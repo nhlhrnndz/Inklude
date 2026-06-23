@@ -1,24 +1,25 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
-
-import { useColorScheme } from '@/hooks/use-color-scheme';
-
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
+import { Stack } from "expo-router";
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <Stack
+      screenOptions={{
+        headerStyle: { backgroundColor: "#0f0f0f" },
+        headerTintColor: "#fff",
+        headerTitleStyle: { fontWeight: "bold" },
+        contentStyle: { backgroundColor: "#0f0f0f" },
+      }}
+    >
+      <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="student" options={{ title: "Student Dashboard" }} />
+      <Stack.Screen name="teacher" options={{ title: "Teacher Dashboard" }} />
+      <Stack.Screen name="explore" options={{ title: "Live Caption" }} />
+      <Stack.Screen name="join" options={{ title: "Join Session" }} />
+      <Stack.Screen name="tts" options={{ title: "Text to Speech" }} />
+      <Stack.Screen
+        name="create-session"
+        options={{ title: "Create Session" }}
+      />
+    </Stack>
   );
 }
