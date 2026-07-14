@@ -135,3 +135,92 @@ IncluEd
    └─ api.ts
 
 ```
+```
+IncluEd
+├─ .claude
+│  └─ settings.json
+├─ AGENTS.md
+├─ app
+│  ├─ explore.tsx
+│  ├─ index.tsx
+│  ├─ index.tsx.bak
+│  ├─ join.tsx
+│  ├─ login.tsx
+│  ├─ modal.tsx
+│  ├─ profile.tsx
+│  ├─ register.tsx
+│  ├─ role-select.tsx
+│  ├─ session.tsx
+│  ├─ student.tsx
+│  ├─ teacher.tsx
+│  ├─ tts.tsx
+│  └─ _layout.tsx
+├─ app.json
+├─ assets
+│  └─ images
+│     ├─ favicon.png
+│     ├─ icon.png
+│     ├─ partial-react-logo.png
+│     ├─ react-logo.png
+│     ├─ react-logo@2x.png
+│     ├─ react-logo@3x.png
+│     └─ splash-icon.png
+├─ backend
+│  ├─ db.js
+│  ├─ package-lock.json
+│  ├─ package.json
+│  ├─ routes
+│  │  └─ auth.js
+│  └─ server.js
+├─ CLAUDE.md
+├─ components
+│  ├─ external-link.tsx
+│  ├─ haptic-tab.tsx
+│  ├─ hello-wave.tsx
+│  ├─ parallax-scroll-view.tsx
+│  ├─ themed-text.tsx
+│  ├─ themed-view.tsx
+│  └─ ui
+│     ├─ collapsible.tsx
+│     ├─ icon-symbol.ios.tsx
+│     └─ icon-symbol.tsx
+├─ constants
+│  ├─ config.ts
+│  └─ theme.ts
+├─ context
+│  └─ AuthContext.tsx
+├─ eslint.config.js
+├─ hooks
+│  ├─ use-color-scheme.ts
+│  ├─ use-color-scheme.web.ts
+│  ├─ use-theme-color.ts
+│  └─ useAuth.ts
+├─ metro.config.js
+├─ package-lock.json
+├─ package.json
+├─ README.md
+├─ scripts
+│  └─ reset-project.js
+├─ server
+│  ├─ config
+│  │  └─ db.js
+│  ├─ controllers
+│  │  ├─ authController.js
+│  │  └─ profileController.js
+│  ├─ index.js
+│  ├─ middleware
+│  │  └─ authMiddleware.js
+│  ├─ models
+│  │  └─ profileModel.js
+│  ├─ package-lock.json
+│  ├─ package.json
+│  ├─ routes
+│  │  ├─ auth.js
+│  │  └─ profile.js
+│  ├─ services
+│  └─ sockets
+├─ tsconfig.json
+└─ utils
+   └─ api.ts
+
+```
