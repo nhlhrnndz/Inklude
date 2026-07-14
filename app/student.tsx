@@ -19,6 +19,17 @@ export default function StudentDashboard() {
       <View style={styles.cardContainer}>
         <TouchableOpacity
           style={styles.card}
+          onPress={() => router.push("/profile")}
+        >
+          <Text style={styles.cardIcon}>🧩</Text>
+          <Text style={styles.cardTitle}>My Profile</Text>
+          <Text style={styles.cardText}>
+            Manage your accessibility preferences
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.card}
           onPress={() => router.push("/join")}
         >
           <Text style={styles.cardIcon}>🔑</Text>

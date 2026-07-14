@@ -12,6 +12,8 @@ app.use(cors());
 app.use(express.json());
 
 app.use("/api/auth", authRoutes);
+const profileRoutes = require("./routes/profile");
+app.use("/api/profile", profileRoutes);
 
 app.get("/", (req, res) => {
   res.json({ message: "IncluEd Backend is running ✅" });

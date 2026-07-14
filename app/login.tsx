@@ -1,15 +1,16 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useAuth } from "../context/AuthContext";
+import { getMyProfile } from "../utils/api";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -28,12 +29,30 @@ export default function LoginScreen() {
       setLoading(true);
       console.log("1. Attempting login...");
       await login(email, password);
-      console.log(
-        "2. Login successful, navigating to:",
-        role === "teacher" ? "/teacher" : "/student",
-      );
-      router.replace(role === "teacher" ? "/teacher" : "/student");
-      console.log("3. Navigation called");
+      console.log("2. Login successful, role:", role);
+
+      if (role === "teacher") {
+        router.replace("/teacher");
+        return;
+      }
+
+      // Student: check if they already have a profile
+      try {
+        await getMyProfile();
+        console.log("3. Profile exists, navigating to /student");
+        router.replace("/student");
+      } catch (profileErr: any) {
+        if (profileErr?.response?.status === 404) {
+          console.log("3. No profile yet, navigating to /profile");
+          router.replace("/profile");
+        } else {
+          console.log(
+            "Profile check error (non-404), defaulting to /student:",
+            profileErr,
+          );
+          router.replace("/student");
+        }
+      }
     } catch (err: any) {
       console.log("ERROR:", JSON.stringify(err));
       Alert.alert(
