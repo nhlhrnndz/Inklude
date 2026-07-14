@@ -1,13 +1,20 @@
 import { useRouter } from "expo-router";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useAuth } from "../context/AuthContext";
 
 export default function TeacherDashboard() {
   const router = useRouter();
+  const { logout, user } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    router.replace("/role-select");
+  };
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>IncluEd</Text>
-      <Text style={styles.subtitle}>Teacher Dashboard</Text>
+      <Text style={styles.subtitle}>Welcome, {user?.name || "Teacher"} 🏫</Text>
 
       <View style={styles.cardContainer}>
         <TouchableOpacity
@@ -32,6 +39,10 @@ export default function TeacherDashboard() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+        <Text style={styles.logoutText}>Logout</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -67,4 +78,13 @@ const styles = StyleSheet.create({
   cardIcon: { fontSize: 28, marginBottom: 8 },
   cardTitle: { fontSize: 18, fontWeight: "bold", color: "#fff" },
   cardText: { marginTop: 4, color: "#888", fontSize: 13 },
+  logoutBtn: {
+    marginTop: 24,
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e94560",
+    alignItems: "center",
+  },
+  logoutText: { color: "#e94560", fontWeight: "bold", fontSize: 15 },
 });

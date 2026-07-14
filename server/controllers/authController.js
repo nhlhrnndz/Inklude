@@ -1,14 +1,12 @@
 const db = require("../config/db");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-require("dotenv").config();
 
 // REGISTER
 const register = async (req, res) => {
   const { name, email, password, role } = req.body;
 
   try {
-    // Check if email already exists
     const [existing] = await db.query("SELECT * FROM users WHERE email = ?", [
       email,
     ]);
@@ -16,10 +14,8 @@ const register = async (req, res) => {
       return res.status(400).json({ message: "Email already registered" });
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Insert user
     const [result] = await db.query(
       "INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)",
       [name, email, hashedPassword, role],
@@ -32,6 +28,7 @@ const register = async (req, res) => {
         userId: result.insertId,
       });
   } catch (err) {
+    console.error("Register error:", err);
     res
       .status(500)
       .json({ message: "Registration failed", error: err.message });
@@ -43,7 +40,6 @@ const login = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    // Find user
     const [rows] = await db.query("SELECT * FROM users WHERE email = ?", [
       email,
     ]);
@@ -53,18 +49,17 @@ const login = async (req, res) => {
 
     const user = rows[0];
 
-    // Check password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid password" });
     }
 
-    // Generate JWT
-    const token = jwt.sign(
-      { id: user.id, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" },
-    );
+    const secret = process.env.JWT_SECRET;
+    console.log("JWT_SECRET:", secret ? "loaded ✅" : "MISSING ❌");
+
+    const token = jwt.sign({ id: user.id, role: user.role }, secret, {
+      expiresIn: "7d",
+    });
 
     res.json({
       message: "Login successful ✅",
@@ -77,6 +72,7 @@ const login = async (req, res) => {
       },
     });
   } catch (err) {
+    console.error("Login error:", err);
     res.status(500).json({ message: "Login failed", error: err.message });
   }
 };
