@@ -1,47 +1,79 @@
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import React, { useState } from "react";
 import {
-    Alert,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import { joinSessionByCode } from "../utils/api";
 
-export default function JoinSession() {
-  const [code, setCode] = useState("");
+export default function JoinSessionScreen() {
   const router = useRouter();
+  const [code, setCode] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleJoin = () => {
-    if (code.trim().length < 4) {
-      Alert.alert("Invalid Code", "Please enter a valid session code.");
+  const handleJoin = async () => {
+    const trimmedCode = code.trim().toUpperCase();
+    if (!trimmedCode) {
+      Alert.alert("Error", "Please enter a session code");
       return;
     }
-    Alert.alert("Joined!", `You joined session: ${code.toUpperCase()}`, [
-      { text: "Go to Live Caption", onPress: () => router.push("/explore") },
-    ]);
+
+    setLoading(true);
+    try {
+      const response = await joinSessionByCode(trimmedCode);
+      Alert.alert("Success! 🎉", `Joined "${response.session.title}"`, [
+        {
+          text: "View Session",
+          onPress: () => router.push(`/session/${response.session.id}`),
+        },
+      ]);
+    } catch (error: any) {
+      Alert.alert(
+        "Failed to Join",
+        error.response?.data?.message || "Invalid session code",
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <View style={styles.container}>
+      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <Text style={styles.backText}>← Back</Text>
+      </TouchableOpacity>
+
       <Text style={styles.title}>Join Session</Text>
       <Text style={styles.subtitle}>
-        Enter the session code from your teacher
+        Enter your teacher's 6-character session code
       </Text>
 
       <TextInput
-        style={styles.input}
-        placeholder="e.g. ABCD12"
-        placeholderTextColor="#888"
+        style={styles.codeInput}
+        placeholder="e.g. A1B2C3"
+        placeholderTextColor="#666"
         value={code}
         onChangeText={setCode}
         autoCapitalize="characters"
         maxLength={6}
+        textAlign="center"
       />
 
-      <TouchableOpacity style={styles.button} onPress={handleJoin}>
-        <Text style={styles.buttonText}>Join</Text>
+      <TouchableOpacity
+        style={styles.joinButton}
+        onPress={handleJoin}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.joinButtonText}>Join Session</Text>
+        )}
       </TouchableOpacity>
     </View>
   );
@@ -51,35 +83,48 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#0f0f0f",
-    justifyContent: "center",
-    alignItems: "center",
     padding: 24,
+    paddingTop: 60,
   },
-  title: { fontSize: 28, fontWeight: "bold", color: "#fff", marginBottom: 8 },
+  backButton: {
+    marginBottom: 20,
+  },
+  backText: {
+    color: "#4A6FA5",
+    fontSize: 16,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#fff",
+    marginBottom: 8,
+  },
   subtitle: {
     fontSize: 14,
-    color: "#aaa",
+    color: "#888",
     marginBottom: 32,
-    textAlign: "center",
   },
-  input: {
-    width: "100%",
+  codeInput: {
     backgroundColor: "#1e1e1e",
     color: "#fff",
-    fontSize: 22,
-    textAlign: "center",
-    letterSpacing: 6,
-    borderRadius: 12,
+    borderRadius: 10,
+    padding: 20,
+    fontSize: 32,
+    fontWeight: "bold",
+    letterSpacing: 8,
+    borderWidth: 2,
+    borderColor: "#4A6FA5",
+    marginBottom: 24,
+  },
+  joinButton: {
+    backgroundColor: "#4CAF50",
     padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "#333",
+    borderRadius: 10,
+    alignItems: "center",
   },
-  button: {
-    backgroundColor: "#4f9eff",
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 48,
+  joinButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
   },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
 });

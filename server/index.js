@@ -33,3 +33,6 @@ app.get("/test-db", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`IncluEd server running on port ${PORT}`);
 });
+
+const sessionRoutes = require("./routes/session");
+app.use("/api/sessions", sessionRoutes);

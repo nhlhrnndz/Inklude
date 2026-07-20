@@ -33,5 +33,29 @@ export const saveMyProfile = async (
   });
   return response.data;
 };
+export const createSession = async (title: string, description?: string) => {
+  const response = await api.post("/api/sessions", { title, description });
+  return response.data;
+};
+
+export const getMySessions = async () => {
+  const response = await api.get("/api/sessions");
+  return response.data;
+};
+
+export const getSessionDetails = async (sessionId: number) => {
+  const response = await api.get(`/api/sessions/${sessionId}`);
+  return response.data;
+};
+
+export const joinSessionByCode = async (code: string) => {
+  const response = await api.get(`/api/sessions/join/${code.toUpperCase()}`);
+  return response.data;
+};
+
+export const endSession = async (sessionId: number) => {
+  const response = await api.delete(`/api/sessions/${sessionId}`);
+  return response.data;
+};
 
 export default api;
