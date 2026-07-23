@@ -1,33 +1,74 @@
 import { useRouter } from "expo-router";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
+const PRIMARY = "#8B0000";
+
 export default function RoleSelectScreen() {
   const router = useRouter();
 
   return (
     <View style={styles.container}>
-      <View style={styles.logoArea}>
-        <Text style={styles.title}>Who are you?</Text>
-        <Text style={styles.tagline}>Choose your role to continue</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>Continue as</Text>
+
+        <Text style={styles.subtitle}>
+          Choose your role to continue using IncluEd.
+        </Text>
       </View>
 
-      <View style={styles.buttonGroup}>
+      <View style={styles.cardContainer}>
+        {/* Student */}
         <TouchableOpacity
-          style={styles.studentButton}
+          activeOpacity={0.85}
+          style={styles.card}
           onPress={() =>
-            router.push({ pathname: "/login", params: { role: "student" } })
+            router.push({
+              pathname: "/login",
+              params: { role: "student" },
+            })
           }
         >
-          <Text style={styles.studentButtonText}>👤 I'm a Student</Text>
+          <View style={styles.iconCircle}>
+            <Text style={styles.iconText}>S</Text>
+          </View>
+
+          <View style={styles.cardContent}>
+            <Text style={styles.cardTitle}>Student</Text>
+
+            <Text style={styles.cardDescription}>
+              Access learning tools, AI communication, classroom sessions, and
+              accessibility features.
+            </Text>
+          </View>
+
+          <Text style={styles.arrow}>›</Text>
         </TouchableOpacity>
 
+        {/* Faculty */}
         <TouchableOpacity
-          style={styles.teacherButton}
+          activeOpacity={0.85}
+          style={styles.card}
           onPress={() =>
-            router.push({ pathname: "/login", params: { role: "teacher" } })
+            router.push({
+              pathname: "/login",
+              params: { role: "teacher" },
+            })
           }
         >
-          <Text style={styles.teacherButtonText}>🏫 I'm a Teacher</Text>
+          <View style={styles.iconCircle}>
+            <Text style={styles.iconText}>F</Text>
+          </View>
+
+          <View style={styles.cardContent}>
+            <Text style={styles.cardTitle}>Faculty</Text>
+
+            <Text style={styles.cardDescription}>
+              Create classroom sessions, manage accessibility support, and
+              communicate with students.
+            </Text>
+          </View>
+
+          <Text style={styles.arrow}>›</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -37,29 +78,89 @@ export default function RoleSelectScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0f0f0f",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 24,
+    justifyContent: "center",
+  },
+
+  header: {
+    marginBottom: 40,
+    alignItems: "center",
+  },
+
+  title: {
+    fontSize: 32,
+    fontWeight: "700",
+    color: PRIMARY,
+  },
+
+  subtitle: {
+    marginTop: 10,
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+    lineHeight: 24,
+  },
+
+  cardContainer: {
+    gap: 18,
+  },
+
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    padding: 22,
+    flexDirection: "row",
+    alignItems: "center",
+
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    elevation: 4,
+  },
+
+  iconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#FDECEC",
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 28,
   },
-  logoArea: { alignItems: "center", marginBottom: 60 },
-  title: { fontSize: 28, fontWeight: "bold", color: "#fff" },
-  tagline: { fontSize: 14, color: "#888", marginTop: 8, textAlign: "center" },
-  buttonGroup: { width: "100%", gap: 14 },
-  studentButton: {
-    backgroundColor: "#4f9eff",
-    borderRadius: 14,
-    paddingVertical: 18,
-    alignItems: "center",
+
+  iconText: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: PRIMARY,
   },
-  studentButtonText: { color: "#fff", fontSize: 17, fontWeight: "bold" },
-  teacherButton: {
-    backgroundColor: "#1e1e1e",
-    borderRadius: 14,
-    paddingVertical: 18,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#333",
+
+  cardContent: {
+    flex: 1,
+    marginLeft: 18,
   },
-  teacherButtonText: { color: "#fff", fontSize: 17, fontWeight: "bold" },
+
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1F2937",
+  },
+
+  cardDescription: {
+    marginTop: 6,
+    fontSize: 14,
+    color: "#6B7280",
+    lineHeight: 20,
+  },
+
+  arrow: {
+    fontSize: 30,
+    color: PRIMARY,
+    fontWeight: "300",
+  },
 });
