@@ -6,46 +6,118 @@ export default function StartScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.logoArea}>
-        <Text style={styles.logo}>🎓</Text>
-        <Text style={styles.title}>IncluEd</Text>
-        <Text style={styles.tagline}>Inclusive Education for Everyone</Text>
+
+      <View style={styles.content}>
+
+        {/* Replace this with your IncluEd logo later */}
+        <View style={styles.logoPlaceholder}>
+          <Text style={styles.logoText}>IncluEd</Text>
+        </View>
+
+        <Text style={styles.title}>Welcome to IncluEd</Text>
+
+        <Text style={styles.subtitle}>
+          An Inclusive Education Support System that empowers accessible
+          learning and communication for every BatStateU student.
+        </Text>
+
       </View>
 
-      <TouchableOpacity
-        style={styles.getStartedButton}
-        onPress={() => router.push("/role-select")}
-      >
-        <Text style={styles.getStartedText}>Get Started</Text>
-      </TouchableOpacity>
+      <View style={styles.bottomContainer}>
 
-      <Text style={styles.footer}>
-        Designed for Deaf & Hard-of-Hearing Students
-      </Text>
+        <TouchableOpacity
+          style={styles.button}
+          activeOpacity={0.85}
+          onPress={() => router.push("/role-select")}
+        >
+          <Text style={styles.buttonText}>
+            Get Started
+          </Text>
+        </TouchableOpacity>
+
+        <Text style={styles.footer}>
+          Batangas State University • ARASOF–Nasugbu
+        </Text>
+
+      </View>
+
     </View>
   );
 }
 
+const PRIMARY = "#8B0000";
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0f0f0f",
+    backgroundColor: "#FFFFFF",
     justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 80,
-    paddingHorizontal: 28,
+    paddingHorizontal: 30,
+    paddingVertical: 70,
   },
-  logoArea: { alignItems: "center", marginTop: 100 },
-  logo: { fontSize: 64, marginBottom: 16 },
-  title: { fontSize: 40, fontWeight: "bold", color: "#fff", letterSpacing: 2 },
-  tagline: { fontSize: 14, color: "#888", marginTop: 8, textAlign: "center" },
-  getStartedButton: {
-    backgroundColor: "#4f9eff",
-    borderRadius: 14,
+
+  content: {
+    alignItems: "center",
+    marginTop: 40,
+  },
+
+  logoPlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 2,
+    borderColor: PRIMARY,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 35,
+  },
+
+  logoText: {
+    color: PRIMARY,
+    fontSize: 22,
+    fontWeight: "700",
+  },
+
+  title: {
+    fontSize: 34,
+    fontWeight: "700",
+    color: PRIMARY,
+    textAlign: "center",
+  },
+
+  subtitle: {
+    marginTop: 18,
+    fontSize: 16,
+    lineHeight: 25,
+    color: "#555",
+    textAlign: "center",
+    paddingHorizontal: 10,
+  },
+
+  bottomContainer: {
+    alignItems: "center",
+  },
+
+  button: {
+    backgroundColor: PRIMARY,
+    width: "100%",
     paddingVertical: 18,
-    paddingHorizontal: 48,
+    borderRadius: 30,
     alignItems: "center",
+
+    elevation: 4,
   },
-  getStartedText: { color: "#fff", fontSize: 17, fontWeight: "bold" },
-  footer: { color: "#444", fontSize: 12, textAlign: "center" },
+
+  buttonText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+
+  footer: {
+    marginTop: 24,
+    fontSize: 13,
+    color: "#888",
+    textAlign: "center",
+  },
 });
