@@ -1,170 +1,245 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
-import {
-    ActivityIndicator,
-    Alert,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from "react-native";
+import { StyleSheet } from "react-native";
+import Toast from "react-native-toast-message";
+
+import AuthFooter from "../components/auth/AuthFooter";
+import AuthHeader from "../components/auth/AuthHeader";
+import AuthInput from "../components/auth/AuthInput";
+import PasswordInput from "../components/auth/PasswordInput";
+import PrimaryButton from "../components/auth/PrimaryButton";
+import ScreenContainer from "../components/common/ScreenContainer";
+
 import { useAuth } from "../context/AuthContext";
+import Colors from "../theme/colors";
+import { passwordsMatch, validateEmail, validateName, validatePassword } from "../utils/validators/auth";
 
 export default function RegisterScreen() {
   const router = useRouter();
   const { register } = useAuth();
-  const { role: roleParam } = useLocalSearchParams<{ role: string }>();
+
+  const { role: roleParam } =
+    useLocalSearchParams<{ role?: string }>();
+
+  const role: "student" | "teacher" =
+    roleParam === "teacher" ? "teacher" : "student";
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"student" | "teacher">(
-    (roleParam as "student" | "teacher") || "student",
-  );
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  const [nameError, setNameError] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [confirmPasswordError, setConfirmPasswordError] =
+    useState("");
+
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
-    if (!name || !email || !password) {
-      Alert.alert("Error", "Please fill in all fields");
+    // Clear previous errors
+    setNameError("");
+    setEmailError("");
+    setPasswordError("");
+    setConfirmPasswordError("");
+
+    let isValid = true;
+
+    // Validate Full Name
+    if (!name.trim()) {
+      setNameError("Please enter your full name.");
+      isValid = false;
+    } else if (!validateName(name)) {
+      setNameError("Please enter a valid full name.");
+      isValid = false;
+    }
+
+    // Validate Email
+    if (!email.trim()) {
+      setEmailError("Please enter your university email.");
+      isValid = false;
+    } else if (!validateEmail(email)) {
+      setEmailError("Please enter a valid email address.");
+      isValid = false;
+    }
+
+    // Validate Password
+    if (!password) {
+      setPasswordError("Please create a password.");
+      isValid = false;
+    } else if (!validatePassword(password)) {
+      setPasswordError(
+        "Password must be at least 8 characters.",
+      );
+      isValid = false;
+    }
+
+    // Validate Confirm Password
+    if (!confirmPassword) {
+      setConfirmPasswordError(
+        "Please confirm your password.",
+      );
+      isValid = false;
+    } else if (!passwordsMatch(password, confirmPassword)) {
+      setConfirmPasswordError("Passwords do not match.");
+      isValid = false;
+    }
+
+    // Stop if validation failed
+    if (!isValid) {
+      Toast.show({
+        type: "error",
+        text1: "Check Your Information",
+        text2: "Please correct the highlighted fields.",
+      });
+
       return;
     }
+
     try {
       setLoading(true);
-      await register(name, email, password, role);
-      Alert.alert("Success", "Account created! Please login.", [
-        {
-          text: "OK",
-          onPress: () =>
-            router.replace({ pathname: "/login", params: { role } }),
-        },
-      ]);
-    } catch (err: any) {
-      Alert.alert(
-        "Registration Failed",
-        err.response?.data?.message || "Something went wrong",
+
+      await register(
+        name.trim(),
+        email.trim(),
+        password,
+        role,
       );
+
+      Toast.show({
+        type: "success",
+        text1: "Account Created!",
+        text2: "Your account was created successfully.",
+      });
+
+      // Give the toast a moment to display
+      setTimeout(() => {
+        router.replace({
+          pathname: "/login",
+          params: { role },
+        });
+      }, 1200);
+    } catch (err: any) {
+      console.error("Registration Error:", err);
+
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        "We couldn't create your account. Please try again.";
+
+      Toast.show({
+        type: "error",
+        text1: "Registration Failed",
+        text2: message,
+      });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>IncluEd</Text>
-      <Text style={styles.subtitle}>Create your account</Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Full Name"
-        placeholderTextColor="#aaa"
-        value={name}
-        onChangeText={setName}
+    <ScreenContainer>
+      <AuthHeader
+        title="Create Account"
+        subtitle="Create your account to get started with IncluEd"
       />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        placeholderTextColor="#aaa"
+      <AuthInput
+        label="Full Name"
+        icon="person-outline"
+        placeholder="Enter your full name"
+        value={name}
+        onChangeText={(text) => {
+          setName(text);
+
+          if (nameError) {
+            setNameError("");
+          }
+        }}
+        autoCapitalize="words"
+        autoCorrect={false}
+        returnKeyType="next"
+        error={nameError}
+      />
+
+      <AuthInput
+        label="University Email"
+        icon="mail-outline"
+        placeholder="Enter your university email"
         value={email}
-        onChangeText={setEmail}
+        onChangeText={(text) => {
+          setEmail(text);
+
+          if (emailError) {
+            setEmailError("");
+          }
+        }}
         keyboardType="email-address"
         autoCapitalize="none"
+        autoCorrect={false}
+        returnKeyType="next"
+        error={emailError}
       />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        placeholderTextColor="#aaa"
+      <PasswordInput
+        label="Password"
+        placeholder="Create a password"
         value={password}
-        onChangeText={setPassword}
-        secureTextEntry
+        onChangeText={(text) => {
+          setPassword(text);
+
+          if (passwordError) {
+            setPasswordError("");
+          }
+
+          // Automatically clear mismatch error
+          // when the user changes the password
+          if (confirmPasswordError) {
+            setConfirmPasswordError("");
+          }
+        }}
+        returnKeyType="next"
+        error={passwordError}
       />
 
-      {/* Role Selector */}
-      <View style={styles.roleContainer}>
-        <TouchableOpacity
-          style={[styles.roleBtn, role === "student" && styles.roleActive]}
-          onPress={() => setRole("student")}
-        >
-          <Text style={styles.roleText}>Student</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.roleBtn, role === "teacher" && styles.roleActive]}
-          onPress={() => setRole("teacher")}
-        >
-          <Text style={styles.roleText}>Teacher</Text>
-        </TouchableOpacity>
-      </View>
+      <PasswordInput
+        label="Confirm Password"
+        placeholder="Re-enter your password"
+        value={confirmPassword}
+        onChangeText={(text) => {
+          setConfirmPassword(text);
 
-      <TouchableOpacity
-        style={styles.button}
+          if (confirmPasswordError) {
+            setConfirmPasswordError("");
+          }
+        }}
+        returnKeyType="done"
+        onSubmitEditing={handleRegister}
+        error={confirmPasswordError}
+      />
+
+      <PrimaryButton
+        title="Create Account"
         onPress={handleRegister}
+        loading={loading}
         disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Register</Text>
-        )}
-      </TouchableOpacity>
+      />
 
-      <TouchableOpacity
-        onPress={() => router.replace({ pathname: "/login", params: { role } })}
-      >
-        <Text style={styles.link}>Already have an account? Login</Text>
-      </TouchableOpacity>
-    </View>
+      <AuthFooter
+        question="Already have an account?"
+        action="Sign In"
+        onPress={() =>
+          router.replace({
+            pathname: "/login",
+            params: { role },
+          })
+        }
+      />
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#1a1a2e",
-    justifyContent: "center",
-    padding: 24,
-  },
-  title: {
-    fontSize: 36,
-    fontWeight: "bold",
-    color: "#e94560",
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: "#aaa",
-    textAlign: "center",
-    marginBottom: 32,
-  },
-  input: {
-    backgroundColor: "#16213e",
-    color: "#fff",
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 16,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: "#0f3460",
-  },
-  roleContainer: { flexDirection: "row", marginBottom: 16, gap: 12 },
-  roleBtn: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#0f3460",
-    alignItems: "center",
-  },
-  roleActive: { backgroundColor: "#e94560", borderColor: "#e94560" },
-  roleText: { color: "#fff", fontWeight: "bold" },
-  button: {
-    backgroundColor: "#e94560",
-    padding: 16,
-    borderRadius: 10,
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
-  link: { color: "#e94560", textAlign: "center", fontSize: 14 },
+  // Reserved for future Register-specific styles.
 });
