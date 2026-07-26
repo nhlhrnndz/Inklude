@@ -13,7 +13,7 @@ type AuthContextType = {
   user: User | null;
   token: string | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
   register: (
     name: string,
     email: string,
@@ -71,6 +71,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setUser(user);
     await AsyncStorage.setItem("token", token);
     await AsyncStorage.setItem("user", JSON.stringify(user));
+    return user;
   };
 
   const logout = async () => {

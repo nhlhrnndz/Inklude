@@ -12,6 +12,7 @@ const sessionRoutes = require("./routes/session");
 const transcribeRoutes = require("./routes/transcribe");
 const transcriptRoutes = require("./routes/transcript");
 const initCaptionSocket = require("./sockets/captionSocket");
+const guidanceRoutes = require("./routes/guidance");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -24,6 +25,7 @@ app.use("/api/profile", profileRoutes);
 app.use("/api/sessions", sessionRoutes);
 app.use("/api/transcribe", transcribeRoutes);
 app.use("/api/transcripts", transcriptRoutes);
+app.use("/api/guidance", guidanceRoutes);
 
 app.get("/", (req, res) => {
   res.json({ message: "IncluEd Backend is running ✅" });

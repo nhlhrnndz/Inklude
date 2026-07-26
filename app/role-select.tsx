@@ -70,6 +70,33 @@ export default function RoleSelectScreen() {
 
           <Text style={styles.arrow}>›</Text>
         </TouchableOpacity>
+
+        {/* Guidance */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          style={styles.card}
+          onPress={() =>
+            router.push({
+              pathname: "/login",
+              params: { role: "guidance" },
+            })
+          }
+        >
+          <View style={styles.iconCircle}>
+            <Text style={styles.iconText}>G</Text>
+          </View>
+
+          <View style={styles.cardContent}>
+            <Text style={styles.cardTitle}>Guidance</Text>
+
+            <Text style={styles.cardDescription}>
+              View student disability records, session attendance, and
+              transcript history.
+            </Text>
+          </View>
+
+          <Text style={styles.arrow}>›</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );

@@ -78,4 +78,25 @@ export const transcribeAudioChunk = async (
   return response.data.text;
 };
 
+// 📊 Guidance Dashboard
+export const getDashboardStats = async () => {
+  const response = await api.get("/api/guidance/stats");
+  return response.data;
+};
+
+export const getStudents = async (filters?: {
+  disability?: string;
+  search?: string;
+}) => {
+  const response = await api.get("/api/guidance/students", {
+    params: filters,
+  });
+  return response.data;
+};
+
+export const getStudentDetail = async (studentId: number) => {
+  const response = await api.get(`/api/guidance/students/${studentId}`);
+  return response.data;
+};
+
 export default api;

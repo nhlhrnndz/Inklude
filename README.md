@@ -694,3 +694,130 @@ IncluEd
       └─ auth.ts
 
 ```
+```
+IncluEd
+├─ .claude
+│  └─ settings.json
+├─ AGENTS.md
+├─ app
+│  ├─ create-session.tsx
+│  ├─ explore.tsx
+│  ├─ guidance
+│  │  └─ student
+│  │     └─ [id].tsx
+│  ├─ guidance-dashboard.tsx
+│  ├─ index.tsx
+│  ├─ index.tsx.bak
+│  ├─ join.tsx
+│  ├─ login.tsx
+│  ├─ modal.tsx
+│  ├─ my-sessions.tsx
+│  ├─ profile.tsx
+│  ├─ register.tsx
+│  ├─ role-select.tsx
+│  ├─ session
+│  │  └─ [id].tsx
+│  ├─ student.tsx
+│  ├─ teacher.tsx
+│  ├─ tts.tsx
+│  └─ _layout.tsx
+├─ app.json
+├─ assets
+│  └─ images
+│     ├─ favicon.png
+│     ├─ icon.png
+│     ├─ partial-react-logo.png
+│     ├─ react-logo.png
+│     ├─ react-logo@2x.png
+│     ├─ react-logo@3x.png
+│     └─ splash-icon.png
+├─ backend
+│  ├─ db.js
+│  ├─ package-lock.json
+│  ├─ package.json
+│  ├─ routes
+│  │  └─ auth.js
+│  └─ server.js
+├─ CLAUDE.md
+├─ components
+│  ├─ auth
+│  │  ├─ AuthFooter.tsx
+│  │  ├─ AuthHeader.tsx
+│  │  ├─ AuthInput.tsx
+│  │  ├─ PasswordInput.tsx
+│  │  └─ PrimaryButton.tsx
+│  ├─ common
+│  │  ├─ ScreenContainer.tsx
+│  │  └─ ToastConfig.tsx
+│  ├─ external-link.tsx
+│  ├─ haptic-tab.tsx
+│  ├─ hello-wave.tsx
+│  ├─ parallax-scroll-view.tsx
+│  ├─ themed-text.tsx
+│  ├─ themed-view.tsx
+│  └─ ui
+│     ├─ collapsible.tsx
+│     ├─ icon-symbol.ios.tsx
+│     └─ icon-symbol.tsx
+├─ constants
+│  ├─ config.ts
+│  └─ theme.ts
+├─ context
+│  └─ AuthContext.tsx
+├─ eslint.config.js
+├─ hooks
+│  ├─ use-color-scheme.ts
+│  ├─ use-color-scheme.web.ts
+│  ├─ use-theme-color.ts
+│  ├─ useAuth.ts
+│  ├─ useCaptionSession.ts
+│  └─ useMicCaptioning.ts
+├─ metro.config.js
+├─ package-lock.json
+├─ package.json
+├─ README.md
+├─ scripts
+│  └─ reset-project.js
+├─ server
+│  ├─ config
+│  │  └─ db.js
+│  ├─ controllers
+│  │  ├─ authController.js
+│  │  ├─ guidanceController.js
+│  │  ├─ profileController.js
+│  │  ├─ sessionController.js
+│  │  ├─ transcribeController.js
+│  │  └─ transcriptController.js
+│  ├─ index.js
+│  ├─ middleware
+│  │  └─ authMiddleware.js
+│  ├─ models
+│  │  ├─ guidanceModel.js
+│  │  ├─ profileModel.js
+│  │  ├─ sessionModel.js
+│  │  └─ transcriptModel.js
+│  ├─ package-lock.json
+│  ├─ package.json
+│  ├─ routes
+│  │  ├─ auth.js
+│  │  ├─ guidance.js
+│  │  ├─ profile.js
+│  │  ├─ session.js
+│  │  ├─ transcribe.js
+│  │  └─ transcript.js
+│  ├─ services
+│  └─ sockets
+│     └─ captionSocket.js
+├─ theme
+│  ├─ colors.ts
+│  ├─ radius.ts
+│  ├─ spacing.ts
+│  └─ typography.ts
+├─ tsconfig.json
+└─ utils
+   ├─ api.ts
+   ├─ socket.ts
+   └─ validators
+      └─ auth.ts
+
+```
