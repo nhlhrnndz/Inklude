@@ -17,10 +17,7 @@ import Spacing from "../theme/spacing";
 import Typography from "../theme/typography";
 
 import { getMyProfile } from "../utils/api";
-import {
-  validateEmail,
-  validatePassword,
-} from "../utils/validators/auth";
+import { validateEmail, validatePassword } from "../utils/validators/auth";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -62,7 +59,7 @@ export default function LoginScreen() {
     try {
       setLoading(true);
 
-      await login(email.trim(), password);
+      const loggedInUser = await login(email.trim(), password);
 
       Toast.show({
         type: "success",
@@ -70,8 +67,13 @@ export default function LoginScreen() {
         text2: "Signing you in...",
       });
 
-      if (role === "teacher") {
+      if (loggedInUser.role === "teacher") {
         router.replace("/teacher");
+        return;
+      }
+
+      if (loggedInUser.role === "guidance") {
+        router.replace("/guidance-dashboard");
         return;
       }
 
@@ -89,9 +91,7 @@ export default function LoginScreen() {
       Toast.show({
         type: "error",
         text1: "Login Failed",
-        text2:
-          err.response?.data?.message ??
-          "Incorrect email or password.",
+        text2: err.response?.data?.message ?? "Incorrect email or password.",
       });
     } finally {
       setLoading(false);
@@ -150,9 +150,7 @@ export default function LoginScreen() {
           })
         }
       >
-        <Text style={styles.forgotText}>
-          Forgot Password?
-        </Text>
+        <Text style={styles.forgotText}>Forgot Password?</Text>
       </TouchableOpacity>
 
       <PrimaryButton
