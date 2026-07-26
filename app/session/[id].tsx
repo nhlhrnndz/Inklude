@@ -1,15 +1,17 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
+import { useCaptionSession } from "../../hooks/useCaptionSession";
+import { useMicCaptioning } from "../../hooks/useMicCaptioning";
 import { endSession, getSessionDetails } from "../../utils/api";
 
 interface Participant {
@@ -37,6 +39,23 @@ export default function SessionDetailScreen() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [ending, setEnding] = useState(false);
+
+  const isTeacher = user?.role === "teacher";
+
+  // 🔴 Live captioning socket connection — joins the session room automatically
+  const { captions, connected, sendCaption } = useCaptionSession(
+    id,
+    user?.id,
+    isTeacher ? "teacher" : "student",
+  );
+
+  // 🎙 Mic capture loop (teacher only) — records chunks, transcribes, broadcasts
+  const {
+    isRecording,
+    error: micError,
+    startCaptioning,
+    stopCaptioning,
+  } = useMicCaptioning((text) => sendCaption(text));
 
   useEffect(() => {
     loadSession();
@@ -66,6 +85,10 @@ export default function SessionDetailScreen() {
   };
 
   const confirmEndSession = async () => {
+    // Make sure the mic loop stops if the teacher ends the session while recording
+    if (isRecording) {
+      await stopCaptioning();
+    }
     setEnding(true);
     try {
       await endSession(Number(id));
@@ -98,7 +121,6 @@ export default function SessionDetailScreen() {
     );
   }
 
-  const isTeacher = user?.role === "teacher";
   const isActive = session.status === "active";
 
   return (
@@ -150,6 +172,58 @@ export default function SessionDetailScreen() {
               </Text>
             </View>
           ))}
+        </View>
+      )}
+
+      {isActive && (
+        <View style={styles.captionSection}>
+          <View style={styles.captionHeader}>
+            <Text style={styles.sectionTitle}>Live Captions</Text>
+            <View style={styles.socketStatusRow}>
+              <View
+                style={[
+                  styles.socketDot,
+                  connected ? styles.socketDotOn : styles.socketDotOff,
+                ]}
+              />
+              <Text style={styles.socketStatusText}>
+                {connected ? "Connected" : "Connecting..."}
+              </Text>
+            </View>
+          </View>
+
+          {isTeacher && (
+            <TouchableOpacity
+              style={[
+                styles.testCaptionButton,
+                isRecording && { backgroundColor: "#e94560" },
+              ]}
+              onPress={isRecording ? stopCaptioning : startCaptioning}
+            >
+              <Text style={styles.testCaptionButtonText}>
+                {isRecording
+                  ? "⏹ Stop Live Captioning"
+                  : "🎙 Start Live Captioning"}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {micError && <Text style={styles.micErrorText}>{micError}</Text>}
+
+          <View style={styles.captionBox}>
+            {captions.length === 0 ? (
+              <Text style={styles.captionEmpty}>
+                No captions yet —{" "}
+                {isTeacher ? "tap the button above" : "waiting for the teacher"}
+              </Text>
+            ) : (
+              captions.map((c, i) => (
+                <Text key={i} style={styles.captionText}>
+                  {c.text}
+                </Text>
+              ))
+            )}
+          </View>
         </View>
       )}
 
@@ -267,7 +341,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 18,
     fontWeight: "bold",
-    marginBottom: 12,
   },
   participantItem: {
     backgroundColor: "#1e1e1e",
@@ -286,6 +359,69 @@ const styles = StyleSheet.create({
   participantTime: {
     color: "#888",
     fontSize: 12,
+  },
+  captionSection: {
+    marginBottom: 24,
+  },
+  captionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  socketStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  socketDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  socketDotOn: {
+    backgroundColor: "#4caf50",
+  },
+  socketDotOff: {
+    backgroundColor: "#e94560",
+  },
+  socketStatusText: {
+    color: "#888",
+    fontSize: 12,
+  },
+  testCaptionButton: {
+    backgroundColor: "#4A6FA5",
+    padding: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  testCaptionButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  micErrorText: {
+    color: "#e94560",
+    fontSize: 13,
+    marginBottom: 12,
+  },
+  captionBox: {
+    backgroundColor: "#1e1e1e",
+    borderRadius: 10,
+    padding: 16,
+    minHeight: 80,
+  },
+  captionEmpty: {
+    color: "#666",
+    fontSize: 13,
+    fontStyle: "italic",
+  },
+  captionText: {
+    color: "#fff",
+    fontSize: 15,
+    marginBottom: 8,
+    lineHeight: 20,
   },
   endButton: {
     backgroundColor: "#e94560",
