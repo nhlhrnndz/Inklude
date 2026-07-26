@@ -33,6 +33,7 @@ export const saveMyProfile = async (
   });
   return response.data;
 };
+
 export const createSession = async (title: string, description?: string) => {
   const response = await api.post("/api/sessions", { title, description });
   return response.data;
@@ -56,6 +57,25 @@ export const joinSessionByCode = async (code: string) => {
 export const endSession = async (sessionId: number) => {
   const response = await api.delete(`/api/sessions/${sessionId}`);
   return response.data;
+};
+
+// 🎙 Send a recorded audio chunk to the backend for Whisper transcription
+export const transcribeAudioChunk = async (
+  fileUri: string,
+): Promise<string> => {
+  const formData = new FormData();
+  // @ts-ignore — React Native's FormData accepts this shape even though the DOM type doesn't
+  formData.append("audio", {
+    uri: fileUri,
+    name: "chunk.m4a",
+    type: "audio/m4a",
+  });
+
+  const response = await api.post("/api/transcribe", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+
+  return response.data.text;
 };
 
 export default api;
