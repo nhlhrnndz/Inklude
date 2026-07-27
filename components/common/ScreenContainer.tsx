@@ -2,13 +2,12 @@ import React, { ReactNode } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import Colors from "../../theme/colors";
-import Spacing from "../../theme/spacing";
+import { useTheme } from "../../context/ThemeContext";
 
 interface ScreenContainerProps {
   children: ReactNode;
@@ -17,14 +16,24 @@ interface ScreenContainerProps {
 export default function ScreenContainer({
   children,
 }: ScreenContainerProps) {
+  const { colors, spacing } = useTheme();
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: colors.background }]}
+    >
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
-          contentContainerStyle={styles.container}
+          contentContainerStyle={[
+            styles.container,
+            {
+              paddingHorizontal: spacing.lg,
+              paddingVertical: spacing.xl,
+            },
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -38,7 +47,6 @@ export default function ScreenContainer({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
 
   flex: {
@@ -48,7 +56,5 @@ const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
     justifyContent: "center",
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.xl,
   },
 });

@@ -1,26 +1,18 @@
 import React from "react";
-import {
-  Image,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
 
-import Colors from "../../theme/colors";
-import Spacing from "../../theme/spacing";
-import Typography from "../../theme/typography";
+import { useTheme } from "../../context/ThemeContext";
 
 interface AuthHeaderProps {
   title: string;
   subtitle: string;
 }
 
-export default function AuthHeader({
-  title,
-  subtitle,
-}: AuthHeaderProps) {
+export default function AuthHeader({ title, subtitle }: AuthHeaderProps) {
+  const { colors, typography, spacing } = useTheme();
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { marginBottom: spacing.xxl }]}>
       {/* Uncomment when BSU logo is added */}
 
       {/*
@@ -31,23 +23,72 @@ export default function AuthHeader({
       />
       */}
 
-      <Text style={styles.brand}>
+      <Text
+        style={{
+          fontFamily: typography.title.fontFamily,
+          fontSize: 28,
+          fontWeight: "700",
+          color: colors.primary,
+          letterSpacing: 0.5,
+        }}
+        accessibilityRole="header"
+      >
         IncluEd
       </Text>
 
-      <Text style={styles.university}>
+      <Text
+        style={{
+          fontFamily: typography.body.fontFamily,
+          fontSize: typography.body.fontSize,
+          fontWeight: "600",
+          color: colors.text,
+          marginTop: 6,
+        }}
+      >
         Batangas State University
       </Text>
 
-      <Text style={styles.campus}>
+      <Text
+        style={{
+          fontFamily: typography.caption.fontFamily,
+          fontSize: typography.caption.fontSize,
+          color: colors.textSecondary,
+          marginTop: 2,
+          marginBottom: spacing.lg,
+        }}
+      >
         ARASOF–Nasugbu
       </Text>
 
-      <Text style={styles.title}>
+      <Text
+        style={[
+          styles.title,
+          {
+            fontFamily: typography.h1.fontFamily,
+            fontSize: typography.h1.fontSize,
+            lineHeight: typography.h1.lineHeight,
+            fontWeight: typography.h1.fontWeight,
+            color: colors.text,
+          },
+        ]}
+        accessibilityRole="header"
+      >
         {title}
       </Text>
 
-      <Text style={styles.subtitle}>
+      <Text
+        style={[
+          styles.subtitle,
+          {
+            fontFamily: typography.body.fontFamily,
+            fontSize: typography.body.fontSize,
+            lineHeight: typography.body.lineHeight,
+            color: colors.textSecondary,
+            marginTop: spacing.sm,
+            paddingHorizontal: spacing.md,
+          },
+        ]}
+      >
         {subtitle}
       </Text>
     </View>
@@ -57,49 +98,19 @@ export default function AuthHeader({
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",
-    marginBottom: Spacing.xxl,
   },
 
   logo: {
     width: 90,
     height: 90,
-    marginBottom: Spacing.md,
-  },
-
-  brand: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: Colors.primary,
-    letterSpacing: 0.5,
-  },
-
-  university: {
-    marginTop: 6,
-    fontSize: 15,
-    color: Colors.text,
-    fontWeight: "600",
-  },
-
-  campus: {
-    marginTop: 2,
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginBottom: Spacing.lg,
+    marginBottom: 16,
   },
 
   title: {
-    fontSize: Typography.h1,
-    fontWeight: "700",
-    color: Colors.text,
     textAlign: "center",
   },
 
   subtitle: {
-    marginTop: Spacing.sm,
-    fontSize: Typography.body,
-    color: Colors.textSecondary,
     textAlign: "center",
-    lineHeight: 24,
-    paddingHorizontal: Spacing.md,
   },
 });

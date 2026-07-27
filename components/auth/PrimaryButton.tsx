@@ -6,10 +6,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 
-import Colors from "../../theme/colors";
-import Radius from "../../theme/radius";
-import Spacing from "../../theme/spacing";
-import Typography from "../../theme/typography";
+import { useTheme } from "../../context/ThemeContext";
 
 interface PrimaryButtonProps {
   title: string;
@@ -24,20 +21,39 @@ export default function PrimaryButton({
   loading = false,
   disabled = false,
 }: PrimaryButtonProps) {
+  const { colors, typography, spacing, radius } = useTheme();
+  const isInactive = loading || disabled;
+
   return (
     <TouchableOpacity
       activeOpacity={0.85}
       style={[
         styles.button,
-        (loading || disabled) && styles.buttonDisabled,
+        {
+          backgroundColor: isInactive ? colors.disabled : colors.primary,
+          borderRadius: radius.xl,
+          marginTop: spacing.md,
+        },
       ]}
       onPress={onPress}
-      disabled={loading || disabled}
+      disabled={isInactive}
+      accessibilityRole="button"
+      accessibilityLabel={loading ? "Loading" : title}
+      accessibilityState={{ disabled: isInactive, busy: loading }}
     >
       {loading ? (
         <ActivityIndicator color="#FFFFFF" />
       ) : (
-        <Text style={styles.text}>{title}</Text>
+        <Text
+          style={{
+            color: "#FFFFFF",
+            fontFamily: typography.button.fontFamily,
+            fontSize: typography.button.fontSize,
+            fontWeight: typography.button.fontWeight,
+          }}
+        >
+          {title}
+        </Text>
       )}
     </TouchableOpacity>
   );
@@ -45,21 +61,8 @@ export default function PrimaryButton({
 
 const styles = StyleSheet.create({
   button: {
-    backgroundColor: Colors.primary,
     height: 56,
-    borderRadius: Radius.xl,
     justifyContent: "center",
     alignItems: "center",
-    marginTop: Spacing.md,
-  },
-
-  buttonDisabled: {
-    backgroundColor: Colors.disabled,
-  },
-
-  text: {
-    color: "#FFFFFF",
-    fontSize: Typography.button,
-    fontWeight: "700",
   },
 });

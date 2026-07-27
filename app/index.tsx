@@ -1,59 +1,120 @@
 import { useRouter } from "expo-router";
+import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+
+import { useTheme } from "../context/ThemeContext";
 
 export default function StartScreen() {
   const router = useRouter();
+  const { colors, typography, spacing, radius } = useTheme();
 
   return (
-    <View style={styles.container}>
-
-      <View style={styles.content}>
-
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
+      <View style={[styles.content, { paddingHorizontal: spacing.lg }]}>
         {/* Replace this with your IncluEd logo later */}
-        <View style={styles.logoPlaceholder}>
-          <Text style={styles.logoText}>IncluEd</Text>
+        <View
+          style={[
+            styles.logoPlaceholder,
+            {
+              borderRadius: radius.round,
+              borderColor: colors.primary,
+              marginBottom: spacing.xl,
+            },
+          ]}
+        >
+          <Text
+            style={{
+              fontFamily: typography.title.fontFamily,
+              fontSize: typography.title.fontSize,
+              fontWeight: "700",
+              color: colors.primary,
+            }}
+          >
+            IncluEd
+          </Text>
         </View>
 
-        <Text style={styles.title}>Welcome to IncluEd</Text>
+        <Text
+          style={{
+            fontFamily: typography.h1.fontFamily,
+            fontSize: typography.h1.fontSize,
+            lineHeight: typography.h1.lineHeight,
+            fontWeight: typography.h1.fontWeight,
+            color: colors.primary,
+            textAlign: "center",
+          }}
+          accessibilityRole="header"
+        >
+          Welcome to IncluEd
+        </Text>
 
-        <Text style={styles.subtitle}>
+        <Text
+          style={{
+            fontFamily: typography.body.fontFamily,
+            fontSize: typography.body.fontSize,
+            lineHeight: typography.body.lineHeight,
+            color: colors.textSecondary,
+            textAlign: "center",
+            marginTop: spacing.md,
+            paddingHorizontal: spacing.sm,
+          }}
+        >
           An Inclusive Education Support System that empowers accessible
           learning and communication for every BatStateU student.
         </Text>
-
       </View>
 
-      <View style={styles.bottomContainer}>
-
+      <View style={[styles.bottomContainer, { paddingHorizontal: spacing.lg }]}>
         <TouchableOpacity
-          style={styles.button}
+          style={[
+            styles.button,
+            {
+              backgroundColor: colors.primary,
+              borderRadius: radius.xl,
+              paddingVertical: spacing.md + 2,
+            },
+          ]}
           activeOpacity={0.85}
           onPress={() => router.push("/role-select")}
+          accessibilityRole="button"
+          accessibilityLabel="Get started"
         >
-          <Text style={styles.buttonText}>
+          <Text
+            style={{
+              color: "#FFFFFF",
+              fontFamily: typography.button.fontFamily,
+              fontSize: typography.button.fontSize,
+              fontWeight: typography.button.fontWeight,
+            }}
+          >
             Get Started
           </Text>
         </TouchableOpacity>
 
-        <Text style={styles.footer}>
+        <Text
+          style={{
+            fontFamily: typography.caption.fontFamily,
+            fontSize: typography.caption.fontSize,
+            color: colors.textSecondary,
+            textAlign: "center",
+            marginTop: spacing.lg,
+          }}
+        >
           Batangas State University • ARASOF–Nasugbu
         </Text>
-
       </View>
-
-    </View>
+    </SafeAreaView>
   );
 }
-
-const PRIMARY = "#8B0000";
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
     justifyContent: "space-between",
-    paddingHorizontal: 30,
-    paddingVertical: 70,
+    paddingVertical: 40,
   },
 
   content: {
@@ -64,34 +125,9 @@ const styles = StyleSheet.create({
   logoPlaceholder: {
     width: 120,
     height: 120,
-    borderRadius: 60,
     borderWidth: 2,
-    borderColor: PRIMARY,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 35,
-  },
-
-  logoText: {
-    color: PRIMARY,
-    fontSize: 22,
-    fontWeight: "700",
-  },
-
-  title: {
-    fontSize: 34,
-    fontWeight: "700",
-    color: PRIMARY,
-    textAlign: "center",
-  },
-
-  subtitle: {
-    marginTop: 18,
-    fontSize: 16,
-    lineHeight: 25,
-    color: "#555",
-    textAlign: "center",
-    paddingHorizontal: 10,
   },
 
   bottomContainer: {
@@ -99,25 +135,8 @@ const styles = StyleSheet.create({
   },
 
   button: {
-    backgroundColor: PRIMARY,
     width: "100%",
-    paddingVertical: 18,
-    borderRadius: 30,
     alignItems: "center",
-
     elevation: 4,
-  },
-
-  buttonText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-
-  footer: {
-    marginTop: 24,
-    fontSize: 13,
-    color: "#888",
-    textAlign: "center",
   },
 });

@@ -75,10 +75,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const logout = async () => {
-    setToken(null);
-    setUser(null);
-    await AsyncStorage.removeItem("token");
-    await AsyncStorage.removeItem("user");
+    try {
+      await AsyncStorage.removeItem("token");
+      await AsyncStorage.removeItem("user");
+    } catch (err) {
+      console.error("Failed to clear stored auth:", err);
+    } finally {
+      // Clearing user/token here is all this function needs to do.
+      // RootLayoutNav watches `user` and redirects to index/login
+      // automatically once it flips to null — see _layout.tsx.
+      setToken(null);
+      setUser(null);
+    }
   };
 
   return (
