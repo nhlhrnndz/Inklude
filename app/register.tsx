@@ -11,7 +11,6 @@ import PrimaryButton from "../components/auth/PrimaryButton";
 import ScreenContainer from "../components/common/ScreenContainer";
 
 import { useAuth } from "../context/AuthContext";
-import Colors from "../theme/colors";
 import { passwordsMatch, validateEmail, validateName, validatePassword } from "../utils/validators/auth";
 
 export default function RegisterScreen() {

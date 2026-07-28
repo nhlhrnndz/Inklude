@@ -11,17 +11,21 @@ import PrimaryButton from "../components/auth/PrimaryButton";
 import ScreenContainer from "../components/common/ScreenContainer";
 
 import { useAuth } from "../context/AuthContext";
-import Colors from "../theme/colors";
-import Radius from "../theme/radius";
-import Spacing from "../theme/spacing";
-import Typography from "../theme/typography";
+import { useTheme } from "../context/ThemeContext";
 
 import { getMyProfile } from "../utils/api";
 import { validateEmail, validatePassword } from "../utils/validators/auth";
 
+const ROLE_LABEL: Record<string, string> = {
+  teacher: "Faculty",
+  guidance: "Guidance",
+  student: "Student",
+};
+
 export default function LoginScreen() {
   const router = useRouter();
   const { login } = useAuth();
+  const { colors, typography, spacing, radius } = useTheme();
   const { role } = useLocalSearchParams<{ role: string }>();
 
   const [email, setEmail] = useState("");
@@ -31,6 +35,9 @@ export default function LoginScreen() {
   const [passwordError, setPasswordError] = useState("");
 
   const [loading, setLoading] = useState(false);
+
+  const roleLabel = ROLE_LABEL[role as string] ?? "Student";
+  const isGuidance = role === "guidance";
 
   const handleLogin = async () => {
     setEmailError("");
@@ -82,7 +89,7 @@ export default function LoginScreen() {
         router.replace("/student");
       } catch (profileErr: any) {
         if (profileErr?.response?.status === 404) {
-          router.replace("/profile");
+          router.replace("/accessibility");
         } else {
           router.replace("/student");
         }
@@ -105,9 +112,30 @@ export default function LoginScreen() {
         subtitle="Sign in to continue using IncluEd"
       />
 
-      <View style={styles.roleBadge}>
-        <Text style={styles.roleText}>
-          {role === "teacher" ? "Faculty" : "Student"}
+      <View
+        style={[
+          styles.roleBadge,
+          {
+            paddingHorizontal: 18,
+            paddingVertical: 8,
+            marginBottom: spacing.xl,
+            backgroundColor: colors.primaryLight + "1A",
+            borderRadius: radius.xl,
+            borderWidth: 1,
+            borderColor: colors.primary,
+          },
+        ]}
+        accessibilityLabel={`Signing in as ${roleLabel}`}
+      >
+        <Text
+          style={{
+            fontFamily: typography.body.fontFamily,
+            fontSize: typography.body.fontSize,
+            fontWeight: "700",
+            color: colors.primary,
+          }}
+        >
+          {roleLabel}
         </Text>
       </View>
 
@@ -141,7 +169,7 @@ export default function LoginScreen() {
       />
 
       <TouchableOpacity
-        style={styles.forgotContainer}
+        style={[styles.forgotContainer, { marginBottom: spacing.lg }]}
         onPress={() =>
           Toast.show({
             type: "info",
@@ -149,8 +177,20 @@ export default function LoginScreen() {
             text2: "Forgot Password will be available in a future update.",
           })
         }
+        accessibilityRole="button"
+        accessibilityLabel="Forgot password"
+        hitSlop={8}
       >
-        <Text style={styles.forgotText}>Forgot Password?</Text>
+        <Text
+          style={{
+            fontFamily: typography.caption.fontFamily,
+            fontSize: typography.caption.fontSize,
+            fontWeight: "600",
+            color: colors.primary,
+          }}
+        >
+          Forgot Password?
+        </Text>
       </TouchableOpacity>
 
       <PrimaryButton
@@ -160,16 +200,20 @@ export default function LoginScreen() {
         disabled={loading}
       />
 
-      <AuthFooter
-        question="Don't have an account?"
-        action="Create Account"
-        onPress={() =>
-          router.push({
-            pathname: "/register",
-            params: { role },
-          })
-        }
-      />
+      {/* Guidance accounts are provisioned by an administrator —
+          no self-service registration path for that role. */}
+      {!isGuidance && (
+        <AuthFooter
+          question="Don't have an account?"
+          action="Create Account"
+          onPress={() =>
+            router.push({
+              pathname: "/register",
+              params: { role },
+            })
+          }
+        />
+      )}
     </ScreenContainer>
   );
 }
@@ -177,29 +221,9 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   roleBadge: {
     alignSelf: "center",
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    marginBottom: Spacing.xl,
-    backgroundColor: "#FFF5F5",
-    borderRadius: Radius.xl,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-  },
-
-  roleText: {
-    color: Colors.primary,
-    fontSize: Typography.body,
-    fontWeight: "700",
   },
 
   forgotContainer: {
     alignItems: "flex-end",
-    marginBottom: Spacing.lg,
-  },
-
-  forgotText: {
-    color: Colors.primary,
-    fontWeight: "600",
-    fontSize: Typography.caption,
   },
 });

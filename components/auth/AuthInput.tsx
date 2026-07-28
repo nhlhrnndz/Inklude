@@ -1,5 +1,5 @@
-import React from "react";
 import { Ionicons } from "@expo/vector-icons";
+import React from "react";
 import {
   StyleSheet,
   Text,
@@ -8,10 +8,7 @@ import {
   View,
 } from "react-native";
 
-import Colors from "../../theme/colors";
-import Radius from "../../theme/radius";
-import Spacing from "../../theme/spacing";
-import Typography from "../../theme/typography";
+import { useTheme } from "../../context/ThemeContext";
 
 interface AuthInputProps extends TextInputProps {
   label: string;
@@ -23,36 +20,76 @@ export default function AuthInput({
   label,
   error,
   icon,
+  accessibilityLabel,
+  accessibilityHint,
   ...props
 }: AuthInputProps) {
+  const { colors, typography, spacing, radius } = useTheme();
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.label}>{label}</Text>
+    <View style={[styles.container, { marginBottom: spacing.md }]}>
+      <Text
+        style={{
+          fontFamily: typography.body.fontFamily,
+          fontSize: typography.body.fontSize,
+          fontWeight: "600",
+          color: colors.text,
+          marginBottom: spacing.sm,
+        }}
+      >
+        {label}
+      </Text>
 
       <View
         style={[
           styles.inputContainer,
-          error && styles.inputError,
+          {
+            height: 56,
+            borderWidth: 1,
+            borderColor: error ? colors.error : colors.border,
+            borderRadius: radius.lg,
+            paddingHorizontal: spacing.md,
+            backgroundColor: colors.surface,
+          },
         ]}
       >
         {icon && (
           <Ionicons
             name={icon}
             size={20}
-            color={Colors.primary}
-            style={styles.icon}
+            color={error ? colors.error : colors.primary}
+            style={{ marginRight: spacing.sm }}
           />
         )}
 
         <TextInput
-          style={styles.input}
-          placeholderTextColor={Colors.placeholder}
+          style={[
+            styles.input,
+            {
+              color: colors.text,
+              fontFamily: typography.body.fontFamily,
+              fontSize: typography.body.fontSize,
+            },
+          ]}
+          placeholderTextColor={colors.placeholder}
+          accessibilityLabel={accessibilityLabel ?? label}
+          accessibilityHint={error ?? accessibilityHint}
           {...props}
         />
       </View>
 
       {error ? (
-        <Text style={styles.error}>{error}</Text>
+        <Text
+          style={{
+            marginTop: 6,
+            fontFamily: typography.caption.fontFamily,
+            fontSize: typography.caption.fontSize,
+            color: colors.error,
+          }}
+          accessibilityLiveRegion="polite"
+        >
+          {error}
+        </Text>
       ) : null}
     </View>
   );
@@ -60,44 +97,15 @@ export default function AuthInput({
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: Spacing.md,
-  },
-
-  label: {
-    fontSize: Typography.body,
-    color: Colors.text,
-    marginBottom: Spacing.sm,
-    fontWeight: "600",
+    // dynamic values applied inline
   },
 
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    height: 56,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.lg,
-    paddingHorizontal: Spacing.md,
-    backgroundColor: Colors.surface,
   },
 
   input: {
     flex: 1,
-    color: Colors.text,
-    fontSize: Typography.body,
-  },
-
-  icon: {
-    marginRight: Spacing.sm,
-  },
-
-  inputError: {
-    borderColor: Colors.error,
-  },
-
-  error: {
-    marginTop: 6,
-    color: Colors.error,
-    fontSize: Typography.caption,
   },
 });

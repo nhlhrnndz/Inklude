@@ -1,8 +1,7 @@
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-import Colors from "../../theme/colors";
-import Spacing from "../../theme/spacing";
+import { useTheme } from "../../context/ThemeContext";
 
 interface AuthFooterProps {
   question: string;
@@ -15,14 +14,35 @@ export default function AuthFooter({
   action,
   onPress,
 }: AuthFooterProps) {
+  const { colors, typography, spacing } = useTheme();
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.question}>
+    <View style={[styles.container, { marginTop: spacing.lg }]}>
+      <Text
+        style={{
+          fontFamily: typography.body.fontFamily,
+          fontSize: 15,
+          color: colors.textSecondary,
+        }}
+      >
         {question}
       </Text>
 
-      <TouchableOpacity onPress={onPress}>
-        <Text style={styles.action}>
+      <TouchableOpacity
+        onPress={onPress}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel={`${question} ${action}`}
+      >
+        <Text
+          style={{
+            fontFamily: typography.button.fontFamily,
+            fontSize: 15,
+            fontWeight: "700",
+            color: colors.primary,
+            marginLeft: 5,
+          }}
+        >
           {action}
         </Text>
       </TouchableOpacity>
@@ -34,19 +54,6 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
     justifyContent: "center",
-    marginTop: Spacing.lg,
     flexWrap: "wrap",
-  },
-
-  question: {
-    color: Colors.textSecondary,
-    fontSize: 15,
-  },
-
-  action: {
-    marginLeft: 5,
-    color: Colors.primary,
-    fontWeight: "700",
-    fontSize: 15,
   },
 });
