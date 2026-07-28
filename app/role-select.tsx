@@ -1,144 +1,186 @@
 import { useRouter } from "expo-router";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React from "react";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-const PRIMARY = "#8B0000";
+import { useTheme } from "../context/ThemeContext";
+
+interface RoleOption {
+  key: "student" | "teacher" | "guidance";
+  initial: string;
+  title: string;
+  description: string;
+}
+
+const ROLE_OPTIONS: RoleOption[] = [
+  {
+    key: "student",
+    initial: "S",
+    title: "Student",
+    description:
+      "Access learning tools, AI communication, classroom sessions, and accessibility features.",
+  },
+  {
+    key: "teacher",
+    initial: "F",
+    title: "Faculty",
+    description:
+      "Create classroom sessions, manage accessibility support, and communicate with students.",
+  },
+  {
+    key: "guidance",
+    initial: "G",
+    title: "Guidance",
+    description:
+      "View student support records, session attendance, and transcript history.",
+  },
+];
 
 export default function RoleSelectScreen() {
   const router = useRouter();
+  const { colors, typography, spacing, radius } = useTheme();
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Continue as</Text>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingHorizontal: spacing.lg },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={[styles.header, { marginBottom: spacing.xxl }]}>
+          <Text
+            style={{
+              fontFamily: typography.h1.fontFamily,
+              fontSize: typography.h1.fontSize,
+              lineHeight: typography.h1.lineHeight,
+              fontWeight: typography.h1.fontWeight,
+              color: colors.primary,
+            }}
+            accessibilityRole="header"
+          >
+            Continue as
+          </Text>
 
-        <Text style={styles.subtitle}>
-          Choose your role to continue using IncluEd.
-        </Text>
-      </View>
+          <Text
+            style={{
+              fontFamily: typography.body.fontFamily,
+              fontSize: typography.body.fontSize,
+              lineHeight: typography.body.lineHeight,
+              color: colors.textSecondary,
+              textAlign: "center",
+              marginTop: spacing.sm,
+            }}
+          >
+            Choose your role to continue using IncluEd.
+          </Text>
+        </View>
 
-      <View style={styles.cardContainer}>
-        {/* Student */}
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={styles.card}
-          onPress={() =>
-            router.push({
-              pathname: "/login",
-              params: { role: "student" },
-            })
-          }
-        >
-          <View style={styles.iconCircle}>
-            <Text style={styles.iconText}>S</Text>
-          </View>
+        <View style={{ gap: spacing.md }}>
+          {ROLE_OPTIONS.map((option) => (
+            <TouchableOpacity
+              key={option.key}
+              activeOpacity={0.85}
+              style={[
+                styles.card,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  borderRadius: radius.lg,
+                  padding: spacing.lg,
+                },
+              ]}
+              onPress={() =>
+                router.push({
+                  pathname: "/login",
+                  params: { role: option.key },
+                })
+              }
+              accessibilityRole="button"
+              accessibilityLabel={`${option.title}. ${option.description}`}
+            >
+              <View
+                style={[
+                  styles.iconCircle,
+                  {
+                    borderRadius: radius.round,
+                    backgroundColor: colors.primaryLight + "22",
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    fontFamily: typography.title.fontFamily,
+                    fontSize: typography.title.fontSize,
+                    fontWeight: "700",
+                    color: colors.primary,
+                  }}
+                >
+                  {option.initial}
+                </Text>
+              </View>
 
-          <View style={styles.cardContent}>
-            <Text style={styles.cardTitle}>Student</Text>
+              <View style={[styles.cardContent, { marginLeft: spacing.md }]}>
+                <Text
+                  style={{
+                    fontFamily: typography.title.fontFamily,
+                    fontSize: typography.title.fontSize,
+                    fontWeight: "700",
+                    color: colors.text,
+                  }}
+                >
+                  {option.title}
+                </Text>
 
-            <Text style={styles.cardDescription}>
-              Access learning tools, AI communication, classroom sessions, and
-              accessibility features.
-            </Text>
-          </View>
+                <Text
+                  style={{
+                    fontFamily: typography.caption.fontFamily,
+                    fontSize: typography.caption.fontSize,
+                    lineHeight: typography.caption.lineHeight,
+                    color: colors.textSecondary,
+                    marginTop: 4,
+                  }}
+                >
+                  {option.description}
+                </Text>
+              </View>
 
-          <Text style={styles.arrow}>›</Text>
-        </TouchableOpacity>
-
-        {/* Faculty */}
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={styles.card}
-          onPress={() =>
-            router.push({
-              pathname: "/login",
-              params: { role: "teacher" },
-            })
-          }
-        >
-          <View style={styles.iconCircle}>
-            <Text style={styles.iconText}>F</Text>
-          </View>
-
-          <View style={styles.cardContent}>
-            <Text style={styles.cardTitle}>Faculty</Text>
-
-            <Text style={styles.cardDescription}>
-              Create classroom sessions, manage accessibility support, and
-              communicate with students.
-            </Text>
-          </View>
-
-          <Text style={styles.arrow}>›</Text>
-        </TouchableOpacity>
-
-        {/* Guidance */}
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={styles.card}
-          onPress={() =>
-            router.push({
-              pathname: "/login",
-              params: { role: "guidance" },
-            })
-          }
-        >
-          <View style={styles.iconCircle}>
-            <Text style={styles.iconText}>G</Text>
-          </View>
-
-          <View style={styles.cardContent}>
-            <Text style={styles.cardTitle}>Guidance</Text>
-
-            <Text style={styles.cardDescription}>
-              View student disability records, session attendance, and
-              transcript history.
-            </Text>
-          </View>
-
-          <Text style={styles.arrow}>›</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+              <Text
+                style={[
+                  styles.arrow,
+                  { color: colors.primary },
+                ]}
+                accessibilityElementsHidden
+                importantForAccessibility="no"
+              >
+                ›
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
-    paddingHorizontal: 24,
+  },
+
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: "center",
+    paddingVertical: 32,
   },
 
   header: {
-    marginBottom: 40,
     alignItems: "center",
   },
 
-  title: {
-    fontSize: 32,
-    fontWeight: "700",
-    color: PRIMARY,
-  },
-
-  subtitle: {
-    marginTop: 10,
-    fontSize: 16,
-    color: "#666",
-    textAlign: "center",
-    lineHeight: 24,
-  },
-
-  cardContainer: {
-    gap: 18,
-  },
-
   card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 22,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    padding: 22,
     flexDirection: "row",
     alignItems: "center",
 
@@ -155,39 +197,16 @@ const styles = StyleSheet.create({
   iconCircle: {
     width: 56,
     height: 56,
-    borderRadius: 28,
-    backgroundColor: "#FDECEC",
     justifyContent: "center",
     alignItems: "center",
   },
 
-  iconText: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: PRIMARY,
-  },
-
   cardContent: {
     flex: 1,
-    marginLeft: 18,
-  },
-
-  cardTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#1F2937",
-  },
-
-  cardDescription: {
-    marginTop: 6,
-    fontSize: 14,
-    color: "#6B7280",
-    lineHeight: 20,
   },
 
   arrow: {
     fontSize: 30,
-    color: PRIMARY,
     fontWeight: "300",
   },
 });

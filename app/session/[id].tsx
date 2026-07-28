@@ -32,6 +32,17 @@ interface Session {
   participants: Participant[];
 }
 
+// Maps each role to its dashboard route. Used so the "Back" button
+// always returns the user to their own dashboard instead of relying
+// on router.back(), which just pops whatever happens to be sitting
+// underneath on the native stack (and can be stale after a logout
+// or role switch — see Sidebar.tsx's logout handler).
+const ROLE_HOME: Record<string, string> = {
+  student: "/student",
+  teacher: "/teacher",
+  guidance: "/guidance-dashboard",
+};
+
 export default function SessionDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -71,6 +82,10 @@ export default function SessionDetailScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const goToDashboard = () => {
+    router.replace((ROLE_HOME[user?.role ?? "student"] ?? "/") as any);
   };
 
   const handleEndSession = () => {
@@ -125,7 +140,7 @@ export default function SessionDetailScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+      <TouchableOpacity style={styles.backButton} onPress={goToDashboard}>
         <Text style={styles.backText}>← Back</Text>
       </TouchableOpacity>
 

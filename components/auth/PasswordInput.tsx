@@ -1,5 +1,5 @@
-import React, { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import React, { useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -9,10 +9,7 @@ import {
   View,
 } from "react-native";
 
-import Colors from "../../theme/colors";
-import Radius from "../../theme/radius";
-import Spacing from "../../theme/spacing";
-import Typography from "../../theme/typography";
+import { useTheme } from "../../context/ThemeContext";
 
 interface PasswordInputProps extends TextInputProps {
   label: string;
@@ -22,48 +19,90 @@ interface PasswordInputProps extends TextInputProps {
 export default function PasswordInput({
   label,
   error,
+  accessibilityLabel,
+  accessibilityHint,
   ...props
 }: PasswordInputProps) {
   const [hidden, setHidden] = useState(true);
+  const { colors, typography, spacing, radius } = useTheme();
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.label}>{label}</Text>
+    <View style={[styles.container, { marginBottom: spacing.md }]}>
+      <Text
+        style={{
+          fontFamily: typography.body.fontFamily,
+          fontSize: typography.body.fontSize,
+          fontWeight: "600",
+          color: colors.text,
+          marginBottom: spacing.sm,
+        }}
+      >
+        {label}
+      </Text>
 
       <View
         style={[
           styles.inputContainer,
-          error && styles.inputError,
+          {
+            height: 56,
+            borderWidth: 1,
+            borderColor: error ? colors.error : colors.border,
+            borderRadius: radius.lg,
+            backgroundColor: colors.surface,
+            paddingHorizontal: spacing.md,
+          },
         ]}
       >
         <Ionicons
           name="lock-closed-outline"
           size={20}
-          color={Colors.primary}
-          style={styles.icon}
+          color={error ? colors.error : colors.primary}
+          style={{ marginRight: spacing.sm }}
         />
 
         <TextInput
-          style={styles.input}
+          style={[
+            styles.input,
+            {
+              color: colors.text,
+              fontFamily: typography.body.fontFamily,
+              fontSize: typography.body.fontSize,
+            },
+          ]}
           secureTextEntry={hidden}
-          placeholderTextColor={Colors.placeholder}
+          placeholderTextColor={colors.placeholder}
+          accessibilityLabel={accessibilityLabel ?? label}
+          accessibilityHint={error ?? accessibilityHint}
           {...props}
         />
 
         <TouchableOpacity
           onPress={() => setHidden(!hidden)}
           hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel={hidden ? "Show password" : "Hide password"}
+          accessibilityState={{ expanded: !hidden }}
         >
           <Ionicons
             name={hidden ? "eye-off-outline" : "eye-outline"}
             size={22}
-            color={Colors.primary}
+            color={colors.primary}
           />
         </TouchableOpacity>
       </View>
 
       {error ? (
-        <Text style={styles.error}>{error}</Text>
+        <Text
+          style={{
+            marginTop: 6,
+            fontFamily: typography.caption.fontFamily,
+            fontSize: typography.caption.fontSize,
+            color: colors.error,
+          }}
+          accessibilityLiveRegion="polite"
+        >
+          {error}
+        </Text>
       ) : null}
     </View>
   );
@@ -71,44 +110,15 @@ export default function PasswordInput({
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: Spacing.md,
-  },
-
-  label: {
-    marginBottom: Spacing.sm,
-    fontSize: Typography.body,
-    fontWeight: "600",
-    color: Colors.text,
+    // dynamic values applied inline
   },
 
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    height: 56,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.surface,
-    paddingHorizontal: Spacing.md,
-  },
-
-  inputError: {
-    borderColor: Colors.error,
-  },
-
-  icon: {
-    marginRight: Spacing.sm,
   },
 
   input: {
     flex: 1,
-    color: Colors.text,
-    fontSize: Typography.body,
-  },
-
-  error: {
-    marginTop: 6,
-    color: Colors.error,
-    fontSize: Typography.caption,
   },
 });

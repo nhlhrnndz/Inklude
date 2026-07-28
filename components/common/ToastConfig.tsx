@@ -1,17 +1,20 @@
 import React from "react";
-import Toast, {
+import {
   BaseToast,
   ErrorToast,
+  ToastConfig,
 } from "react-native-toast-message";
 
-import Colors from "../../theme/colors";
+import { ColorPalette } from "../../theme/colors";
 
-export const toastConfig = {
-  success: (props: any) => (
+export const createToastConfig = (
+  colors: ColorPalette
+): ToastConfig => ({
+  success: (props) => (
     <BaseToast
       {...props}
       style={{
-        borderLeftColor: Colors.primary,
+        borderLeftColor: colors.primary,
         borderLeftWidth: 6,
       }}
       text1Style={{
@@ -24,11 +27,11 @@ export const toastConfig = {
     />
   ),
 
-  error: (props: any) => (
+  error: (props) => (
     <ErrorToast
       {...props}
       style={{
-        borderLeftColor: Colors.error,
+        borderLeftColor: colors.error,
         borderLeftWidth: 6,
       }}
       text1Style={{
@@ -40,6 +43,4 @@ export const toastConfig = {
       }}
     />
   ),
-};
-
-export default Toast;
+});
