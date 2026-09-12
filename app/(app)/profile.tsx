@@ -51,6 +51,7 @@ function ProfileRow({ icon, label, onPress, destructive }: ProfileRowProps) {
         color={destructive ? colors.danger : colors.textSecondary}
         style={{ marginRight: spacing.sm + 2 }}
       />
+
       <Text
         style={{
           flex: 1,
@@ -61,19 +62,24 @@ function ProfileRow({ icon, label, onPress, destructive }: ProfileRowProps) {
       >
         {label}
       </Text>
+
       <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
     </TouchableOpacity>
   );
 }
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const { user } = useAuth();
   const { colors, typography, spacing, radius } = useTheme();
-  const router = useRouter();
 
   const displayName = user?.name ?? "Guest User";
   const initial = displayName.charAt(0).toUpperCase();
   const roleLabel = user?.role ? (ROLE_LABEL[user.role] ?? user.role) : "—";
+
+  const goBackToDashboard = () => {
+    router.replace("/student");
+  };
 
   return (
     <SafeAreaView
@@ -85,6 +91,30 @@ export default function ProfileScreen() {
           paddingBottom: spacing.xxl,
         }}
       >
+        {/* Back Button */}
+        <TouchableOpacity
+          style={[styles.backButton, { marginBottom: spacing.md }]}
+          onPress={goBackToDashboard}
+          accessibilityRole="button"
+          accessibilityLabel="Back to Student Dashboard"
+          accessibilityHint="Returns to the Student Dashboard"
+        >
+          <Ionicons name="arrow-back" size={22} color={colors.primary} />
+
+          <Text
+            style={{
+              fontFamily: typography.body.fontFamily,
+              fontSize: typography.body.fontSize,
+              color: colors.primary,
+              fontWeight: "600",
+              marginLeft: spacing.sm,
+            }}
+          >
+            Back
+          </Text>
+        </TouchableOpacity>
+
+        {/* Header */}
         <Text
           style={{
             fontFamily: typography.h2.fontFamily,
@@ -122,6 +152,7 @@ export default function ProfileScreen() {
               {initial}
             </Text>
           </View>
+
           <TouchableOpacity
             style={[styles.changePhotoBtn, { marginTop: spacing.sm }]}
             onPress={() => showComingSoon("Changing your profile picture")}
@@ -129,6 +160,7 @@ export default function ProfileScreen() {
             accessibilityLabel="Change profile picture"
           >
             <Ionicons name="camera-outline" size={16} color={colors.primary} />
+
             <Text
               style={{
                 fontFamily: typography.caption.fontFamily,
@@ -156,6 +188,7 @@ export default function ProfileScreen() {
         >
           Basic Information
         </Text>
+
         <View
           style={[
             styles.card,
@@ -178,6 +211,7 @@ export default function ProfileScreen() {
             >
               Name
             </Text>
+
             <Text
               style={{
                 fontFamily: typography.body.fontFamily,
@@ -189,7 +223,9 @@ export default function ProfileScreen() {
               {displayName}
             </Text>
           </View>
+
           <View style={[styles.divider, { backgroundColor: colors.divider }]} />
+
           <View style={[styles.infoRow, { paddingVertical: spacing.sm }]}>
             <Text
               style={{
@@ -200,6 +236,7 @@ export default function ProfileScreen() {
             >
               Email
             </Text>
+
             <Text
               style={{
                 fontFamily: typography.body.fontFamily,
@@ -211,7 +248,9 @@ export default function ProfileScreen() {
               {user?.email ?? "—"}
             </Text>
           </View>
+
           <View style={[styles.divider, { backgroundColor: colors.divider }]} />
+
           <View style={[styles.infoRow, { paddingVertical: spacing.sm }]}>
             <Text
               style={{
@@ -222,6 +261,7 @@ export default function ProfileScreen() {
             >
               Role
             </Text>
+
             <Text
               style={{
                 fontFamily: typography.body.fontFamily,
@@ -268,6 +308,7 @@ export default function ProfileScreen() {
         >
           Security
         </Text>
+
         <View
           style={[
             styles.card,
@@ -300,6 +341,7 @@ export default function ProfileScreen() {
         >
           Notifications
         </Text>
+
         <View
           style={[
             styles.card,
@@ -343,7 +385,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   infoRow: {
-    // dynamic values applied inline
+    // Dynamic values are applied inline.
   },
   divider: {
     height: StyleSheet.hairlineWidth,
@@ -351,5 +393,11 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
+  },
+  backButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 44,
+    alignSelf: "flex-start",
   },
 });

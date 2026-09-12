@@ -42,6 +42,7 @@ export default function SessionDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
+
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [ending, setEnding] = useState(false);
@@ -77,8 +78,31 @@ export default function SessionDetailScreen() {
     }
   };
 
+  /**
+   * Used for actions that intentionally return
+   * to the user's dashboard.
+   */
   const goToDashboard = () => {
     router.replace((ROLE_HOME[user?.role ?? "student"] ?? "/") as any);
+  };
+
+  /**
+   * Returns to the screen that opened Session Detail.
+   *
+   * Examples:
+   * Join Session → Session Detail → Back → Join Session
+   * My Sessions → Session Detail → Back → My Sessions
+   *
+   * If there is no navigation history, fall back
+   * to the appropriate role dashboard.
+   */
+  const goBackToParent = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    goToDashboard();
   };
 
   const handleEndSession = () => {
@@ -96,11 +120,17 @@ export default function SessionDetailScreen() {
     if (isRecording) {
       await stopCaptioning();
     }
+
     setEnding(true);
+
     try {
       await endSession(Number(id));
+
       crossAlert("Success", "Session ended successfully", [
-        { text: "OK", onPress: goToDashboard },
+        {
+          text: "OK",
+          onPress: goToDashboard,
+        },
       ]);
     } catch (error) {
       console.error("Error ending session:", error);
@@ -119,7 +149,7 @@ export default function SessionDetailScreen() {
         {
           text: "Leave",
           style: "destructive",
-          onPress: goToDashboard, // unmount triggers useCaptionSession's "leave-session" emit
+          onPress: goToDashboard,
         },
       ],
     );
@@ -137,7 +167,12 @@ export default function SessionDetailScreen() {
     return (
       <View style={styles.centered}>
         <Text style={styles.errorText}>Session not found</Text>
-        <TouchableOpacity onPress={() => router.back()}>
+
+        <TouchableOpacity
+          onPress={goBackToParent}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <Text style={styles.backLink}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -148,7 +183,13 @@ export default function SessionDetailScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <TouchableOpacity style={styles.backButton} onPress={goToDashboard}>
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={goBackToParent}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+        accessibilityHint="Returns to the screen you came from"
+      >
         <Text style={styles.backText}>← Back</Text>
       </TouchableOpacity>
 
@@ -157,8 +198,12 @@ export default function SessionDetailScreen() {
           <Text style={styles.codeLabel}>Session Code</Text>
           <Text style={styles.code}>{session.code}</Text>
         </View>
+
         <View
-          style={[styles.statusBadge, isActive ? styles.active : styles.ended]}
+          style={[
+            styles.statusBadge,
+            isActive ? styles.active : styles.ended,
+          ]}
         >
           <Text style={styles.statusText}>
             {isActive ? "● LIVE" : "● ENDED"}
@@ -167,15 +212,19 @@ export default function SessionDetailScreen() {
       </View>
 
       <Text style={styles.title}>{session.title}</Text>
+
       {session.description && (
         <Text style={styles.description}>{session.description}</Text>
       )}
 
       <View style={styles.stats}>
         <View style={styles.stat}>
-          <Text style={styles.statValue}>{session.participants.length}</Text>
+          <Text style={styles.statValue}>
+            {session.participants.length}
+          </Text>
           <Text style={styles.statLabel}>Participants</Text>
         </View>
+
         <View style={styles.stat}>
           <Text style={styles.statValue}>
             {new Date(session.createdAt).toLocaleDateString()}
@@ -187,9 +236,11 @@ export default function SessionDetailScreen() {
       {session.participants.length > 0 && (
         <View style={styles.participantsSection}>
           <Text style={styles.sectionTitle}>Participants</Text>
+
           {session.participants.map((p) => (
             <View key={p.id} style={styles.participantItem}>
               <Text style={styles.participantName}>{p.name}</Text>
+
               <Text style={styles.participantTime}>
                 Joined: {new Date(p.joined_at).toLocaleTimeString()}
               </Text>
@@ -202,13 +253,17 @@ export default function SessionDetailScreen() {
         <View style={styles.captionSection}>
           <View style={styles.captionHeader}>
             <Text style={styles.sectionTitle}>Live Captions</Text>
+
             <View style={styles.socketStatusRow}>
               <View
                 style={[
                   styles.socketDot,
-                  connected ? styles.socketDotOn : styles.socketDotOff,
+                  connected
+                    ? styles.socketDotOn
+                    : styles.socketDotOff,
                 ]}
               />
+
               <Text style={styles.socketStatusText}>
                 {connected ? "Connected" : "Connecting..."}
               </Text>
@@ -219,9 +274,13 @@ export default function SessionDetailScreen() {
             <TouchableOpacity
               style={[
                 styles.testCaptionButton,
-                isRecording && { backgroundColor: "#e94560" },
+                isRecording && {
+                  backgroundColor: "#e94560",
+                },
               ]}
-              onPress={isRecording ? stopCaptioning : startCaptioning}
+              onPress={
+                isRecording ? stopCaptioning : startCaptioning
+              }
             >
               <Text style={styles.testCaptionButtonText}>
                 {isRecording
@@ -231,13 +290,17 @@ export default function SessionDetailScreen() {
             </TouchableOpacity>
           )}
 
-          {micError && <Text style={styles.micErrorText}>{micError}</Text>}
+          {micError && (
+            <Text style={styles.micErrorText}>{micError}</Text>
+          )}
 
           <View style={styles.captionBox}>
             {captions.length === 0 ? (
               <Text style={styles.captionEmpty}>
                 No captions yet —{" "}
-                {isTeacher ? "tap the button above" : "waiting for the teacher"}
+                {isTeacher
+                  ? "tap the button above"
+                  : "waiting for the teacher"}
               </Text>
             ) : (
               captions.map((c, i) => (
