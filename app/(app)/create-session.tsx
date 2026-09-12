@@ -3,20 +3,19 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
-  View,
+  TouchableOpacity
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useTheme } from "../../context/ThemeContext";
 import { createSession } from "../../utils/api";
+import { crossAlert } from "../../utils/crossAlert";
 
 export default function CreateSessionScreen() {
   const router = useRouter();
@@ -28,29 +27,30 @@ export default function CreateSessionScreen() {
 
   const handleCreate = async () => {
     if (!title.trim()) {
-      Alert.alert("Error", "Please enter a session title");
+      crossAlert("Error", "Please enter a session title");
       return;
     }
 
     setLoading(true);
     try {
       const response = await createSession(title.trim(), description.trim());
-      Alert.alert(
+      crossAlert(
         "Session Created!",
-        `Session code: ${response.session.code}\nShare this code with your students.`,
+        `Session code: ${response.session.code}\nShare this code with your students.\n\nTap OK to view the session, or Cancel to return to your dashboard.`,
         [
+          {
+            text: "Cancel",
+            style: "cancel",
+            onPress: () => router.replace("/teacher"),
+          },
           {
             text: "View Session",
             onPress: () => router.push(`/session/${response.session.id}`),
           },
-          {
-            text: "Done",
-            onPress: () => router.back(),
-          },
         ],
       );
     } catch (error: any) {
-      Alert.alert(
+      crossAlert(
         "Error",
         error.response?.data?.message || "Failed to create session",
       );
@@ -60,7 +60,9 @@ export default function CreateSessionScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: colors.background }]}
+    >
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -72,7 +74,7 @@ export default function CreateSessionScreen() {
         >
           <TouchableOpacity
             style={[styles.backButton, { marginBottom: spacing.lg }]}
-            onPress={() => router.back()}
+            onPress={() => router.replace("/teacher")}
             accessibilityRole="button"
             accessibilityLabel="Go back"
             hitSlop={8}

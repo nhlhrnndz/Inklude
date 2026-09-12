@@ -1,5 +1,7 @@
+// utils/api.ts
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
+import { Platform } from "react-native";
 import { API_URL } from "../constants/config";
 
 const api = axios.create({
@@ -64,15 +66,23 @@ export const transcribeAudioChunk = async (
   fileUri: string,
 ): Promise<string> => {
   const formData = new FormData();
-  // @ts-ignore — React Native's FormData accepts this shape even though the DOM type doesn't
-  formData.append("audio", {
-    uri: fileUri,
-    name: "chunk.m4a",
-    type: "audio/m4a",
-  });
+
+  if (Platform.OS === "web") {
+    // On web, expo-av gives us a blob: URL — fetch it and attach as a real Blob
+    const audioBlob = await (await fetch(fileUri)).blob();
+    formData.append("audio", audioBlob, "chunk.webm");
+  } else {
+    // Native (iOS/Android) — RN's FormData understands this {uri,name,type} shape
+    // @ts-ignore — React Native's FormData accepts this shape even though the DOM type doesn't
+    formData.append("audio", {
+      uri: fileUri,
+      name: "chunk.m4a",
+      type: "audio/m4a",
+    });
+  }
 
   const response = await api.post("/api/transcribe", formData, {
-    headers: { "Content-Type": "multipart/form-data" },
+    headers: { "Content-Type": undefined }, // let the platform set its own multipart boundary
   });
 
   return response.data.text;

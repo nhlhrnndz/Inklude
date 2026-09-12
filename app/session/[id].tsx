@@ -2,7 +2,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,6 +12,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useCaptionSession } from "../../hooks/useCaptionSession";
 import { useMicCaptioning } from "../../hooks/useMicCaptioning";
 import { endSession, getSessionDetails } from "../../utils/api";
+import { crossAlert } from "../../utils/crossAlert";
 
 interface Participant {
   id: number;
@@ -32,11 +32,6 @@ interface Session {
   participants: Participant[];
 }
 
-// Maps each role to its dashboard route. Used so the "Back" button
-// always returns the user to their own dashboard instead of relying
-// on router.back(), which just pops whatever happens to be sitting
-// underneath on the native stack (and can be stale after a logout
-// or role switch — see Sidebar.tsx's logout handler).
 const ROLE_HOME: Record<string, string> = {
   student: "/student",
   teacher: "/teacher",
@@ -53,14 +48,12 @@ export default function SessionDetailScreen() {
 
   const isTeacher = user?.role === "teacher";
 
-  // 🔴 Live captioning socket connection — joins the session room automatically
   const { captions, connected, sendCaption } = useCaptionSession(
     id,
     user?.id,
     isTeacher ? "teacher" : "student",
   );
 
-  // 🎙 Mic capture loop (teacher only) — records chunks, transcribes, broadcasts
   const {
     isRecording,
     error: micError,
@@ -78,7 +71,7 @@ export default function SessionDetailScreen() {
       setSession(data.session);
     } catch (error) {
       console.error("Error loading session:", error);
-      Alert.alert("Error", "Failed to load session details");
+      crossAlert("Error", "Failed to load session details");
     } finally {
       setLoading(false);
     }
@@ -89,7 +82,7 @@ export default function SessionDetailScreen() {
   };
 
   const handleEndSession = () => {
-    Alert.alert("End Session?", "Are you sure you want to end this session?", [
+    crossAlert("End Session?", "Are you sure you want to end this session?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "End",
@@ -100,21 +93,36 @@ export default function SessionDetailScreen() {
   };
 
   const confirmEndSession = async () => {
-    // Make sure the mic loop stops if the teacher ends the session while recording
     if (isRecording) {
       await stopCaptioning();
     }
     setEnding(true);
     try {
       await endSession(Number(id));
-      Alert.alert("Success", "Session ended successfully");
-      router.back();
+      crossAlert("Success", "Session ended successfully", [
+        { text: "OK", onPress: goToDashboard },
+      ]);
     } catch (error) {
       console.error("Error ending session:", error);
-      Alert.alert("Error", "Failed to end session");
+      crossAlert("Error", "Failed to end session");
     } finally {
       setEnding(false);
     }
+  };
+
+  const handleLeaveSession = () => {
+    crossAlert(
+      "Leave Session?",
+      "You can rejoin later using the session code.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Leave",
+          style: "destructive",
+          onPress: goToDashboard, // unmount triggers useCaptionSession's "leave-session" emit
+        },
+      ],
+    );
   };
 
   if (loading) {
@@ -253,6 +261,15 @@ export default function SessionDetailScreen() {
           ) : (
             <Text style={styles.endButtonText}>End Session</Text>
           )}
+        </TouchableOpacity>
+      )}
+
+      {!isTeacher && isActive && (
+        <TouchableOpacity
+          style={styles.leaveButton}
+          onPress={handleLeaveSession}
+        >
+          <Text style={styles.leaveButtonText}>Leave Session</Text>
         </TouchableOpacity>
       )}
     </ScrollView>
@@ -447,6 +464,19 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   endButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  leaveButton: {
+    backgroundColor: "#3a3a3a",
+    padding: 16,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 10,
+    marginBottom: 40,
+  },
+  leaveButtonText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "bold",
