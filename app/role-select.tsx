@@ -1,6 +1,12 @@
+//role-select.tsx
 import { useRouter } from "expo-router";
-import React from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useTheme } from "../context/ThemeContext";
@@ -41,7 +47,9 @@ export default function RoleSelectScreen() {
   const { colors, typography, spacing, radius } = useTheme();
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: colors.background }]}
+    >
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
@@ -147,10 +155,7 @@ export default function RoleSelectScreen() {
               </View>
 
               <Text
-                style={[
-                  styles.arrow,
-                  { color: colors.primary },
-                ]}
+                style={[styles.arrow, { color: colors.primary }]}
                 accessibilityElementsHidden
                 importantForAccessibility="no"
               >
