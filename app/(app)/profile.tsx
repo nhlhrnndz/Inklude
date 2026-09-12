@@ -1,7 +1,13 @@
+//profile.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 
@@ -57,11 +63,7 @@ function ProfileRow({ icon, label, onPress, destructive }: ProfileRowProps) {
         {label}
       </Text>
 
-      <Ionicons
-        name="chevron-forward"
-        size={18}
-        color={colors.textSecondary}
-      />
+      <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
     </TouchableOpacity>
   );
 }
@@ -73,7 +75,7 @@ export default function ProfileScreen() {
 
   const displayName = user?.name ?? "Guest User";
   const initial = displayName.charAt(0).toUpperCase();
-  const roleLabel = user?.role ? ROLE_LABEL[user.role] ?? user.role : "—";
+  const roleLabel = user?.role ? (ROLE_LABEL[user.role] ?? user.role) : "—";
 
   const goBackToDashboard = () => {
     router.replace("/student");
@@ -81,12 +83,7 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView
-      style={[
-        styles.safeArea,
-        {
-          backgroundColor: colors.background,
-        },
-      ]}
+      style={[styles.safeArea, { backgroundColor: colors.background }]}
     >
       <ScrollView
         contentContainerStyle={{
@@ -96,22 +93,13 @@ export default function ProfileScreen() {
       >
         {/* Back Button */}
         <TouchableOpacity
-          style={[
-            styles.backButton,
-            {
-              marginBottom: spacing.md,
-            },
-          ]}
+          style={[styles.backButton, { marginBottom: spacing.md }]}
           onPress={goBackToDashboard}
           accessibilityRole="button"
           accessibilityLabel="Back to Student Dashboard"
           accessibilityHint="Returns to the Student Dashboard"
         >
-          <Ionicons
-            name="arrow-back"
-            size={22}
-            color={colors.primary}
-          />
+          <Ionicons name="arrow-back" size={22} color={colors.primary} />
 
           <Text
             style={{
@@ -142,14 +130,7 @@ export default function ProfileScreen() {
         </Text>
 
         {/* Profile Picture */}
-        <View
-          style={[
-            styles.avatarSection,
-            {
-              marginBottom: spacing.xl,
-            },
-          ]}
-        >
+        <View style={[styles.avatarSection, { marginBottom: spacing.xl }]}>
           <View
             style={[
               styles.avatar,
@@ -173,21 +154,12 @@ export default function ProfileScreen() {
           </View>
 
           <TouchableOpacity
-            style={[
-              styles.changePhotoBtn,
-              {
-                marginTop: spacing.sm,
-              },
-            ]}
+            style={[styles.changePhotoBtn, { marginTop: spacing.sm }]}
             onPress={() => showComingSoon("Changing your profile picture")}
             accessibilityRole="button"
             accessibilityLabel="Change profile picture"
           >
-            <Ionicons
-              name="camera-outline"
-              size={16}
-              color={colors.primary}
-            />
+            <Ionicons name="camera-outline" size={16} color={colors.primary} />
 
             <Text
               style={{
@@ -229,14 +201,7 @@ export default function ProfileScreen() {
             },
           ]}
         >
-          <View
-            style={[
-              styles.infoRow,
-              {
-                paddingVertical: spacing.sm,
-              },
-            ]}
-          >
+          <View style={[styles.infoRow, { paddingVertical: spacing.sm }]}>
             <Text
               style={{
                 fontFamily: typography.caption.fontFamily,
@@ -259,23 +224,9 @@ export default function ProfileScreen() {
             </Text>
           </View>
 
-          <View
-            style={[
-              styles.divider,
-              {
-                backgroundColor: colors.divider,
-              },
-            ]}
-          />
+          <View style={[styles.divider, { backgroundColor: colors.divider }]} />
 
-          <View
-            style={[
-              styles.infoRow,
-              {
-                paddingVertical: spacing.sm,
-              },
-            ]}
-          >
+          <View style={[styles.infoRow, { paddingVertical: spacing.sm }]}>
             <Text
               style={{
                 fontFamily: typography.caption.fontFamily,
@@ -298,23 +249,9 @@ export default function ProfileScreen() {
             </Text>
           </View>
 
-          <View
-            style={[
-              styles.divider,
-              {
-                backgroundColor: colors.divider,
-              },
-            ]}
-          />
+          <View style={[styles.divider, { backgroundColor: colors.divider }]} />
 
-          <View
-            style={[
-              styles.infoRow,
-              {
-                paddingVertical: spacing.sm,
-              },
-            ]}
-          >
+          <View style={[styles.infoRow, { paddingVertical: spacing.sm }]}>
             <Text
               style={{
                 fontFamily: typography.caption.fontFamily,
@@ -354,7 +291,7 @@ export default function ProfileScreen() {
           <ProfileRow
             icon="create-outline"
             label="Edit Profile"
-            onPress={() => showComingSoon("Editing your profile")}
+            onPress={() => router.push("/edit-profile")}
           />
         </View>
 
@@ -387,7 +324,7 @@ export default function ProfileScreen() {
           <ProfileRow
             icon="lock-closed-outline"
             label="Change Password"
-            onPress={() => showComingSoon("Changing your password")}
+            onPress={() => router.push("/change-password")}
           />
         </View>
 

@@ -1,3 +1,4 @@
+//profileController.js
 const { getProfileByUserId, upsertProfile } = require("../models/profileModel");
 
 const VALID_DISABILITY_TYPES = [
