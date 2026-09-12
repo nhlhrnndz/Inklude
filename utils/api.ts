@@ -36,6 +36,24 @@ export const saveMyProfile = async (
   return response.data;
 };
 
+// ✏️ Update the logged-in user's own basic account info (name/email)
+export const updateProfileInfo = async (name: string, email: string) => {
+  const response = await api.put("/api/auth/profile", { name, email });
+  return response.data;
+};
+
+// 🔒 Change the logged-in user's password
+export const changePassword = async (
+  currentPassword: string,
+  newPassword: string,
+) => {
+  const response = await api.put("/api/auth/password", {
+    currentPassword,
+    newPassword,
+  });
+  return response.data;
+};
+
 export const createSession = async (title: string, description?: string) => {
   const response = await api.post("/api/sessions", { title, description });
   return response.data;

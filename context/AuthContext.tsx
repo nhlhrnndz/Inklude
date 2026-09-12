@@ -1,3 +1,4 @@
+//AuthContext.tsx
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import api from "../utils/api";
@@ -21,6 +22,7 @@ type AuthContextType = {
     role: string,
   ) => Promise<void>;
   logout: () => void;
+  updateUser: (updatedUser: User) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -89,9 +91,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
+  // Refresh the in-memory + persisted user after a profile edit,
+  // without requiring the user to log in again.
+  const updateUser = async (updatedUser: User) => {
+    setUser(updatedUser);
+    await AsyncStorage.setItem("user", JSON.stringify(updatedUser));
+  };
+
   return (
     <AuthContext.Provider
-      value={{ user, token, loading, login, register, logout }}
+      value={{ user, token, loading, login, register, logout, updateUser }}
     >
       {children}
     </AuthContext.Provider>

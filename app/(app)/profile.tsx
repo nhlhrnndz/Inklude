@@ -1,6 +1,13 @@
+//profile.tsx
 import { Ionicons } from "@expo/vector-icons";
-import React from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useRouter } from "expo-router";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 
@@ -62,14 +69,22 @@ function ProfileRow({ icon, label, onPress, destructive }: ProfileRowProps) {
 export default function ProfileScreen() {
   const { user } = useAuth();
   const { colors, typography, spacing, radius } = useTheme();
+  const router = useRouter();
 
   const displayName = user?.name ?? "Guest User";
   const initial = displayName.charAt(0).toUpperCase();
-  const roleLabel = user?.role ? ROLE_LABEL[user.role] ?? user.role : "—";
+  const roleLabel = user?.role ? (ROLE_LABEL[user.role] ?? user.role) : "—";
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxl }}>
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: colors.background }]}
+    >
+      <ScrollView
+        contentContainerStyle={{
+          padding: spacing.lg,
+          paddingBottom: spacing.xxl,
+        }}
+      >
         <Text
           style={{
             fontFamily: typography.h2.fontFamily,
@@ -89,7 +104,10 @@ export default function ProfileScreen() {
           <View
             style={[
               styles.avatar,
-              { borderRadius: radius.round, backgroundColor: colors.primaryLight },
+              {
+                borderRadius: radius.round,
+                backgroundColor: colors.primaryLight,
+              },
             ]}
             accessibilityLabel={`${displayName}'s profile picture`}
           >
@@ -151,28 +169,67 @@ export default function ProfileScreen() {
           ]}
         >
           <View style={[styles.infoRow, { paddingVertical: spacing.sm }]}>
-            <Text style={{ fontFamily: typography.caption.fontFamily, fontSize: typography.caption.fontSize, color: colors.textSecondary }}>
+            <Text
+              style={{
+                fontFamily: typography.caption.fontFamily,
+                fontSize: typography.caption.fontSize,
+                color: colors.textSecondary,
+              }}
+            >
               Name
             </Text>
-            <Text style={{ fontFamily: typography.body.fontFamily, fontSize: typography.body.fontSize, color: colors.text, marginTop: 2 }}>
+            <Text
+              style={{
+                fontFamily: typography.body.fontFamily,
+                fontSize: typography.body.fontSize,
+                color: colors.text,
+                marginTop: 2,
+              }}
+            >
               {displayName}
             </Text>
           </View>
           <View style={[styles.divider, { backgroundColor: colors.divider }]} />
           <View style={[styles.infoRow, { paddingVertical: spacing.sm }]}>
-            <Text style={{ fontFamily: typography.caption.fontFamily, fontSize: typography.caption.fontSize, color: colors.textSecondary }}>
+            <Text
+              style={{
+                fontFamily: typography.caption.fontFamily,
+                fontSize: typography.caption.fontSize,
+                color: colors.textSecondary,
+              }}
+            >
               Email
             </Text>
-            <Text style={{ fontFamily: typography.body.fontFamily, fontSize: typography.body.fontSize, color: colors.text, marginTop: 2 }}>
+            <Text
+              style={{
+                fontFamily: typography.body.fontFamily,
+                fontSize: typography.body.fontSize,
+                color: colors.text,
+                marginTop: 2,
+              }}
+            >
               {user?.email ?? "—"}
             </Text>
           </View>
           <View style={[styles.divider, { backgroundColor: colors.divider }]} />
           <View style={[styles.infoRow, { paddingVertical: spacing.sm }]}>
-            <Text style={{ fontFamily: typography.caption.fontFamily, fontSize: typography.caption.fontSize, color: colors.textSecondary }}>
+            <Text
+              style={{
+                fontFamily: typography.caption.fontFamily,
+                fontSize: typography.caption.fontSize,
+                color: colors.textSecondary,
+              }}
+            >
               Role
             </Text>
-            <Text style={{ fontFamily: typography.body.fontFamily, fontSize: typography.body.fontSize, color: colors.text, marginTop: 2 }}>
+            <Text
+              style={{
+                fontFamily: typography.body.fontFamily,
+                fontSize: typography.body.fontSize,
+                color: colors.text,
+                marginTop: 2,
+              }}
+            >
               {roleLabel}
             </Text>
           </View>
@@ -194,7 +251,7 @@ export default function ProfileScreen() {
           <ProfileRow
             icon="create-outline"
             label="Edit Profile"
-            onPress={() => showComingSoon("Editing your profile")}
+            onPress={() => router.push("/edit-profile")}
           />
         </View>
 
@@ -226,7 +283,7 @@ export default function ProfileScreen() {
           <ProfileRow
             icon="lock-closed-outline"
             label="Change Password"
-            onPress={() => showComingSoon("Changing your password")}
+            onPress={() => router.push("/change-password")}
           />
         </View>
 
