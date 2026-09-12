@@ -1,89 +1,118 @@
 // hooks/useMicCaptioning.ts
-import { Audio } from "expo-av";
-import { useCallback, useRef, useState } from "react";
+import {
+  AudioModule,
+  RecordingPresets,
+  setAudioModeAsync,
+  useAudioRecorder,
+} from "expo-audio";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { transcribeAudioChunk } from "../utils/api";
 
-const CHUNK_DURATION_MS = 6000; // record 6 seconds at a time
+const CHUNK_DURATION_MS = 5000; // record 5s → upload → repeat
 
-export function useMicCaptioning(onCaption: (text: string) => void) {
+interface UseMicCaptioningResult {
+  isRecording: boolean;
+  error: string | null;
+  startCaptioning: () => Promise<void>;
+  stopCaptioning: () => Promise<void>;
+}
+
+export function useMicCaptioning(
+  onTranscript: (text: string) => void,
+): UseMicCaptioningResult {
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+
   const [isRecording, setIsRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const recordingRef = useRef<Audio.Recording | null>(null);
-  const runningRef = useRef(false); // controls the loop independent of React state timing
 
-  const recordOneChunk = useCallback(async () => {
+  // Drives the recursive chunk loop; a ref avoids stale closures across renders.
+  const isActiveRef = useRef(false);
+
+  // Keep the latest callback without re-creating recordChunk every render.
+  const onTranscriptRef = useRef(onTranscript);
+  useEffect(() => {
+    onTranscriptRef.current = onTranscript;
+  }, [onTranscript]);
+
+  const recordChunk = useCallback(async () => {
+    if (!isActiveRef.current) return;
+
     try {
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY,
-      );
-      recordingRef.current = recording;
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
 
-      // Let it record for CHUNK_DURATION_MS
       await new Promise((resolve) => setTimeout(resolve, CHUNK_DURATION_MS));
 
-      if (!runningRef.current) {
-        // Stop was requested while this chunk was recording
-        await recording.stopAndUnloadAsync();
+      if (!isActiveRef.current) {
+        // stopCaptioning() fired mid-chunk — stop cleanly, skip uploading a partial clip
+        try {
+          await audioRecorder.stop();
+        } catch {
+          // already stopped
+        }
         return;
       }
 
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
-      recordingRef.current = null;
+      await audioRecorder.stop();
+      const uri = audioRecorder.uri;
 
       if (uri) {
-        try {
-          const text = await transcribeAudioChunk(uri);
-          if (text && text.trim().length > 0) {
-            onCaption(text.trim());
-          }
-        } catch (err: any) {
-          console.log("⚠️ Transcription request failed:", err.message);
-          // Don't kill the loop over one failed chunk — just skip it
-        }
+        // Fire-and-forget so the next chunk starts immediately instead of
+        // waiting on the network round trip.
+        transcribeAudioChunk(uri)
+          .then((text) => {
+            if (text && isActiveRef.current) {
+              onTranscriptRef.current(text);
+            }
+          })
+          .catch((err) => {
+            console.warn("Chunk transcription failed:", err);
+            // One bad chunk shouldn't kill the whole captioning session
+          });
       }
 
-      // Start the next chunk immediately if still running
-      if (runningRef.current) {
-        recordOneChunk();
-      }
-    } catch (err: any) {
-      console.error("🎙️ Recording error:", err.message);
-      setError(err.message);
-      runningRef.current = false;
+      recordChunk();
+    } catch (err) {
+      console.error("Recording error:", err);
+      setError(err instanceof Error ? err.message : "Recording failed");
+      isActiveRef.current = false;
       setIsRecording(false);
     }
-  }, [onCaption]);
+  }, [audioRecorder]);
 
   const startCaptioning = useCallback(async () => {
-    const { status } = await Audio.requestPermissionsAsync();
-    if (status !== "granted") {
-      setError("Microphone permission denied");
+    setError(null);
+
+    const permission = await AudioModule.requestRecordingPermissionsAsync();
+    if (!permission.granted) {
+      setError("Microphone permission was denied");
       return;
     }
 
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
+    await setAudioModeAsync({
+      allowsRecording: true,
+      playsInSilentMode: true,
     });
 
-    setError(null);
-    runningRef.current = true;
+    isActiveRef.current = true;
     setIsRecording(true);
-    recordOneChunk();
-  }, [recordOneChunk]);
+    recordChunk();
+  }, [recordChunk]);
 
   const stopCaptioning = useCallback(async () => {
-    runningRef.current = false;
+    isActiveRef.current = false;
     setIsRecording(false);
-    if (recordingRef.current) {
-      try {
-        await recordingRef.current.stopAndUnloadAsync();
-      } catch {
-        // already stopped, ignore
-      }
-      recordingRef.current = null;
+    try {
+      await audioRecorder.stop();
+    } catch {
+      // Recorder may already be stopped between chunks — safe to ignore
     }
+  }, [audioRecorder]);
+
+  useEffect(() => {
+    return () => {
+      isActiveRef.current = false;
+    };
   }, []);
 
   return { isRecording, error, startCaptioning, stopCaptioning };

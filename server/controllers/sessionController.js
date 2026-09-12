@@ -3,6 +3,7 @@ const {
   getSessionById,
   getSessionByCode,
   getTeacherSessions,
+  getJoinedSessions,
   endSession,
   addParticipant,
   isParticipant,
@@ -52,19 +53,20 @@ async function createSessionController(req, res) {
   }
 }
 
-// GET /api/sessions - Get all sessions for the teacher
+// GET /api/sessions - Get all sessions for the logged-in user (teacher or student)
 async function getMySessions(req, res) {
   try {
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    if (userRole !== "teacher") {
-      return res
-        .status(403)
-        .json({ message: "Only teachers can view sessions." });
+    let sessions;
+    if (userRole === "teacher") {
+      sessions = await getTeacherSessions(userId);
+    } else if (userRole === "student") {
+      sessions = await getJoinedSessions(userId);
+    } else {
+      return res.status(403).json({ message: "Unauthorized role." });
     }
-
-    const sessions = await getTeacherSessions(userId);
 
     res.json({
       sessions: sessions.map((s) => ({
@@ -97,14 +99,12 @@ async function getSessionByIdController(req, res) {
       return res.status(404).json({ message: "Session not found." });
     }
 
-    // If user is teacher, verify they own this session
     if (userRole === "teacher") {
       if (session.teacher_id !== userId) {
         return res.status(403).json({ message: "Access denied." });
       }
     }
 
-    // If user is student, check if they are a participant
     if (userRole === "student") {
       const isUserParticipant = await isParticipant(sessionId, userId);
       if (!isUserParticipant) {
@@ -155,7 +155,6 @@ async function joinSessionByCode(req, res) {
         .json({ message: "Invalid session code or session has ended." });
     }
 
-    // Add participant
     await addParticipant(session.id, userId);
 
     const participants = await getParticipants(session.id);
@@ -181,39 +180,24 @@ async function joinSessionByCode(req, res) {
 // DELETE /api/sessions/:id - End a session (Teacher only)
 async function endSessionController(req, res) {
   try {
-    console.log("1. endSessionController called");
-    console.log("2. Session ID:", req.params.id);
-    console.log("3. User ID:", req.user.id);
-    console.log("4. User Role:", req.user.role);
-
     const userId = req.user.id;
     const sessionId = req.params.id;
 
     const session = await getSessionById(sessionId);
-    console.log("5. Session found:", session ? "Yes" : "No");
 
     if (!session) {
-      console.log("6. Session not found");
       return res.status(404).json({ message: "Session not found." });
     }
 
-    console.log("7. Session teacher_id:", session.teacher_id);
-    console.log("8. User ID:", userId);
-    console.log("9. Session status:", session.status);
-
     if (session.teacher_id !== userId) {
-      console.log("10. Access denied - not the teacher");
       return res.status(403).json({ message: "Access denied." });
     }
 
     if (session.status === "ended") {
-      console.log("11. Session already ended");
       return res.status(400).json({ message: "Session is already ended." });
     }
 
-    console.log("12. Attempting to end session...");
     await endSession(sessionId, userId);
-    console.log("13. Session ended successfully");
 
     res.json({ message: "Session ended successfully." });
   } catch (err) {

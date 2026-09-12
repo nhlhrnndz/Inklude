@@ -1,7 +1,7 @@
-import { DrawerActions } from "@react-navigation/native";
-import { useNavigation, usePathname, useRouter } from "expo-router";
+// app/(app)/_layout.tsx
+import { usePathname, useRouter } from "expo-router";
 import { Drawer } from "expo-router/drawer";
-import React from "react";
+import type { ComponentProps } from "react";
 import Toast from "react-native-toast-message";
 
 import Sidebar, { UserRole } from "../../components/navigation/Sidebar";
@@ -9,6 +9,15 @@ import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
 
 type RouteMap = Record<string, string | null>;
+
+// Inferred directly from expo-router's own <Drawer /> component, so it's
+// always the exact shape expo-router actually passes at runtime —
+// rather than the @react-navigation/drawer type, which looks similar
+// but is a structurally different (and incompatible) type in this
+// version of expo-router.
+type DrawerContentProps = Parameters<
+  NonNullable<ComponentProps<typeof Drawer>["drawerContent"]>
+>[0];
 
 const ROUTES_BY_ROLE: Record<UserRole, RouteMap> = {
   student: {
@@ -48,9 +57,11 @@ function findActiveKey(role: UserRole, pathname: string): string {
   return match ? match[0] : "dashboard";
 }
 
-function SidebarDrawerContent() {
+// Receives the real navigation object expo-router's <Drawer /> passes to
+// drawerContent — props.navigation here IS the Drawer navigator's own
+// navigation object, so props.navigation.closeDrawer() resolves correctly.
+function SidebarDrawerContent({ navigation }: DrawerContentProps) {
   const router = useRouter();
-  const navigation = useNavigation();
   const pathname = usePathname();
   const { user } = useAuth();
 
@@ -66,12 +77,12 @@ function SidebarDrawerContent() {
         text1: "Coming Soon",
         text2: "This section will be available in a future update.",
       });
-      navigation.dispatch(DrawerActions.closeDrawer());
+      navigation.closeDrawer();
       return;
     }
 
     router.push(target as any);
-    navigation.dispatch(DrawerActions.closeDrawer());
+    navigation.closeDrawer();
   };
 
   const handleHelp = () => {
@@ -80,11 +91,15 @@ function SidebarDrawerContent() {
       text1: "Coming Soon",
       text2: "Help & support will be available in a future update.",
     });
-    navigation.dispatch(DrawerActions.closeDrawer());
+    navigation.closeDrawer();
   };
 
   return (
-    <Sidebar activeRoute={activeRoute} onNavigate={handleNavigate} onHelp={handleHelp} />
+    <Sidebar
+      activeRoute={activeRoute}
+      onNavigate={handleNavigate}
+      onHelp={handleHelp}
+    />
   );
 }
 
@@ -93,7 +108,7 @@ export default function AppDrawerLayout() {
 
   return (
     <Drawer
-      drawerContent={() => <SidebarDrawerContent />}
+      drawerContent={(props) => <SidebarDrawerContent {...props} />}
       screenOptions={{
         headerStyle: { backgroundColor: colors.background },
         headerShadowVisible: false,

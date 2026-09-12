@@ -20,13 +20,19 @@ async function transcribeAudio(req, res) {
       return res.status(400).json({ message: "No audio file provided" });
     }
 
-    const file = await toFile(req.file.buffer, "audio.m4a", {
-      type: req.file.mimetype || "audio/m4a",
+    // Use whatever filename/mimetype the client actually sent (m4a on native, webm on web)
+    // instead of hardcoding — this keeps the extension and MIME type in sync so
+    // OpenAI decodes the audio correctly regardless of platform.
+    const originalName = req.file.originalname || "chunk.m4a";
+    const mimeType = req.file.mimetype || "audio/m4a";
+
+    const file = await toFile(req.file.buffer, originalName, {
+      type: mimeType,
     });
 
     const transcription = await openai.audio.transcriptions.create({
       file,
-      model: "whisper-1",
+      model: "gpt-4o-mini-transcribe",
       language: "en",
     });
 

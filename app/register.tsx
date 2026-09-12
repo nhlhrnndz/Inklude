@@ -11,17 +11,29 @@ import PrimaryButton from "../components/auth/PrimaryButton";
 import ScreenContainer from "../components/common/ScreenContainer";
 
 import { useAuth } from "../context/AuthContext";
-import { passwordsMatch, validateEmail, validateName, validatePassword } from "../utils/validators/auth";
+import {
+  passwordsMatch,
+  validateEmail,
+  validateName,
+  validatePassword,
+} from "../utils/validators/auth";
 
 export default function RegisterScreen() {
   const router = useRouter();
   const { register } = useAuth();
 
-  const { role: roleParam } =
-    useLocalSearchParams<{ role?: string }>();
+  const { role: roleParam } = useLocalSearchParams<{
+    role?: string | string[];
+  }>();
 
-  const role: "student" | "teacher" =
-    roleParam === "teacher" ? "teacher" : "student";
+  // roleParam can arrive as a string OR an array depending on nav history —
+  // normalize it to a single string before checking it.
+  const normalizedRole = Array.isArray(roleParam) ? roleParam[0] : roleParam;
+
+  const role: "student" | "teacher" | "guidance" =
+    normalizedRole === "teacher" || normalizedRole === "guidance"
+      ? normalizedRole
+      : "student";
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -31,13 +43,11 @@ export default function RegisterScreen() {
   const [nameError, setNameError] = useState("");
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
-  const [confirmPasswordError, setConfirmPasswordError] =
-    useState("");
+  const [confirmPasswordError, setConfirmPasswordError] = useState("");
 
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
-    // Clear previous errors
     setNameError("");
     setEmailError("");
     setPasswordError("");
@@ -45,7 +55,6 @@ export default function RegisterScreen() {
 
     let isValid = true;
 
-    // Validate Full Name
     if (!name.trim()) {
       setNameError("Please enter your full name.");
       isValid = false;
@@ -54,7 +63,6 @@ export default function RegisterScreen() {
       isValid = false;
     }
 
-    // Validate Email
     if (!email.trim()) {
       setEmailError("Please enter your university email.");
       isValid = false;
@@ -63,29 +71,22 @@ export default function RegisterScreen() {
       isValid = false;
     }
 
-    // Validate Password
     if (!password) {
       setPasswordError("Please create a password.");
       isValid = false;
     } else if (!validatePassword(password)) {
-      setPasswordError(
-        "Password must be at least 8 characters.",
-      );
+      setPasswordError("Password must be at least 8 characters.");
       isValid = false;
     }
 
-    // Validate Confirm Password
     if (!confirmPassword) {
-      setConfirmPasswordError(
-        "Please confirm your password.",
-      );
+      setConfirmPasswordError("Please confirm your password.");
       isValid = false;
     } else if (!passwordsMatch(password, confirmPassword)) {
       setConfirmPasswordError("Passwords do not match.");
       isValid = false;
     }
 
-    // Stop if validation failed
     if (!isValid) {
       Toast.show({
         type: "error",
@@ -99,12 +100,7 @@ export default function RegisterScreen() {
     try {
       setLoading(true);
 
-      await register(
-        name.trim(),
-        email.trim(),
-        password,
-        role,
-      );
+      await register(name.trim(), email.trim(), password, role);
 
       Toast.show({
         type: "success",
@@ -112,7 +108,6 @@ export default function RegisterScreen() {
         text2: "Your account was created successfully.",
       });
 
-      // Give the toast a moment to display
       setTimeout(() => {
         router.replace({
           pathname: "/login",
@@ -151,10 +146,7 @@ export default function RegisterScreen() {
         value={name}
         onChangeText={(text) => {
           setName(text);
-
-          if (nameError) {
-            setNameError("");
-          }
+          if (nameError) setNameError("");
         }}
         autoCapitalize="words"
         autoCorrect={false}
@@ -169,10 +161,7 @@ export default function RegisterScreen() {
         value={email}
         onChangeText={(text) => {
           setEmail(text);
-
-          if (emailError) {
-            setEmailError("");
-          }
+          if (emailError) setEmailError("");
         }}
         keyboardType="email-address"
         autoCapitalize="none"
@@ -187,16 +176,8 @@ export default function RegisterScreen() {
         value={password}
         onChangeText={(text) => {
           setPassword(text);
-
-          if (passwordError) {
-            setPasswordError("");
-          }
-
-          // Automatically clear mismatch error
-          // when the user changes the password
-          if (confirmPasswordError) {
-            setConfirmPasswordError("");
-          }
+          if (passwordError) setPasswordError("");
+          if (confirmPasswordError) setConfirmPasswordError("");
         }}
         returnKeyType="next"
         error={passwordError}
@@ -208,10 +189,7 @@ export default function RegisterScreen() {
         value={confirmPassword}
         onChangeText={(text) => {
           setConfirmPassword(text);
-
-          if (confirmPasswordError) {
-            setConfirmPasswordError("");
-          }
+          if (confirmPasswordError) setConfirmPasswordError("");
         }}
         returnKeyType="done"
         onSubmitEditing={handleRegister}

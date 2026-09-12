@@ -37,7 +37,6 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
   const roleLabel = ROLE_LABEL[role as string] ?? "Student";
-  const isGuidance = role === "guidance";
 
   const handleLogin = async () => {
     setEmailError("");
@@ -200,20 +199,16 @@ export default function LoginScreen() {
         disabled={loading}
       />
 
-      {/* Guidance accounts are provisioned by an administrator —
-          no self-service registration path for that role. */}
-      {!isGuidance && (
-        <AuthFooter
-          question="Don't have an account?"
-          action="Create Account"
-          onPress={() =>
-            router.push({
-              pathname: "/register",
-              params: { role },
-            })
-          }
-        />
-      )}
+      <AuthFooter
+        question="Don't have an account?"
+        action="Create Account"
+        onPress={() =>
+          router.push({
+            pathname: "/register",
+            params: { role },
+          })
+        }
+      />
     </ScreenContainer>
   );
 }
