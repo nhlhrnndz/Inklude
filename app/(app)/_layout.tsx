@@ -54,6 +54,7 @@ function isKnownRole(role: string | undefined): role is UserRole {
 function findActiveKey(role: UserRole, pathname: string): string {
   const routes = ROUTES_BY_ROLE[role];
   const match = Object.entries(routes).find(([, path]) => path === pathname);
+
   return match ? match[0] : "dashboard";
 }
 
@@ -77,11 +78,15 @@ function SidebarDrawerContent({ navigation }: DrawerContentProps) {
         text1: "Coming Soon",
         text2: "This section will be available in a future update.",
       });
+
       navigation.closeDrawer();
       return;
     }
 
-    router.push(target as any);
+    // Sidebar items are top-level destinations.
+    // Replace prevents repeatedly stacking sibling screens
+    // in the navigation history.
+    router.replace(target as any);
     navigation.closeDrawer();
   };
 
@@ -91,6 +96,7 @@ function SidebarDrawerContent({ navigation }: DrawerContentProps) {
       text1: "Coming Soon",
       text2: "Help & support will be available in a future update.",
     });
+
     navigation.closeDrawer();
   };
 
@@ -110,12 +116,16 @@ export default function AppDrawerLayout() {
     <Drawer
       drawerContent={(props) => <SidebarDrawerContent {...props} />}
       screenOptions={{
-        headerStyle: { backgroundColor: colors.background },
+        headerStyle: {
+          backgroundColor: colors.background,
+        },
         headerShadowVisible: false,
         headerTintColor: colors.primary,
         headerTitle: () => null,
         drawerType: "front",
-        drawerStyle: { width: 300 },
+        drawerStyle: {
+          width: 300,
+        },
         overlayColor: "rgba(0,0,0,0.4)",
       }}
     />

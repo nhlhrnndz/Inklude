@@ -45,6 +45,7 @@ export default function MySessionsScreen() {
 
   const loadSessions = async () => {
     setError(false);
+
     try {
       const data = await getMySessions();
       setSessions(data.sessions || []);
@@ -62,22 +63,55 @@ export default function MySessionsScreen() {
     loadSessions();
   };
 
-  const activeSessions = sessions.filter((s) => s.status === "active");
-  const endedSessions = sessions.filter((s) => s.status === "ended");
+  const handleBack = () => {
+    if (isTeacher) {
+      router.replace("/teacher");
+    } else {
+      router.replace("/student");
+    }
+  };
+
+  const activeSessions = sessions.filter(
+    (s) => s.status === "active",
+  );
+
+  const endedSessions = sessions.filter(
+    (s) => s.status === "ended",
+  );
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.centered, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} accessibilityLabel="Loading sessions" />
+      <SafeAreaView
+        style={[
+          styles.centered,
+          {
+            backgroundColor: colors.background,
+          },
+        ]}
+      >
+        <ActivityIndicator
+          size="large"
+          color={colors.primary}
+          accessibilityLabel="Loading sessions"
+        />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      style={[
+        styles.safeArea,
+        {
+          backgroundColor: colors.background,
+        },
+      ]}
+    >
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={{ padding: spacing.lg }}
+        contentContainerStyle={{
+          padding: spacing.lg,
+        }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -88,13 +122,32 @@ export default function MySessionsScreen() {
         }
       >
         <TouchableOpacity
-          style={[styles.backButton, { marginBottom: spacing.md }]}
-          onPress={() => router.back()}
+          style={[
+            styles.backButton,
+            {
+              marginBottom: spacing.md,
+            },
+          ]}
+          onPress={handleBack}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={
+            isTeacher
+              ? "Back to Teacher Dashboard"
+              : "Back to Student Dashboard"
+          }
+          accessibilityHint={
+            isTeacher
+              ? "Returns to the Teacher Dashboard"
+              : "Returns to the Student Dashboard"
+          }
           hitSlop={8}
         >
-          <Ionicons name="arrow-back" size={20} color={colors.primary} />
+          <Ionicons
+            name="arrow-back"
+            size={20}
+            color={colors.primary}
+          />
+
           <Text
             style={{
               fontFamily: typography.body.fontFamily,
@@ -120,6 +173,7 @@ export default function MySessionsScreen() {
         >
           My Sessions
         </Text>
+
         <Text
           style={{
             fontFamily: typography.body.fontFamily,
@@ -144,7 +198,12 @@ export default function MySessionsScreen() {
               },
             ]}
           >
-            <Ionicons name="cloud-offline-outline" size={32} color={colors.textSecondary} />
+            <Ionicons
+              name="cloud-offline-outline"
+              size={32}
+              color={colors.textSecondary}
+            />
+
             <Text
               style={{
                 fontFamily: typography.body.fontFamily,
@@ -156,6 +215,7 @@ export default function MySessionsScreen() {
             >
               We couldn't load your sessions.
             </Text>
+
             <TouchableOpacity
               style={[
                 styles.retryButton,
@@ -171,7 +231,13 @@ export default function MySessionsScreen() {
               accessibilityRole="button"
               accessibilityLabel="Retry loading sessions"
             >
-              <Text style={{ fontFamily: typography.body.fontFamily, fontWeight: "700", color: "#FFFFFF" }}>
+              <Text
+                style={{
+                  fontFamily: typography.body.fontFamily,
+                  fontWeight: "700",
+                  color: "#FFFFFF",
+                }}
+              >
                 Retry
               </Text>
             </TouchableOpacity>
@@ -179,8 +245,23 @@ export default function MySessionsScreen() {
         )}
 
         {!error && sessions.length === 0 ? (
-          <View style={[styles.emptyState, { paddingVertical: spacing.xxl }]}>
-            <Ionicons name="albums-outline" size={64} color={colors.textSecondary} style={{ marginBottom: spacing.md }} />
+          <View
+            style={[
+              styles.emptyState,
+              {
+                paddingVertical: spacing.xxl,
+              },
+            ]}
+          >
+            <Ionicons
+              name="albums-outline"
+              size={64}
+              color={colors.textSecondary}
+              style={{
+                marginBottom: spacing.md,
+              }}
+            />
+
             <Text
               style={{
                 fontFamily: typography.title.fontFamily,
@@ -192,6 +273,7 @@ export default function MySessionsScreen() {
             >
               No Sessions Yet
             </Text>
+
             <Text
               style={{
                 fontFamily: typography.body.fontFamily,
@@ -205,6 +287,7 @@ export default function MySessionsScreen() {
                 ? "Create your first session to get started"
                 : "Join a session using a class code to get started"}
             </Text>
+
             {isTeacher && (
               <TouchableOpacity
                 style={[
@@ -236,7 +319,11 @@ export default function MySessionsScreen() {
         ) : (
           <>
             {activeSessions.length > 0 && (
-              <View style={{ marginBottom: spacing.xl }}>
+              <View
+                style={{
+                  marginBottom: spacing.xl,
+                }}
+              >
                 <Text
                   style={{
                     fontFamily: typography.title.fontFamily,
@@ -249,6 +336,7 @@ export default function MySessionsScreen() {
                 >
                   Active Sessions ({activeSessions.length})
                 </Text>
+
                 {activeSessions.map((session) => (
                   <TouchableOpacity
                     key={session.id}
@@ -262,15 +350,29 @@ export default function MySessionsScreen() {
                         marginBottom: spacing.sm,
                       },
                     ]}
-                    onPress={() => router.push(`/session/${session.id}`)}
+                    onPress={() =>
+                      router.push(`/session/${session.id}`)
+                    }
                     accessibilityRole="button"
                     accessibilityLabel={`${session.title}, code ${session.code}, live, ${session.participantCount} participants`}
                   >
-                    <View style={[styles.sessionHeader, { marginBottom: spacing.sm }]}>
-                      <View style={{ flex: 1 }}>
+                    <View
+                      style={[
+                        styles.sessionHeader,
+                        {
+                          marginBottom: spacing.sm,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={{
+                          flex: 1,
+                        }}
+                      >
                         <Text
                           style={{
-                            fontFamily: typography.caption.fontFamily,
+                            fontFamily:
+                              typography.caption.fontFamily,
                             color: colors.textSecondary,
                             fontSize: 10,
                             textTransform: "uppercase",
@@ -279,6 +381,7 @@ export default function MySessionsScreen() {
                         >
                           Code
                         </Text>
+
                         <Text
                           style={{
                             fontFamily: typography.title.fontFamily,
@@ -291,15 +394,22 @@ export default function MySessionsScreen() {
                           {session.code}
                         </Text>
                       </View>
+
                       <View
                         style={[
                           styles.badge,
-                          { backgroundColor: colors.success, borderRadius: radius.sm },
+                          {
+                            backgroundColor: colors.success,
+                            borderRadius: radius.sm,
+                          },
                         ]}
                       >
-                        <Text style={styles.badgeText}>● LIVE</Text>
+                        <Text style={styles.badgeText}>
+                          ● LIVE
+                        </Text>
                       </View>
                     </View>
+
                     <Text
                       style={{
                         fontFamily: typography.body.fontFamily,
@@ -311,12 +421,15 @@ export default function MySessionsScreen() {
                     >
                       {session.title}
                     </Text>
+
                     {session.description ? (
                       <Text
                         style={{
-                          fontFamily: typography.caption.fontFamily,
+                          fontFamily:
+                            typography.caption.fontFamily,
                           color: colors.textSecondary,
-                          fontSize: typography.caption.fontSize,
+                          fontSize:
+                            typography.caption.fontSize,
                           marginBottom: spacing.sm,
                         }}
                         numberOfLines={1}
@@ -324,28 +437,40 @@ export default function MySessionsScreen() {
                         {session.description}
                       </Text>
                     ) : null}
+
                     <View style={styles.sessionFooter}>
                       <View style={styles.metaRow}>
-                        <Ionicons name="people-outline" size={14} color={colors.textSecondary} />
+                        <Ionicons
+                          name="people-outline"
+                          size={14}
+                          color={colors.textSecondary}
+                        />
+
                         <Text
                           style={{
-                            fontFamily: typography.caption.fontFamily,
+                            fontFamily:
+                              typography.caption.fontFamily,
                             color: colors.textSecondary,
-                            fontSize: typography.caption.fontSize,
+                            fontSize:
+                              typography.caption.fontSize,
                             marginLeft: 4,
                           }}
                         >
                           {session.participantCount} participants
                         </Text>
                       </View>
+
                       <Text
                         style={{
-                          fontFamily: typography.caption.fontFamily,
+                          fontFamily:
+                            typography.caption.fontFamily,
                           color: colors.textSecondary,
                           fontSize: 12,
                         }}
                       >
-                        {new Date(session.createdAt).toLocaleDateString()}
+                        {new Date(
+                          session.createdAt,
+                        ).toLocaleDateString()}
                       </Text>
                     </View>
                   </TouchableOpacity>
@@ -354,7 +479,11 @@ export default function MySessionsScreen() {
             )}
 
             {endedSessions.length > 0 && (
-              <View style={{ marginBottom: spacing.xl }}>
+              <View
+                style={{
+                  marginBottom: spacing.xl,
+                }}
+              >
                 <Text
                   style={{
                     fontFamily: typography.title.fontFamily,
@@ -367,6 +496,7 @@ export default function MySessionsScreen() {
                 >
                   Past Sessions ({endedSessions.length})
                 </Text>
+
                 {endedSessions.map((session) => (
                   <TouchableOpacity
                     key={session.id}
@@ -381,15 +511,29 @@ export default function MySessionsScreen() {
                         opacity: 0.7,
                       },
                     ]}
-                    onPress={() => router.push(`/session/${session.id}`)}
+                    onPress={() =>
+                      router.push(`/session/${session.id}`)
+                    }
                     accessibilityRole="button"
                     accessibilityLabel={`${session.title}, code ${session.code}, ended, ${session.participantCount} participants`}
                   >
-                    <View style={[styles.sessionHeader, { marginBottom: spacing.sm }]}>
-                      <View style={{ flex: 1 }}>
+                    <View
+                      style={[
+                        styles.sessionHeader,
+                        {
+                          marginBottom: spacing.sm,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={{
+                          flex: 1,
+                        }}
+                      >
                         <Text
                           style={{
-                            fontFamily: typography.caption.fontFamily,
+                            fontFamily:
+                              typography.caption.fontFamily,
                             color: colors.textSecondary,
                             fontSize: 10,
                             textTransform: "uppercase",
@@ -398,6 +542,7 @@ export default function MySessionsScreen() {
                         >
                           Code
                         </Text>
+
                         <Text
                           style={{
                             fontFamily: typography.title.fontFamily,
@@ -410,15 +555,22 @@ export default function MySessionsScreen() {
                           {session.code}
                         </Text>
                       </View>
+
                       <View
                         style={[
                           styles.badge,
-                          { backgroundColor: colors.disabled, borderRadius: radius.sm },
+                          {
+                            backgroundColor: colors.disabled,
+                            borderRadius: radius.sm,
+                          },
                         ]}
                       >
-                        <Text style={styles.badgeText}>ENDED</Text>
+                        <Text style={styles.badgeText}>
+                          ENDED
+                        </Text>
                       </View>
                     </View>
+
                     <Text
                       style={{
                         fontFamily: typography.body.fontFamily,
@@ -430,12 +582,15 @@ export default function MySessionsScreen() {
                     >
                       {session.title}
                     </Text>
+
                     {session.description ? (
                       <Text
                         style={{
-                          fontFamily: typography.caption.fontFamily,
+                          fontFamily:
+                            typography.caption.fontFamily,
                           color: colors.textSecondary,
-                          fontSize: typography.caption.fontSize,
+                          fontSize:
+                            typography.caption.fontSize,
                           marginBottom: spacing.sm,
                         }}
                         numberOfLines={1}
@@ -443,30 +598,44 @@ export default function MySessionsScreen() {
                         {session.description}
                       </Text>
                     ) : null}
+
                     <View style={styles.sessionFooter}>
                       <View style={styles.metaRow}>
-                        <Ionicons name="people-outline" size={14} color={colors.textSecondary} />
+                        <Ionicons
+                          name="people-outline"
+                          size={14}
+                          color={colors.textSecondary}
+                        />
+
                         <Text
                           style={{
-                            fontFamily: typography.caption.fontFamily,
+                            fontFamily:
+                              typography.caption.fontFamily,
                             color: colors.textSecondary,
-                            fontSize: typography.caption.fontSize,
+                            fontSize:
+                              typography.caption.fontSize,
                             marginLeft: 4,
                           }}
                         >
                           {session.participantCount} participants
                         </Text>
                       </View>
+
                       <Text
                         style={{
-                          fontFamily: typography.caption.fontFamily,
+                          fontFamily:
+                            typography.caption.fontFamily,
                           color: colors.textSecondary,
                           fontSize: 12,
                         }}
                       >
                         {session.endedAt
-                          ? `Ended ${new Date(session.endedAt).toLocaleDateString()}`
-                          : new Date(session.createdAt).toLocaleDateString()}
+                          ? `Ended ${new Date(
+                              session.endedAt,
+                            ).toLocaleDateString()}`
+                          : new Date(
+                              session.createdAt,
+                            ).toLocaleDateString()}
                       </Text>
                     </View>
                   </TouchableOpacity>
@@ -484,54 +653,68 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
+
   scroll: {
     flex: 1,
   },
+
   centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
+
   backButton: {
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",
+    minHeight: 44,
   },
+
   stateBox: {
     alignItems: "center",
     borderWidth: 1,
   },
+
   retryButton: {
     alignItems: "center",
   },
+
   emptyState: {
     alignItems: "center",
     justifyContent: "center",
   },
+
   createButton: {
     alignItems: "center",
   },
+
   sessionCard: {
     borderWidth: 1,
   },
+
   sessionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
   },
+
   sessionFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
+
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
   },
+
   badge: {
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
+
   badgeText: {
     color: "#FFFFFF",
     fontSize: 10,

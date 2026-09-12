@@ -82,6 +82,21 @@ async function getTeacherSessions(teacherId) {
   return rows;
 }
 
+// Get all sessions a student has ever joined (active or ended, past or present)
+async function getJoinedSessions(studentId) {
+  const [rows] = await pool.query(
+    `SELECT DISTINCT s.*, u.name as teacher_name,
+     (SELECT COUNT(*) FROM participants WHERE session_id = s.id AND left_at IS NULL) as participant_count
+     FROM sessions s
+     JOIN participants p ON p.session_id = s.id
+     JOIN users u ON s.teacher_id = u.id
+     WHERE p.user_id = ?
+     ORDER BY s.created_at DESC`,
+    [studentId],
+  );
+  return rows;
+}
+
 // End a session
 async function endSession(sessionId, teacherId) {
   console.log("endSession called with:", { sessionId, teacherId });
@@ -159,6 +174,7 @@ module.exports = {
   getSessionById,
   getSessionByCode,
   getTeacherSessions,
+  getJoinedSessions,
   endSession,
   addParticipant,
   isParticipant,

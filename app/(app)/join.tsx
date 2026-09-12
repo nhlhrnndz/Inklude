@@ -24,14 +24,17 @@ export default function JoinSessionScreen() {
 
   const handleJoin = async () => {
     const trimmedCode = code.trim().toUpperCase();
+
     if (!trimmedCode) {
       Alert.alert("Error", "Please enter a session code");
       return;
     }
 
     setLoading(true);
+
     try {
       const response = await joinSessionByCode(trimmedCode);
+
       Alert.alert("Success!", `Joined "${response.session.title}"`, [
         {
           text: "View Session",
@@ -48,17 +51,51 @@ export default function JoinSessionScreen() {
     }
   };
 
+  /**
+   * Join Session is a top-level Student destination.
+   * Always return directly to the Student Dashboard instead
+   * of following the previous navigation history.
+   */
+  const handleBack = () => {
+    router.replace("/student");
+  };
+
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-      <View style={[styles.container, { padding: spacing.lg }]}>
+    <SafeAreaView
+      style={[
+        styles.safeArea,
+        {
+          backgroundColor: colors.background,
+        },
+      ]}
+    >
+      <View
+        style={[
+          styles.container,
+          {
+            padding: spacing.lg,
+          },
+        ]}
+      >
         <TouchableOpacity
-          style={[styles.backButton, { marginBottom: spacing.lg }]}
-          onPress={() => router.back()}
+          style={[
+            styles.backButton,
+            {
+              marginBottom: spacing.lg,
+            },
+          ]}
+          onPress={handleBack}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel="Back to Student Dashboard"
+          accessibilityHint="Returns to the Student Dashboard"
           hitSlop={8}
         >
-          <Ionicons name="arrow-back" size={20} color={colors.primary} />
+          <Ionicons
+            name="arrow-back"
+            size={20}
+            color={colors.primary}
+          />
+
           <Text
             style={{
               fontFamily: typography.body.fontFamily,
@@ -84,6 +121,7 @@ export default function JoinSessionScreen() {
         >
           Join Session
         </Text>
+
         <Text
           style={{
             fontFamily: typography.body.fontFamily,
@@ -123,7 +161,9 @@ export default function JoinSessionScreen() {
           style={[
             styles.joinButton,
             {
-              backgroundColor: loading ? colors.disabled : colors.primary,
+              backgroundColor: loading
+                ? colors.disabled
+                : colors.primary,
               borderRadius: radius.md,
               padding: spacing.md,
             },
@@ -131,8 +171,13 @@ export default function JoinSessionScreen() {
           onPress={handleJoin}
           disabled={loading}
           accessibilityRole="button"
-          accessibilityLabel={loading ? "Joining session" : "Join session"}
-          accessibilityState={{ disabled: loading, busy: loading }}
+          accessibilityLabel={
+            loading ? "Joining session" : "Join session"
+          }
+          accessibilityState={{
+            disabled: loading,
+            busy: loading,
+          }}
         >
           {loading ? (
             <ActivityIndicator color="#FFFFFF" />
