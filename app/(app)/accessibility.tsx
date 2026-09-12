@@ -56,12 +56,18 @@ export default function AccessibilityPreferencesScreen() {
   const loadExistingProfile = async () => {
     try {
       const data = await getMyProfile();
+
       setSelectedTypes(data.disabilityTypes || []);
-      setPreferences((prev) => ({ ...prev, ...data.accessibilityPreferences }));
+
+      setPreferences((prev) => ({
+        ...prev,
+        ...data.accessibilityPreferences,
+      }));
     } catch (err: any) {
       if (err?.response?.status !== 404) {
         console.error("Error loading profile:", err);
       }
+
       // 404 just means nothing saved yet — that's fine, keep defaults
     } finally {
       setLoading(false);
@@ -70,12 +76,21 @@ export default function AccessibilityPreferencesScreen() {
 
   const toggleDisabilityType = (type: string) => {
     setSelectedTypes((prev) =>
-      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type],
+      prev.includes(type)
+        ? prev.filter((t) => t !== type)
+        : [...prev, type],
     );
   };
 
   const togglePreference = (key: string) => {
-    setPreferences((prev) => ({ ...prev, [key]: !prev[key] }));
+    setPreferences((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
+  const handleBack = () => {
+    router.replace("/student");
   };
 
   const handleSave = async () => {
@@ -88,8 +103,10 @@ export default function AccessibilityPreferencesScreen() {
     }
 
     setSaving(true);
+
     try {
       await saveMyProfile(selectedTypes, preferences);
+
       setSaving(false);
       setSaveSuccess(true);
 
@@ -98,15 +115,31 @@ export default function AccessibilityPreferencesScreen() {
       }, SUCCESS_DISPLAY_MS);
     } catch (err) {
       console.error("Error saving preferences:", err);
+
       setSaving(false);
-      Alert.alert("Error", "Could not save your preferences. Please try again.");
+
+      Alert.alert(
+        "Error",
+        "Could not save your preferences. Please try again.",
+      );
     }
   };
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.centered, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} accessibilityLabel="Loading preferences" />
+      <SafeAreaView
+        style={[
+          styles.centered,
+          {
+            backgroundColor: colors.background,
+          },
+        ]}
+      >
+        <ActivityIndicator
+          size="large"
+          color={colors.primary}
+          accessibilityLabel="Loading preferences"
+        />
       </SafeAreaView>
     );
   }
@@ -114,17 +147,28 @@ export default function AccessibilityPreferencesScreen() {
   if (saveSuccess) {
     return (
       <SafeAreaView
-        style={[styles.centered, { backgroundColor: colors.background, padding: spacing.lg }]}
+        style={[
+          styles.centered,
+          {
+            backgroundColor: colors.background,
+            padding: spacing.lg,
+          },
+        ]}
         accessibilityLiveRegion="polite"
       >
         <View
           style={[
             styles.successCircle,
-            { borderRadius: radius.round, backgroundColor: colors.success, marginBottom: spacing.lg },
+            {
+              borderRadius: radius.round,
+              backgroundColor: colors.success,
+              marginBottom: spacing.lg,
+            },
           ]}
         >
           <Ionicons name="checkmark" size={36} color="#FFFFFF" />
         </View>
+
         <Text
           style={{
             fontFamily: typography.title.fontFamily,
@@ -136,6 +180,7 @@ export default function AccessibilityPreferencesScreen() {
         >
           Preferences Saved
         </Text>
+
         <Text
           style={{
             fontFamily: typography.body.fontFamily,
@@ -146,17 +191,65 @@ export default function AccessibilityPreferencesScreen() {
         >
           Taking you to your dashboard…
         </Text>
-        <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 16 }} />
+
+        <ActivityIndicator
+          size="small"
+          color={colors.primary}
+          style={{ marginTop: 16 }}
+        />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      style={[
+        styles.safeArea,
+        {
+          backgroundColor: colors.background,
+        },
+      ]}
+    >
       <ScrollView
         style={styles.container}
-        contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxl }}
+        contentContainerStyle={{
+          padding: spacing.lg,
+          paddingBottom: spacing.xxl,
+        }}
       >
+        {/* Back Button */}
+        <TouchableOpacity
+          style={[
+            styles.backButton,
+            {
+              marginBottom: spacing.md,
+            },
+          ]}
+          onPress={handleBack}
+          accessibilityRole="button"
+          accessibilityLabel="Back to Student Dashboard"
+          accessibilityHint="Returns to the Student Dashboard"
+        >
+          <Ionicons
+            name="arrow-back"
+            size={22}
+            color={colors.primary}
+          />
+
+          <Text
+            style={{
+              fontFamily: typography.body.fontFamily,
+              fontSize: typography.body.fontSize,
+              color: colors.primary,
+              fontWeight: "600",
+              marginLeft: spacing.sm,
+            }}
+          >
+            Back
+          </Text>
+        </TouchableOpacity>
+
+        {/* Header */}
         <Text
           style={{
             fontFamily: typography.h2.fontFamily,
@@ -170,6 +263,7 @@ export default function AccessibilityPreferencesScreen() {
         >
           Accessibility Preferences
         </Text>
+
         <Text
           style={{
             fontFamily: typography.body.fontFamily,
@@ -182,6 +276,7 @@ export default function AccessibilityPreferencesScreen() {
           personalize your experience.
         </Text>
 
+        {/* Support Needs */}
         <Text
           style={{
             fontFamily: typography.title.fontFamily,
@@ -195,9 +290,11 @@ export default function AccessibilityPreferencesScreen() {
         >
           Support Needs
         </Text>
+
         <View style={[styles.optionsGrid, { gap: 8 }]}>
           {DISABILITY_OPTIONS.map((type) => {
             const selected = selectedTypes.includes(type);
+
             return (
               <TouchableOpacity
                 key={type}
@@ -205,8 +302,12 @@ export default function AccessibilityPreferencesScreen() {
                   styles.chip,
                   {
                     borderRadius: radius.xl,
-                    borderColor: selected ? colors.primary : colors.border,
-                    backgroundColor: selected ? colors.primary : "transparent",
+                    borderColor: selected
+                      ? colors.primary
+                      : colors.border,
+                    backgroundColor: selected
+                      ? colors.primary
+                      : "transparent",
                     marginRight: 8,
                     marginBottom: 8,
                     paddingVertical: 8,
@@ -232,6 +333,7 @@ export default function AccessibilityPreferencesScreen() {
           })}
         </View>
 
+        {/* Preferences */}
         <Text
           style={{
             fontFamily: typography.title.fontFamily,
@@ -245,12 +347,16 @@ export default function AccessibilityPreferencesScreen() {
         >
           Preferences
         </Text>
+
         {PREFERENCE_OPTIONS.map((pref) => (
           <View
             key={pref.key}
             style={[
               styles.preferenceRow,
-              { paddingVertical: 12, borderBottomColor: colors.divider },
+              {
+                paddingVertical: 12,
+                borderBottomColor: colors.divider,
+              },
             ]}
           >
             <Text
@@ -262,10 +368,14 @@ export default function AccessibilityPreferencesScreen() {
             >
               {pref.label}
             </Text>
+
             <Switch
               value={preferences[pref.key]}
               onValueChange={() => togglePreference(pref.key)}
-              trackColor={{ false: colors.disabled, true: colors.primaryLight }}
+              trackColor={{
+                false: colors.disabled,
+                true: colors.primaryLight,
+              }}
               thumbColor={colors.primary}
               accessibilityLabel={pref.label}
               accessibilityRole="switch"
@@ -273,11 +383,14 @@ export default function AccessibilityPreferencesScreen() {
           </View>
         ))}
 
+        {/* Save */}
         <TouchableOpacity
           style={[
             styles.saveButton,
             {
-              backgroundColor: saving ? colors.disabled : colors.primary,
+              backgroundColor: saving
+                ? colors.disabled
+                : colors.primary,
               borderRadius: radius.md,
               paddingVertical: 14,
               marginTop: spacing.xl,
@@ -286,8 +399,13 @@ export default function AccessibilityPreferencesScreen() {
           onPress={handleSave}
           disabled={saving}
           accessibilityRole="button"
-          accessibilityLabel={saving ? "Saving preferences" : "Save preferences"}
-          accessibilityState={{ disabled: saving, busy: saving }}
+          accessibilityLabel={
+            saving ? "Saving preferences" : "Save preferences"
+          }
+          accessibilityState={{
+            disabled: saving,
+            busy: saving,
+          }}
         >
           {saving ? (
             <ActivityIndicator color="#FFFFFF" />
@@ -342,5 +460,11 @@ const styles = StyleSheet.create({
     height: 72,
     justifyContent: "center",
     alignItems: "center",
+  },
+  backButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 44,
+    alignSelf: "flex-start",
   },
 });

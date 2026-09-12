@@ -1,6 +1,7 @@
 import ScreenContainer from "@/components/common/ScreenContainer";
 import { useTheme } from "@/context/ThemeContext";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import * as Speech from "expo-speech";
 import React, { useEffect, useState } from "react";
 import {
@@ -22,6 +23,7 @@ const QUICK_PHRASES = [
 ];
 
 export default function TTSScreen() {
+  const router = useRouter();
   const { colors, typography, spacing, radius } = useTheme();
 
   const [text, setText] = useState("");
@@ -29,24 +31,30 @@ export default function TTSScreen() {
   const [selectedVoice, setSelectedVoice] = useState<string | undefined>(
     undefined,
   );
-  const [rate, setRate] = useState(1.0); // speed: 0.1 - 2.0
-  const [pitch, setPitch] = useState(1.0); // pitch: 0.5 - 2.0
+  const [rate, setRate] = useState(1.0);
+  const [pitch, setPitch] = useState(1.0);
   const [speaking, setSpeaking] = useState(false);
 
   useEffect(() => {
     Speech.getAvailableVoicesAsync().then((available) => {
       setVoices(available);
+
       const defaultEnglish = available.find((v) =>
         v.language?.startsWith("en"),
       );
-      if (defaultEnglish) setSelectedVoice(defaultEnglish.identifier);
+
+      if (defaultEnglish) {
+        setSelectedVoice(defaultEnglish.identifier);
+      }
     });
   }, []);
 
   const speak = (value: string) => {
     if (!value.trim()) return;
+
     Speech.stop();
     setSpeaking(true);
+
     Speech.speak(value, {
       voice: selectedVoice,
       rate,
@@ -63,7 +71,9 @@ export default function TTSScreen() {
   };
 
   const adjustRate = (delta: number) => {
-    setRate((prev) => Math.min(2.0, Math.max(0.1, +(prev + delta).toFixed(1))));
+    setRate((prev) =>
+      Math.min(2.0, Math.max(0.1, +(prev + delta).toFixed(1))),
+    );
   };
 
   const adjustPitch = (delta: number) => {
@@ -72,9 +82,51 @@ export default function TTSScreen() {
     );
   };
 
+  const handleBack = () => {
+    router.replace("/student");
+  };
+
   return (
     <ScreenContainer>
-      <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl }}>
+      <ScrollView
+        contentContainerStyle={{
+          padding: spacing.md,
+          paddingBottom: spacing.xl,
+        }}
+      >
+        {/* Back Navigation */}
+        <TouchableOpacity
+          style={[
+            styles.backButton,
+            {
+              marginBottom: spacing.lg,
+            },
+          ]}
+          onPress={handleBack}
+          accessibilityRole="button"
+          accessibilityLabel="Back to Student Dashboard"
+          accessibilityHint="Returns to the Student Dashboard"
+          hitSlop={8}
+        >
+          <Ionicons
+            name="arrow-back"
+            size={20}
+            color={colors.primary}
+          />
+
+          <Text
+            style={{
+              fontFamily: typography.body.fontFamily,
+              color: colors.primary,
+              fontSize: typography.body.fontSize,
+              marginLeft: 6,
+            }}
+          >
+            Back
+          </Text>
+        </TouchableOpacity>
+
+        {/* Title */}
         <Text
           style={{
             fontFamily: typography.h2.fontFamily,
@@ -89,6 +141,7 @@ export default function TTSScreen() {
           Text to Speech
         </Text>
 
+        {/* Text Input */}
         <TextInput
           style={[
             styles.input,
@@ -100,6 +153,7 @@ export default function TTSScreen() {
               fontSize: typography.body.fontSize,
               color: colors.text,
               marginBottom: spacing.sm,
+              backgroundColor: colors.surface,
             },
           ]}
           placeholder="Type a message to speak..."
@@ -110,7 +164,16 @@ export default function TTSScreen() {
           accessibilityLabel="Message to speak"
         />
 
-        <View style={[styles.row, { gap: spacing.sm, marginBottom: spacing.lg }]}>
+        {/* Speak / Stop Controls */}
+        <View
+          style={[
+            styles.row,
+            {
+              gap: spacing.sm,
+              marginBottom: spacing.lg,
+            },
+          ]}
+        >
           <TouchableOpacity
             style={[
               styles.speakButton,
@@ -125,10 +188,23 @@ export default function TTSScreen() {
             onPress={() => speak(text)}
             disabled={speaking}
             accessibilityRole="button"
-            accessibilityLabel={speaking ? "Speaking" : "Speak message"}
-            accessibilityState={{ disabled: speaking, busy: speaking }}
+            accessibilityLabel={
+              speaking ? "Speaking" : "Speak message"
+            }
+            accessibilityState={{
+              disabled: speaking,
+              busy: speaking,
+            }}
           >
-            {!speaking && <Ionicons name="volume-high-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />}
+            {!speaking && (
+              <Ionicons
+                name="volume-high-outline"
+                size={18}
+                color="#FFFFFF"
+                style={{ marginRight: 6 }}
+              />
+            )}
+
             <Text
               style={{
                 color: "#FFFFFF",
@@ -169,6 +245,7 @@ export default function TTSScreen() {
           )}
         </View>
 
+        {/* Quick Phrases */}
         <Text
           style={{
             fontFamily: typography.title.fontFamily,
@@ -182,7 +259,15 @@ export default function TTSScreen() {
         >
           Quick Phrases
         </Text>
-        <View style={[styles.phraseGrid, { gap: spacing.sm }]}>
+
+        <View
+          style={[
+            styles.phraseGrid,
+            {
+              gap: spacing.sm,
+            },
+          ]}
+        >
           {QUICK_PHRASES.map((phrase) => (
             <TouchableOpacity
               key={phrase}
@@ -201,7 +286,9 @@ export default function TTSScreen() {
               disabled={speaking}
               accessibilityRole="button"
               accessibilityLabel={`Speak phrase: ${phrase}`}
-              accessibilityState={{ disabled: speaking }}
+              accessibilityState={{
+                disabled: speaking,
+              }}
             >
               <Text
                 style={{
@@ -216,6 +303,7 @@ export default function TTSScreen() {
           ))}
         </View>
 
+        {/* Speed */}
         <Text
           style={{
             fontFamily: typography.title.fontFamily,
@@ -228,7 +316,15 @@ export default function TTSScreen() {
         >
           Speed: {rate.toFixed(1)}x
         </Text>
-        <View style={[styles.controlRow, { gap: spacing.md }]}>
+
+        <View
+          style={[
+            styles.controlRow,
+            {
+              gap: spacing.md,
+            },
+          ]}
+        >
           <TouchableOpacity
             style={[
               styles.controlButton,
@@ -241,10 +337,21 @@ export default function TTSScreen() {
             onPress={() => adjustRate(-0.1)}
             accessibilityRole="button"
             accessibilityLabel="Decrease speed"
-            accessibilityValue={{ text: `${rate.toFixed(1)}x` }}
+            accessibilityValue={{
+              text: `${rate.toFixed(1)}x`,
+            }}
           >
-            <Text style={{ fontSize: 22, fontWeight: "700", color: colors.text }}>−</Text>
+            <Text
+              style={{
+                fontSize: 22,
+                fontWeight: "700",
+                color: colors.text,
+              }}
+            >
+              −
+            </Text>
           </TouchableOpacity>
+
           <TouchableOpacity
             style={[
               styles.controlButton,
@@ -257,12 +364,23 @@ export default function TTSScreen() {
             onPress={() => adjustRate(0.1)}
             accessibilityRole="button"
             accessibilityLabel="Increase speed"
-            accessibilityValue={{ text: `${rate.toFixed(1)}x` }}
+            accessibilityValue={{
+              text: `${rate.toFixed(1)}x`,
+            }}
           >
-            <Text style={{ fontSize: 22, fontWeight: "700", color: colors.text }}>+</Text>
+            <Text
+              style={{
+                fontSize: 22,
+                fontWeight: "700",
+                color: colors.text,
+              }}
+            >
+              +
+            </Text>
           </TouchableOpacity>
         </View>
 
+        {/* Pitch */}
         <Text
           style={{
             fontFamily: typography.title.fontFamily,
@@ -275,7 +393,15 @@ export default function TTSScreen() {
         >
           Pitch: {pitch.toFixed(1)}
         </Text>
-        <View style={[styles.controlRow, { gap: spacing.md }]}>
+
+        <View
+          style={[
+            styles.controlRow,
+            {
+              gap: spacing.md,
+            },
+          ]}
+        >
           <TouchableOpacity
             style={[
               styles.controlButton,
@@ -288,10 +414,21 @@ export default function TTSScreen() {
             onPress={() => adjustPitch(-0.1)}
             accessibilityRole="button"
             accessibilityLabel="Decrease pitch"
-            accessibilityValue={{ text: pitch.toFixed(1) }}
+            accessibilityValue={{
+              text: pitch.toFixed(1),
+            }}
           >
-            <Text style={{ fontSize: 22, fontWeight: "700", color: colors.text }}>−</Text>
+            <Text
+              style={{
+                fontSize: 22,
+                fontWeight: "700",
+                color: colors.text,
+              }}
+            >
+              −
+            </Text>
           </TouchableOpacity>
+
           <TouchableOpacity
             style={[
               styles.controlButton,
@@ -304,12 +441,23 @@ export default function TTSScreen() {
             onPress={() => adjustPitch(0.1)}
             accessibilityRole="button"
             accessibilityLabel="Increase pitch"
-            accessibilityValue={{ text: pitch.toFixed(1) }}
+            accessibilityValue={{
+              text: pitch.toFixed(1),
+            }}
           >
-            <Text style={{ fontSize: 22, fontWeight: "700", color: colors.text }}>+</Text>
+            <Text
+              style={{
+                fontSize: 22,
+                fontWeight: "700",
+                color: colors.text,
+              }}
+            >
+              +
+            </Text>
           </TouchableOpacity>
         </View>
 
+        {/* Voice Selection */}
         {voices.length > 0 && (
           <>
             <Text
@@ -325,35 +473,55 @@ export default function TTSScreen() {
             >
               Voice
             </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+            >
               {voices
                 .filter((v) => v.language?.startsWith("en"))
                 .map((v) => {
-                  const isSelected = selectedVoice === v.identifier;
+                  const isSelected =
+                    selectedVoice === v.identifier;
+
                   return (
                     <TouchableOpacity
                       key={v.identifier}
                       style={[
                         styles.voiceChip,
                         {
-                          borderColor: isSelected ? colors.primary : colors.border,
-                          backgroundColor: isSelected ? colors.primary : "transparent",
+                          borderColor: isSelected
+                            ? colors.primary
+                            : colors.border,
+                          backgroundColor: isSelected
+                            ? colors.primary
+                            : "transparent",
                           borderRadius: radius.round,
                           paddingVertical: spacing.xs,
                           paddingHorizontal: spacing.md,
                           marginRight: spacing.sm,
                         },
                       ]}
-                      onPress={() => setSelectedVoice(v.identifier)}
+                      onPress={() =>
+                        setSelectedVoice(v.identifier)
+                      }
                       accessibilityRole="button"
-                      accessibilityLabel={`Voice: ${v.name || v.identifier}`}
-                      accessibilityState={{ selected: isSelected }}
+                      accessibilityLabel={`Voice: ${
+                        v.name || v.identifier
+                      }`}
+                      accessibilityState={{
+                        selected: isSelected,
+                      }}
                     >
                       <Text
                         style={{
-                          color: isSelected ? "#FFFFFF" : colors.text,
-                          fontFamily: typography.caption.fontFamily,
-                          fontSize: typography.caption.fontSize,
+                          color: isSelected
+                            ? "#FFFFFF"
+                            : colors.text,
+                          fontFamily:
+                            typography.caption.fontFamily,
+                          fontSize:
+                            typography.caption.fontSize,
                         }}
                       >
                         {v.name || v.identifier}
@@ -365,6 +533,7 @@ export default function TTSScreen() {
           </>
         )}
 
+        {/* Android Voice Notice */}
         {Platform.OS === "android" && voices.length === 0 && (
           <Text
             style={{
@@ -375,8 +544,8 @@ export default function TTSScreen() {
               fontStyle: "italic",
             }}
           >
-            No extra voices found on this device — default system voice will be
-            used.
+            No extra voices found on this device — default
+            system voice will be used.
           </Text>
         )}
       </ScrollView>
@@ -390,27 +559,39 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     textAlignVertical: "top",
   },
+
+  backButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    minHeight: 44,
+  },
+
   row: {
     flexDirection: "row",
     alignItems: "center",
   },
+
   speakButton: {
     flexDirection: "row",
     alignItems: "center",
   },
-  stopButton: {
-    // dynamic values applied inline
-  },
+
+  stopButton: {},
+
   phraseGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
   },
+
   phraseButton: {
     borderWidth: 1,
   },
+
   controlRow: {
     flexDirection: "row",
   },
+
   controlButton: {
     width: 48,
     height: 48,
@@ -418,6 +599,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
   voiceChip: {
     borderWidth: 1,
   },

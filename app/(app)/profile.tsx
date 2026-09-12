@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -44,6 +45,7 @@ function ProfileRow({ icon, label, onPress, destructive }: ProfileRowProps) {
         color={destructive ? colors.danger : colors.textSecondary}
         style={{ marginRight: spacing.sm + 2 }}
       />
+
       <Text
         style={{
           flex: 1,
@@ -54,12 +56,18 @@ function ProfileRow({ icon, label, onPress, destructive }: ProfileRowProps) {
       >
         {label}
       </Text>
-      <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+
+      <Ionicons
+        name="chevron-forward"
+        size={18}
+        color={colors.textSecondary}
+      />
     </TouchableOpacity>
   );
 }
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const { user } = useAuth();
   const { colors, typography, spacing, radius } = useTheme();
 
@@ -67,9 +75,58 @@ export default function ProfileScreen() {
   const initial = displayName.charAt(0).toUpperCase();
   const roleLabel = user?.role ? ROLE_LABEL[user.role] ?? user.role : "—";
 
+  const goBackToDashboard = () => {
+    router.replace("/student");
+  };
+
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxl }}>
+    <SafeAreaView
+      style={[
+        styles.safeArea,
+        {
+          backgroundColor: colors.background,
+        },
+      ]}
+    >
+      <ScrollView
+        contentContainerStyle={{
+          padding: spacing.lg,
+          paddingBottom: spacing.xxl,
+        }}
+      >
+        {/* Back Button */}
+        <TouchableOpacity
+          style={[
+            styles.backButton,
+            {
+              marginBottom: spacing.md,
+            },
+          ]}
+          onPress={goBackToDashboard}
+          accessibilityRole="button"
+          accessibilityLabel="Back to Student Dashboard"
+          accessibilityHint="Returns to the Student Dashboard"
+        >
+          <Ionicons
+            name="arrow-back"
+            size={22}
+            color={colors.primary}
+          />
+
+          <Text
+            style={{
+              fontFamily: typography.body.fontFamily,
+              fontSize: typography.body.fontSize,
+              color: colors.primary,
+              fontWeight: "600",
+              marginLeft: spacing.sm,
+            }}
+          >
+            Back
+          </Text>
+        </TouchableOpacity>
+
+        {/* Header */}
         <Text
           style={{
             fontFamily: typography.h2.fontFamily,
@@ -85,11 +142,21 @@ export default function ProfileScreen() {
         </Text>
 
         {/* Profile Picture */}
-        <View style={[styles.avatarSection, { marginBottom: spacing.xl }]}>
+        <View
+          style={[
+            styles.avatarSection,
+            {
+              marginBottom: spacing.xl,
+            },
+          ]}
+        >
           <View
             style={[
               styles.avatar,
-              { borderRadius: radius.round, backgroundColor: colors.primaryLight },
+              {
+                borderRadius: radius.round,
+                backgroundColor: colors.primaryLight,
+              },
             ]}
             accessibilityLabel={`${displayName}'s profile picture`}
           >
@@ -104,13 +171,24 @@ export default function ProfileScreen() {
               {initial}
             </Text>
           </View>
+
           <TouchableOpacity
-            style={[styles.changePhotoBtn, { marginTop: spacing.sm }]}
+            style={[
+              styles.changePhotoBtn,
+              {
+                marginTop: spacing.sm,
+              },
+            ]}
             onPress={() => showComingSoon("Changing your profile picture")}
             accessibilityRole="button"
             accessibilityLabel="Change profile picture"
           >
-            <Ionicons name="camera-outline" size={16} color={colors.primary} />
+            <Ionicons
+              name="camera-outline"
+              size={16}
+              color={colors.primary}
+            />
+
             <Text
               style={{
                 fontFamily: typography.caption.fontFamily,
@@ -138,6 +216,7 @@ export default function ProfileScreen() {
         >
           Basic Information
         </Text>
+
         <View
           style={[
             styles.card,
@@ -150,29 +229,110 @@ export default function ProfileScreen() {
             },
           ]}
         >
-          <View style={[styles.infoRow, { paddingVertical: spacing.sm }]}>
-            <Text style={{ fontFamily: typography.caption.fontFamily, fontSize: typography.caption.fontSize, color: colors.textSecondary }}>
+          <View
+            style={[
+              styles.infoRow,
+              {
+                paddingVertical: spacing.sm,
+              },
+            ]}
+          >
+            <Text
+              style={{
+                fontFamily: typography.caption.fontFamily,
+                fontSize: typography.caption.fontSize,
+                color: colors.textSecondary,
+              }}
+            >
               Name
             </Text>
-            <Text style={{ fontFamily: typography.body.fontFamily, fontSize: typography.body.fontSize, color: colors.text, marginTop: 2 }}>
+
+            <Text
+              style={{
+                fontFamily: typography.body.fontFamily,
+                fontSize: typography.body.fontSize,
+                color: colors.text,
+                marginTop: 2,
+              }}
+            >
               {displayName}
             </Text>
           </View>
-          <View style={[styles.divider, { backgroundColor: colors.divider }]} />
-          <View style={[styles.infoRow, { paddingVertical: spacing.sm }]}>
-            <Text style={{ fontFamily: typography.caption.fontFamily, fontSize: typography.caption.fontSize, color: colors.textSecondary }}>
+
+          <View
+            style={[
+              styles.divider,
+              {
+                backgroundColor: colors.divider,
+              },
+            ]}
+          />
+
+          <View
+            style={[
+              styles.infoRow,
+              {
+                paddingVertical: spacing.sm,
+              },
+            ]}
+          >
+            <Text
+              style={{
+                fontFamily: typography.caption.fontFamily,
+                fontSize: typography.caption.fontSize,
+                color: colors.textSecondary,
+              }}
+            >
               Email
             </Text>
-            <Text style={{ fontFamily: typography.body.fontFamily, fontSize: typography.body.fontSize, color: colors.text, marginTop: 2 }}>
+
+            <Text
+              style={{
+                fontFamily: typography.body.fontFamily,
+                fontSize: typography.body.fontSize,
+                color: colors.text,
+                marginTop: 2,
+              }}
+            >
               {user?.email ?? "—"}
             </Text>
           </View>
-          <View style={[styles.divider, { backgroundColor: colors.divider }]} />
-          <View style={[styles.infoRow, { paddingVertical: spacing.sm }]}>
-            <Text style={{ fontFamily: typography.caption.fontFamily, fontSize: typography.caption.fontSize, color: colors.textSecondary }}>
+
+          <View
+            style={[
+              styles.divider,
+              {
+                backgroundColor: colors.divider,
+              },
+            ]}
+          />
+
+          <View
+            style={[
+              styles.infoRow,
+              {
+                paddingVertical: spacing.sm,
+              },
+            ]}
+          >
+            <Text
+              style={{
+                fontFamily: typography.caption.fontFamily,
+                fontSize: typography.caption.fontSize,
+                color: colors.textSecondary,
+              }}
+            >
               Role
             </Text>
-            <Text style={{ fontFamily: typography.body.fontFamily, fontSize: typography.body.fontSize, color: colors.text, marginTop: 2 }}>
+
+            <Text
+              style={{
+                fontFamily: typography.body.fontFamily,
+                fontSize: typography.body.fontSize,
+                color: colors.text,
+                marginTop: 2,
+              }}
+            >
               {roleLabel}
             </Text>
           </View>
@@ -211,6 +371,7 @@ export default function ProfileScreen() {
         >
           Security
         </Text>
+
         <View
           style={[
             styles.card,
@@ -243,6 +404,7 @@ export default function ProfileScreen() {
         >
           Notifications
         </Text>
+
         <View
           style={[
             styles.card,
@@ -286,7 +448,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   infoRow: {
-    // dynamic values applied inline
+    // Dynamic values are applied inline.
   },
   divider: {
     height: StyleSheet.hairlineWidth,
@@ -294,5 +456,11 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
+  },
+  backButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 44,
+    alignSelf: "flex-start",
   },
 });
