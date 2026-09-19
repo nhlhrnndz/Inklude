@@ -1,4 +1,3 @@
-
 ```
 IncluEd
 ├─ .claude
@@ -7,7 +6,10 @@ IncluEd
 ├─ app
 │  ├─ (app)
 │  │  ├─ accessibility.tsx
+│  │  ├─ announcements.tsx
+│  │  ├─ change-password.tsx
 │  │  ├─ create-session.tsx
+│  │  ├─ edit-profile.tsx
 │  │  ├─ explore.tsx
 │  │  ├─ guidance
 │  │  │  └─ student
@@ -15,6 +17,7 @@ IncluEd
 │  │  ├─ guidance-dashboard.tsx
 │  │  ├─ join.tsx
 │  │  ├─ my-sessions.tsx
+│  │  ├─ notifications.tsx
 │  │  ├─ profile.tsx
 │  │  ├─ student.tsx
 │  │  ├─ teacher.tsx
@@ -67,6 +70,8 @@ IncluEd
 │  ├─ hello-wave.tsx
 │  ├─ navigation
 │  │  └─ Sidebar.tsx
+│  ├─ notifications
+│  │  └─ NotificationBell.tsx
 │  ├─ parallax-scroll-view.tsx
 │  ├─ themed-text.tsx
 │  ├─ themed-view.tsx
@@ -79,6 +84,7 @@ IncluEd
 │  └─ theme.ts
 ├─ context
 │  ├─ AuthContext.tsx
+│  ├─ NotificationContext.tsx
 │  └─ ThemeContext.tsx
 ├─ eslint.config.js
 ├─ hooks
@@ -99,8 +105,10 @@ IncluEd
 │  ├─ config
 │  │  └─ db.js
 │  ├─ controllers
+│  │  ├─ announcementController.js
 │  │  ├─ authController.js
 │  │  ├─ guidanceController.js
+│  │  ├─ notificationController.js
 │  │  ├─ profileController.js
 │  │  ├─ sessionController.js
 │  │  ├─ transcribeController.js
@@ -109,22 +117,28 @@ IncluEd
 │  ├─ middleware
 │  │  └─ authMiddleware.js
 │  ├─ models
+│  │  ├─ announcementModel.js
 │  │  ├─ guidanceModel.js
+│  │  ├─ notificationModel.js
 │  │  ├─ profileModel.js
 │  │  ├─ sessionModel.js
 │  │  └─ transcriptModel.js
 │  ├─ package-lock.json
 │  ├─ package.json
 │  ├─ routes
+│  │  ├─ announcement.js
 │  │  ├─ auth.js
 │  │  ├─ guidance.js
+│  │  ├─ notification.js
 │  │  ├─ profile.js
 │  │  ├─ session.js
 │  │  ├─ transcribe.js
 │  │  └─ transcript.js
 │  ├─ services
+│  │  └─ notificationService.js
 │  └─ sockets
-│     └─ captionSocket.js
+│     ├─ captionSocket.js
+│     └─ notificationSocket.js
 ├─ theme
 │  ├─ colors.ts
 │  ├─ radius.ts
