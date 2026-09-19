@@ -11,8 +11,12 @@ const profileRoutes = require("./routes/profile");
 const sessionRoutes = require("./routes/session");
 const transcribeRoutes = require("./routes/transcribe");
 const transcriptRoutes = require("./routes/transcript");
-const initCaptionSocket = require("./sockets/captionSocket");
 const guidanceRoutes = require("./routes/guidance");
+const notificationRoutes = require("./routes/notification");
+const announcementRoutes = require("./routes/announcement");
+const initCaptionSocket = require("./sockets/captionSocket");
+const initNotificationSocket = require("./sockets/notificationSocket");
+const { setIO } = require("./services/notificationService");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -26,6 +30,8 @@ app.use("/api/sessions", sessionRoutes);
 app.use("/api/transcribe", transcribeRoutes);
 app.use("/api/transcripts", transcriptRoutes);
 app.use("/api/guidance", guidanceRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/announcements", announcementRoutes);
 
 app.get("/", (req, res) => {
   res.json({ message: "IncluEd Backend is running ✅" });
@@ -54,6 +60,8 @@ const io = new Server(server, {
 });
 
 initCaptionSocket(io);
+initNotificationSocket(io);
+setIO(io); // lets notificationService emit real-time events
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 IncluEd server + Socket.IO running on port ${PORT}`);

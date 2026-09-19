@@ -127,4 +127,44 @@ export const getStudentDetail = async (studentId: number) => {
   return response.data;
 };
 
+// 🔔 Notifications
+export const getNotifications = async (params?: {
+  limit?: number;
+  offset?: number;
+  unreadOnly?: boolean;
+}) => {
+  const response = await api.get("/api/notifications", { params });
+  return response.data;
+};
+
+export const getUnreadNotificationCount = async () => {
+  const response = await api.get("/api/notifications/unread-count");
+  return response.data;
+};
+
+export const markNotificationRead = async (notificationId: number) => {
+  const response = await api.patch(`/api/notifications/${notificationId}/read`);
+  return response.data;
+};
+
+export const markAllNotificationsRead = async () => {
+  const response = await api.patch("/api/notifications/read-all");
+  return response.data;
+};
+
+// 📢 Announcements (teacher / guidance)
+export const postAnnouncement = async (payload: {
+  title: string;
+  body: string;
+  sessionId?: number;
+}) => {
+  const response = await api.post("/api/announcements", payload);
+  return response.data;
+};
+
+export const getMyAnnouncements = async () => {
+  const response = await api.get("/api/announcements/mine");
+  return response.data;
+};
+
 export default api;

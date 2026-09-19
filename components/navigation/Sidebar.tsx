@@ -1,6 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React from "react";
 import {
   Pressable,
   ScrollView,
@@ -45,6 +44,11 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { key: "dashboard", label: "Dashboard", icon: "home-outline" },
     { key: "mySessions", label: "My Sessions", icon: "albums-outline" },
     { key: "joinSession", label: "Join Session", icon: "enter-outline" },
+    {
+      key: "notifications",
+      label: "Notifications",
+      icon: "notifications-outline",
+    },
     { key: "guidance", label: "Guidance", icon: "heart-outline" },
     { key: "profile", label: "Profile", icon: "person-outline" },
     { key: "settings", label: "Settings", icon: "settings-outline" },
@@ -56,8 +60,18 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
   ],
   teacher: [
     { key: "dashboard", label: "Dashboard", icon: "home-outline" },
-    { key: "createSession", label: "Create Session", icon: "add-circle-outline" },
+    {
+      key: "createSession",
+      label: "Create Session",
+      icon: "add-circle-outline",
+    },
     { key: "mySessions", label: "My Sessions", icon: "albums-outline" },
+    { key: "announcements", label: "Announcements", icon: "megaphone-outline" },
+    {
+      key: "notifications",
+      label: "Notifications",
+      icon: "notifications-outline",
+    },
     { key: "students", label: "Students", icon: "people-outline" },
     { key: "profile", label: "Profile", icon: "person-outline" },
     { key: "settings", label: "Settings", icon: "settings-outline" },
@@ -67,6 +81,12 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { key: "students", label: "Students", icon: "people-outline" },
     { key: "sessions", label: "Sessions", icon: "albums-outline" },
     { key: "reports", label: "Reports", icon: "document-text-outline" },
+    { key: "announcements", label: "Announcements", icon: "megaphone-outline" },
+    {
+      key: "notifications",
+      label: "Notifications",
+      icon: "notifications-outline",
+    },
     { key: "profile", label: "Profile", icon: "person-outline" },
     { key: "settings", label: "Settings", icon: "settings-outline" },
   ],
@@ -228,8 +248,8 @@ export default function Sidebar({
                   backgroundColor: isActive
                     ? colors.primaryLight + "22"
                     : pressed
-                    ? colors.secondaryBackground
-                    : "transparent",
+                      ? colors.secondaryBackground
+                      : "transparent",
                 },
               ]}
             >

@@ -1,29 +1,29 @@
 // app/(app)/_layout.tsx
 import { usePathname, useRouter } from "expo-router";
 import { Drawer } from "expo-router/drawer";
-import type { ComponentProps } from "react";
 import Toast from "react-native-toast-message";
 
 import Sidebar, { UserRole } from "../../components/navigation/Sidebar";
+import NotificationBell from "../../components/notifications/NotificationBell";
 import { useAuth } from "../../context/AuthContext";
+import { NotificationProvider } from "../../context/NotificationContext";
 import { useTheme } from "../../context/ThemeContext";
 
 type RouteMap = Record<string, string | null>;
 
-// Inferred directly from expo-router's own <Drawer /> component, so it's
-// always the exact shape expo-router actually passes at runtime —
-// rather than the @react-navigation/drawer type, which looks similar
-// but is a structurally different (and incompatible) type in this
-// version of expo-router.
-type DrawerContentProps = Parameters<
-  NonNullable<ComponentProps<typeof Drawer>["drawerContent"]>
->[0];
+// Only the part of the drawer's navigation object that we actually use.
+// Typing just this avoids depending on the exact DrawerContentProps type,
+// which differs between expo-router and @react-navigation/drawer.
+type SidebarDrawerContentProps = {
+  navigation: { closeDrawer: () => void };
+};
 
 const ROUTES_BY_ROLE: Record<UserRole, RouteMap> = {
   student: {
     dashboard: "/student",
     mySessions: "/my-sessions",
     joinSession: "/join",
+    notifications: "/notifications",
     guidance: null,
     profile: "/profile",
     settings: null,
@@ -33,6 +33,8 @@ const ROUTES_BY_ROLE: Record<UserRole, RouteMap> = {
     dashboard: "/teacher",
     createSession: "/create-session",
     mySessions: "/my-sessions",
+    announcements: "/announcements",
+    notifications: "/notifications",
     students: null,
     profile: "/profile",
     settings: null,
@@ -42,6 +44,8 @@ const ROUTES_BY_ROLE: Record<UserRole, RouteMap> = {
     students: "/guidance-dashboard",
     sessions: null,
     reports: null,
+    announcements: "/announcements",
+    notifications: "/notifications",
     profile: "/profile",
     settings: null,
   },
@@ -59,9 +63,9 @@ function findActiveKey(role: UserRole, pathname: string): string {
 }
 
 // Receives the real navigation object expo-router's <Drawer /> passes to
-// drawerContent — props.navigation here IS the Drawer navigator's own
-// navigation object, so props.navigation.closeDrawer() resolves correctly.
-function SidebarDrawerContent({ navigation }: DrawerContentProps) {
+// drawerContent — navigation.closeDrawer() resolves against the Drawer
+// navigator itself.
+function SidebarDrawerContent({ navigation }: SidebarDrawerContentProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useAuth();
@@ -113,21 +117,30 @@ export default function AppDrawerLayout() {
   const { colors } = useTheme();
 
   return (
-    <Drawer
-      drawerContent={(props) => <SidebarDrawerContent {...props} />}
-      screenOptions={{
-        headerStyle: {
-          backgroundColor: colors.background,
-        },
-        headerShadowVisible: false,
-        headerTintColor: colors.primary,
-        headerTitle: () => null,
-        drawerType: "front",
-        drawerStyle: {
-          width: 300,
-        },
-        overlayColor: "rgba(0,0,0,0.4)",
-      }}
-    />
+    <NotificationProvider>
+      <Drawer
+        drawerContent={(props) => <SidebarDrawerContent {...props} />}
+        screenOptions={{
+          headerStyle: {
+            backgroundColor: colors.background,
+          },
+          headerShadowVisible: false,
+          headerTintColor: colors.primary,
+          headerTitle: () => null,
+          headerRight: () => <NotificationBell />,
+          drawerType: "front",
+          drawerStyle: {
+            width: 300,
+          },
+          overlayColor: "rgba(0,0,0,0.4)",
+        }}
+      >
+        {/* The bell is redundant on the notifications screen itself */}
+        <Drawer.Screen
+          name="notifications"
+          options={{ headerRight: () => null }}
+        />
+      </Drawer>
+    </NotificationProvider>
   );
 }
