@@ -1,7 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "../../context/AuthContext";
@@ -12,7 +17,7 @@ interface DashboardCard {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   description: string;
-  route: "/profile" | "/join" | "/explore" | "/tts";
+  route: "/profile" | "/join" | "/quick-talk" | "/tts";
 }
 
 const CARDS: DashboardCard[] = [
@@ -27,15 +32,15 @@ const CARDS: DashboardCard[] = [
     key: "join",
     icon: "key-outline",
     title: "Join Session",
-    description: "Enter class session code",
+    description: "Enter a class code to see live captions",
     route: "/join",
   },
   {
-    key: "caption",
-    icon: "chatbox-ellipses-outline",
-    title: "Live Caption",
-    description: "View real-time classroom subtitles",
-    route: "/explore",
+    key: "quickTalk",
+    icon: "chatbubbles-outline",
+    title: "Quick Talk",
+    description: "Follow a nearby conversation and reply out loud",
+    route: "/quick-talk",
   },
   {
     key: "tts",
@@ -52,7 +57,9 @@ export default function StudentDashboard() {
   const { colors, typography, spacing, radius } = useTheme();
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: colors.background }]}
+    >
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { padding: spacing.lg }]}
         showsVerticalScrollIndicator={false}
