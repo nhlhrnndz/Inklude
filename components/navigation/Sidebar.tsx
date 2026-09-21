@@ -41,23 +41,52 @@ interface NavItem {
 
 const NAV_ITEMS: Record<UserRole, NavItem[]> = {
   student: [
-    { key: "dashboard", label: "Dashboard", icon: "home-outline" },
-    { key: "mySessions", label: "My Sessions", icon: "albums-outline" },
-    { key: "joinSession", label: "Join Session", icon: "enter-outline" },
-    {
-      key: "notifications",
-      label: "Notifications",
-      icon: "notifications-outline",
-    },
-    { key: "guidance", label: "Guidance", icon: "heart-outline" },
-    { key: "profile", label: "Profile", icon: "person-outline" },
-    { key: "settings", label: "Settings", icon: "settings-outline" },
-    {
-      key: "accessibility",
-      label: "Accessibility Preferences",
-      icon: "options-outline",
-    },
-  ],
+  {
+    key: "dashboard",
+    label: "Dashboard",
+    icon: "home-outline",
+  },
+  {
+    key: "mySessions",
+    label: "My Sessions",
+    icon: "albums-outline",
+  },
+  {
+    key: "joinSession",
+    label: "Join Session",
+    icon: "enter-outline",
+  },
+  {
+    key: "notifications",
+    label: "Notifications",
+    icon: "notifications-outline",
+  },
+  {
+    key: "guidance",
+    label: "Guidance",
+    icon: "heart-outline",
+  },
+  {
+    key: "profile",
+    label: "Profile",
+    icon: "person-outline",
+  },
+  {
+    key: "sis",
+    label: "Student Information Sheet",
+    icon: "document-text-outline",
+  },
+  {
+    key: "settings",
+    label: "Settings",
+    icon: "settings-outline",
+  },
+  {
+    key: "accessibility",
+    label: "Accessibility Preferences",
+    icon: "options-outline",
+  },
+],
   teacher: [
     { key: "dashboard", label: "Dashboard", icon: "home-outline" },
     {

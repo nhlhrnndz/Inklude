@@ -167,4 +167,96 @@ export const getMyAnnouncements = async () => {
   return response.data;
 };
 
+// =========================
+// SIS
+// =========================
+
+export type SISStatus = "not_started" | "in_progress" | "completed";
+
+export interface SISData {
+  id?: number;
+  userId?: number;
+
+  studentId: string;
+  fullName: string;
+  dateOfBirth: string;
+  sex: string;
+  civilStatus: string;
+  nationality: string;
+
+  email: string;
+  mobileNumber: string;
+  currentAddress: string;
+  permanentAddress: string;
+
+  programCourse: string;
+  yearLevel: string;
+  sectionBlock: string;
+  academicYear: string;
+
+  emergencyContactName: string;
+  emergencyContactRelationship: string;
+  emergencyContactNumber: string;
+  emergencyContactAddress: string;
+
+  parentGuardianName: string;
+  parentGuardianRelationship: string;
+  parentGuardianContact: string;
+  parentGuardianOccupation: string;
+
+  preferredCommunicationMethod: string;
+  learningCommunicationPreferences: string;
+  additionalSupportNotes: string;
+
+  status: SISStatus;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export const getMySIS = async (): Promise<{
+  sis: SISData | null;
+  status: SISStatus;
+}> => {
+  const response = await api.get("/api/sis/me");
+  return response.data;
+};
+
+export const saveMySIS = async (
+  data: SISData,
+): Promise<{
+  message: string;
+  sis: SISData;
+  status: SISStatus;
+}> => {
+  const response = await api.post("/api/sis/me", data);
+  return response.data;
+};
+
+export const updateMySIS = async (
+  data: SISData,
+): Promise<{
+  message: string;
+  sis: SISData;
+  status: SISStatus;
+}> => {
+  const response = await api.put("/api/sis/me", data);
+  return response.data;
+};
+
+export const getGuidanceSIS = async (filters?: {
+  status?: SISStatus;
+  search?: string;
+}) => {
+  const response = await api.get("/api/sis/students", {
+    params: filters,
+  });
+
+  return response.data;
+};
+
+export const getGuidanceStudentSIS = async (studentId: number) => {
+  const response = await api.get(`/api/sis/students/${studentId}`);
+  return response.data;
+};
+
 export default api;
