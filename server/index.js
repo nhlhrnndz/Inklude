@@ -17,6 +17,7 @@ const announcementRoutes = require("./routes/announcement");
 const initCaptionSocket = require("./sockets/captionSocket");
 const initNotificationSocket = require("./sockets/notificationSocket");
 const { setIO } = require("./services/notificationService");
+const sisRoutes = require("./routes/sis");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -32,6 +33,7 @@ app.use("/api/transcripts", transcriptRoutes);
 app.use("/api/guidance", guidanceRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/announcements", announcementRoutes);
+app.use("/api/sis", sisRoutes);
 
 app.get("/", (req, res) => {
   res.json({ message: "IncluEd Backend is running ✅" });

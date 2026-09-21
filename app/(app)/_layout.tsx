@@ -11,9 +11,6 @@ import { useTheme } from "../../context/ThemeContext";
 
 type RouteMap = Record<string, string | null>;
 
-// Only the part of the drawer's navigation object that we actually use.
-// Typing just this avoids depending on the exact DrawerContentProps type,
-// which differs between expo-router and @react-navigation/drawer.
 type SidebarDrawerContentProps = {
   navigation: { closeDrawer: () => void };
 };
@@ -28,7 +25,9 @@ const ROUTES_BY_ROLE: Record<UserRole, RouteMap> = {
     profile: "/profile",
     settings: null,
     accessibility: "/accessibility",
+    sis: "/sis",
   },
+
   teacher: {
     dashboard: "/teacher",
     createSession: "/create-session",
@@ -39,6 +38,7 @@ const ROUTES_BY_ROLE: Record<UserRole, RouteMap> = {
     profile: "/profile",
     settings: null,
   },
+
   guidance: {
     dashboard: "/guidance-dashboard",
     students: "/guidance-dashboard",
@@ -57,20 +57,25 @@ function isKnownRole(role: string | undefined): role is UserRole {
 
 function findActiveKey(role: UserRole, pathname: string): string {
   const routes = ROUTES_BY_ROLE[role];
-  const match = Object.entries(routes).find(([, path]) => path === pathname);
+
+  const match = Object.entries(routes).find(
+    ([, path]) => path === pathname,
+  );
 
   return match ? match[0] : "dashboard";
 }
 
-// Receives the real navigation object expo-router's <Drawer /> passes to
-// drawerContent — navigation.closeDrawer() resolves against the Drawer
-// navigator itself.
-function SidebarDrawerContent({ navigation }: SidebarDrawerContentProps) {
+function SidebarDrawerContent({
+  navigation,
+}: SidebarDrawerContentProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useAuth();
 
-  const role: UserRole = isKnownRole(user?.role) ? user.role : "student";
+  const role: UserRole = isKnownRole(user?.role)
+    ? user.role
+    : "student";
+
   const activeRoute = findActiveKey(role, pathname);
 
   const handleNavigate = (key: string) => {
@@ -80,16 +85,14 @@ function SidebarDrawerContent({ navigation }: SidebarDrawerContentProps) {
       Toast.show({
         type: "info",
         text1: "Coming Soon",
-        text2: "This section will be available in a future update.",
+        text2:
+          "This section will be available in a future update.",
       });
 
       navigation.closeDrawer();
       return;
     }
 
-    // Sidebar items are top-level destinations.
-    // Replace prevents repeatedly stacking sibling screens
-    // in the navigation history.
     router.replace(target as any);
     navigation.closeDrawer();
   };
@@ -98,7 +101,8 @@ function SidebarDrawerContent({ navigation }: SidebarDrawerContentProps) {
     Toast.show({
       type: "info",
       text1: "Coming Soon",
-      text2: "Help & support will be available in a future update.",
+      text2:
+        "Help & support will be available in a future update.",
     });
 
     navigation.closeDrawer();
@@ -119,7 +123,9 @@ export default function AppDrawerLayout() {
   return (
     <NotificationProvider>
       <Drawer
-        drawerContent={(props) => <SidebarDrawerContent {...props} />}
+        drawerContent={(props) => (
+          <SidebarDrawerContent {...props} />
+        )}
         screenOptions={{
           headerStyle: {
             backgroundColor: colors.background,
@@ -135,10 +141,11 @@ export default function AppDrawerLayout() {
           overlayColor: "rgba(0,0,0,0.4)",
         }}
       >
-        {/* The bell is redundant on the notifications screen itself */}
         <Drawer.Screen
           name="notifications"
-          options={{ headerRight: () => null }}
+          options={{
+            headerRight: () => null,
+          }}
         />
       </Drawer>
     </NotificationProvider>
