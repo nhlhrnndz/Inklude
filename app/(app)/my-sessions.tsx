@@ -1,6 +1,7 @@
+//my-sessions.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   RefreshControl,
@@ -71,13 +72,9 @@ export default function MySessionsScreen() {
     }
   };
 
-  const activeSessions = sessions.filter(
-    (s) => s.status === "active",
-  );
+  const activeSessions = sessions.filter((s) => s.status === "active");
 
-  const endedSessions = sessions.filter(
-    (s) => s.status === "ended",
-  );
+  const endedSessions = sessions.filter((s) => s.status === "ended");
 
   if (loading) {
     return (
@@ -142,11 +139,7 @@ export default function MySessionsScreen() {
           }
           hitSlop={8}
         >
-          <Ionicons
-            name="arrow-back"
-            size={20}
-            color={colors.primary}
-          />
+          <Ionicons name="arrow-back" size={20} color={colors.primary} />
 
           <Text
             style={{
@@ -350,9 +343,7 @@ export default function MySessionsScreen() {
                         marginBottom: spacing.sm,
                       },
                     ]}
-                    onPress={() =>
-                      router.push(`/session/${session.id}`)
-                    }
+                    onPress={() => router.push(`/session/${session.id}`)}
                     accessibilityRole="button"
                     accessibilityLabel={`${session.title}, code ${session.code}, live, ${session.participantCount} participants`}
                   >
@@ -371,8 +362,7 @@ export default function MySessionsScreen() {
                       >
                         <Text
                           style={{
-                            fontFamily:
-                              typography.caption.fontFamily,
+                            fontFamily: typography.caption.fontFamily,
                             color: colors.textSecondary,
                             fontSize: 10,
                             textTransform: "uppercase",
@@ -404,9 +394,7 @@ export default function MySessionsScreen() {
                           },
                         ]}
                       >
-                        <Text style={styles.badgeText}>
-                          ● LIVE
-                        </Text>
+                        <Text style={styles.badgeText}>● LIVE</Text>
                       </View>
                     </View>
 
@@ -425,11 +413,9 @@ export default function MySessionsScreen() {
                     {session.description ? (
                       <Text
                         style={{
-                          fontFamily:
-                            typography.caption.fontFamily,
+                          fontFamily: typography.caption.fontFamily,
                           color: colors.textSecondary,
-                          fontSize:
-                            typography.caption.fontSize,
+                          fontSize: typography.caption.fontSize,
                           marginBottom: spacing.sm,
                         }}
                         numberOfLines={1}
@@ -448,11 +434,9 @@ export default function MySessionsScreen() {
 
                         <Text
                           style={{
-                            fontFamily:
-                              typography.caption.fontFamily,
+                            fontFamily: typography.caption.fontFamily,
                             color: colors.textSecondary,
-                            fontSize:
-                              typography.caption.fontSize,
+                            fontSize: typography.caption.fontSize,
                             marginLeft: 4,
                           }}
                         >
@@ -462,15 +446,12 @@ export default function MySessionsScreen() {
 
                       <Text
                         style={{
-                          fontFamily:
-                            typography.caption.fontFamily,
+                          fontFamily: typography.caption.fontFamily,
                           color: colors.textSecondary,
                           fontSize: 12,
                         }}
                       >
-                        {new Date(
-                          session.createdAt,
-                        ).toLocaleDateString()}
+                        {new Date(session.createdAt).toLocaleDateString()}
                       </Text>
                     </View>
                   </TouchableOpacity>
@@ -511,9 +492,7 @@ export default function MySessionsScreen() {
                         opacity: 0.7,
                       },
                     ]}
-                    onPress={() =>
-                      router.push(`/session/${session.id}`)
-                    }
+                    onPress={() => router.push(`/session/${session.id}`)}
                     accessibilityRole="button"
                     accessibilityLabel={`${session.title}, code ${session.code}, ended, ${session.participantCount} participants`}
                   >
@@ -532,8 +511,7 @@ export default function MySessionsScreen() {
                       >
                         <Text
                           style={{
-                            fontFamily:
-                              typography.caption.fontFamily,
+                            fontFamily: typography.caption.fontFamily,
                             color: colors.textSecondary,
                             fontSize: 10,
                             textTransform: "uppercase",
@@ -565,9 +543,7 @@ export default function MySessionsScreen() {
                           },
                         ]}
                       >
-                        <Text style={styles.badgeText}>
-                          ENDED
-                        </Text>
+                        <Text style={styles.badgeText}>ENDED</Text>
                       </View>
                     </View>
 
@@ -586,11 +562,9 @@ export default function MySessionsScreen() {
                     {session.description ? (
                       <Text
                         style={{
-                          fontFamily:
-                            typography.caption.fontFamily,
+                          fontFamily: typography.caption.fontFamily,
                           color: colors.textSecondary,
-                          fontSize:
-                            typography.caption.fontSize,
+                          fontSize: typography.caption.fontSize,
                           marginBottom: spacing.sm,
                         }}
                         numberOfLines={1}
@@ -609,11 +583,9 @@ export default function MySessionsScreen() {
 
                         <Text
                           style={{
-                            fontFamily:
-                              typography.caption.fontFamily,
+                            fontFamily: typography.caption.fontFamily,
                             color: colors.textSecondary,
-                            fontSize:
-                              typography.caption.fontSize,
+                            fontSize: typography.caption.fontSize,
                             marginLeft: 4,
                           }}
                         >
@@ -623,8 +595,7 @@ export default function MySessionsScreen() {
 
                       <Text
                         style={{
-                          fontFamily:
-                            typography.caption.fontFamily,
+                          fontFamily: typography.caption.fontFamily,
                           color: colors.textSecondary,
                           fontSize: 12,
                         }}
@@ -633,9 +604,7 @@ export default function MySessionsScreen() {
                           ? `Ended ${new Date(
                               session.endedAt,
                             ).toLocaleDateString()}`
-                          : new Date(
-                              session.createdAt,
-                            ).toLocaleDateString()}
+                          : new Date(session.createdAt).toLocaleDateString()}
                       </Text>
                     </View>
                   </TouchableOpacity>

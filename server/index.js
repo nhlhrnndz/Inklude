@@ -17,7 +17,9 @@ const announcementRoutes = require("./routes/announcement");
 const initCaptionSocket = require("./sockets/captionSocket");
 const initNotificationSocket = require("./sockets/notificationSocket");
 const { setIO } = require("./services/notificationService");
+const { setIO: setIOForSockets } = require("./utils/ioRegistry"); // ⬅️ Viewboard: lets sessionController emit session-ended
 const sisRoutes = require("./routes/sis");
+const basicInfoRoutes = require("./routes/basicInfo");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -34,6 +36,7 @@ app.use("/api/guidance", guidanceRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/announcements", announcementRoutes);
 app.use("/api/sis", sisRoutes);
+app.use("/api/basic-info", basicInfoRoutes);
 
 app.get("/", (req, res) => {
   res.json({ message: "IncluEd Backend is running ✅" });
@@ -50,20 +53,19 @@ app.get("/test-db", async (req, res) => {
   }
 });
 
-// Create raw HTTP server from Express app (needed for Socket.IO)
 const server = http.createServer(app);
 
-// Attach Socket.IO with CORS open for Expo Go / web testing
 const io = new Server(server, {
   cors: {
-    origin: "*", // fine for thesis/dev — tighten later if needed
+    origin: "*",
     methods: ["GET", "POST"],
   },
 });
 
 initCaptionSocket(io);
 initNotificationSocket(io);
-setIO(io); // lets notificationService emit real-time events
+setIO(io);
+setIOForSockets(io); // ⬅️ Viewboard
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 IncluEd server + Socket.IO running on port ${PORT}`);

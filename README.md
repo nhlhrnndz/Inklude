@@ -7,6 +7,7 @@ IncluEd
 │  ├─ (app)
 │  │  ├─ accessibility.tsx
 │  │  ├─ announcements.tsx
+│  │  ├─ basic-info.tsx
 │  │  ├─ change-password.tsx
 │  │  ├─ create-session.tsx
 │  │  ├─ edit-profile.tsx
@@ -19,6 +20,8 @@ IncluEd
 │  │  ├─ my-sessions.tsx
 │  │  ├─ notifications.tsx
 │  │  ├─ profile.tsx
+│  │  ├─ quick-talk.tsx
+│  │  ├─ sis.tsx
 │  │  ├─ student.tsx
 │  │  ├─ teacher.tsx
 │  │  ├─ tts.tsx
@@ -30,6 +33,8 @@ IncluEd
 │  ├─ register.tsx
 │  ├─ role-select.tsx
 │  ├─ session
+│  │  └─ [id].tsx
+│  ├─ viewboard
 │  │  └─ [id].tsx
 │  └─ _layout.tsx
 ├─ app.json
@@ -94,7 +99,9 @@ IncluEd
 │  ├─ useAuth.ts
 │  ├─ useCaptionSession.ts
 │  ├─ useDashboardHome.ts
-│  └─ useMicCaptioning.ts
+│  ├─ useMicCaptioning.ts
+│  ├─ useQuickTalkListener.ts
+│  └─ useQuickTalkSpeech.ts
 ├─ metro.config.js
 ├─ package-lock.json
 ├─ package.json
@@ -107,10 +114,12 @@ IncluEd
 │  ├─ controllers
 │  │  ├─ announcementController.js
 │  │  ├─ authController.js
+│  │  ├─ basicInfoController.js
 │  │  ├─ guidanceController.js
 │  │  ├─ notificationController.js
 │  │  ├─ profileController.js
 │  │  ├─ sessionController.js
+│  │  ├─ sisController.js
 │  │  ├─ transcribeController.js
 │  │  └─ transcriptController.js
 │  ├─ index.js
@@ -118,27 +127,33 @@ IncluEd
 │  │  └─ authMiddleware.js
 │  ├─ models
 │  │  ├─ announcementModel.js
+│  │  ├─ basicInfoModel.js
 │  │  ├─ guidanceModel.js
 │  │  ├─ notificationModel.js
 │  │  ├─ profileModel.js
 │  │  ├─ sessionModel.js
+│  │  ├─ sisModel.js
 │  │  └─ transcriptModel.js
 │  ├─ package-lock.json
 │  ├─ package.json
 │  ├─ routes
 │  │  ├─ announcement.js
 │  │  ├─ auth.js
+│  │  ├─ basicInfo.js
 │  │  ├─ guidance.js
 │  │  ├─ notification.js
 │  │  ├─ profile.js
 │  │  ├─ session.js
+│  │  ├─ sis.js
 │  │  ├─ transcribe.js
 │  │  └─ transcript.js
 │  ├─ services
 │  │  └─ notificationService.js
-│  └─ sockets
-│     ├─ captionSocket.js
-│     └─ notificationSocket.js
+│  ├─ sockets
+│  │  ├─ captionSocket.js
+│  │  └─ notificationSocket.js
+│  └─ utils
+│     └─ ioRegistry.js
 ├─ theme
 │  ├─ colors.ts
 │  ├─ radius.ts
@@ -149,6 +164,7 @@ IncluEd
    ├─ api.ts
    ├─ crossAlert.ts
    ├─ socket.ts
+   ├─ stt.ts
    └─ validators
       └─ auth.ts
 

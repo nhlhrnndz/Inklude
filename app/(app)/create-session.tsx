@@ -1,6 +1,7 @@
+//create-session.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -9,7 +10,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity
+  TouchableOpacity,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -27,7 +28,7 @@ export default function CreateSessionScreen() {
 
   const handleCreate = async () => {
     if (!title.trim()) {
-      crossAlert("Error", "Please enter a session title");
+      crossAlert("Error", "Please enter a classroom title");
       return;
     }
 
@@ -35,8 +36,8 @@ export default function CreateSessionScreen() {
     try {
       const response = await createSession(title.trim(), description.trim());
       crossAlert(
-        "Session Created!",
-        `Session code: ${response.session.code}\nShare this code with your students.\n\nTap OK to view the session, or Cancel to return to your dashboard.`,
+        "Classroom Created!",
+        `Classroom code: ${response.session.code}\nShare this code with your students.\n\nTap OK to view the classroom, or Cancel to return to your dashboard.`,
         [
           {
             text: "Cancel",
@@ -44,7 +45,7 @@ export default function CreateSessionScreen() {
             onPress: () => router.replace("/teacher"),
           },
           {
-            text: "View Session",
+            text: "View Classroom",
             onPress: () => router.push(`/session/${response.session.id}`),
           },
         ],
@@ -52,7 +53,7 @@ export default function CreateSessionScreen() {
     } catch (error: any) {
       crossAlert(
         "Error",
-        error.response?.data?.message || "Failed to create session",
+        error.response?.data?.message || "Failed to create classroom",
       );
     } finally {
       setLoading(false);
@@ -103,7 +104,7 @@ export default function CreateSessionScreen() {
             }}
             accessibilityRole="header"
           >
-            Create New Session
+            Create New Classroom
           </Text>
           <Text
             style={{
@@ -113,7 +114,7 @@ export default function CreateSessionScreen() {
               marginBottom: spacing.xxl,
             }}
           >
-            Create a session for your students to join
+            Create a classroom for your students to join
           </Text>
 
           <Text
@@ -125,7 +126,7 @@ export default function CreateSessionScreen() {
               marginBottom: spacing.sm,
             }}
           >
-            Session Title *
+            Classroom Title *
           </Text>
           <TextInput
             style={[
@@ -145,7 +146,7 @@ export default function CreateSessionScreen() {
             placeholderTextColor={colors.placeholder}
             value={title}
             onChangeText={setTitle}
-            accessibilityLabel="Session title"
+            accessibilityLabel="Classroom title"
           />
 
           <Text
@@ -174,13 +175,13 @@ export default function CreateSessionScreen() {
                 fontSize: typography.body.fontSize,
               },
             ]}
-            placeholder="What will you cover in this session?"
+            placeholder="What will you cover in this classroom?"
             placeholderTextColor={colors.placeholder}
             value={description}
             onChangeText={setDescription}
             multiline
             numberOfLines={4}
-            accessibilityLabel="Session description, optional"
+            accessibilityLabel="Classroom description, optional"
           />
 
           <TouchableOpacity
@@ -196,7 +197,9 @@ export default function CreateSessionScreen() {
             onPress={handleCreate}
             disabled={loading}
             accessibilityRole="button"
-            accessibilityLabel={loading ? "Creating session" : "Create session"}
+            accessibilityLabel={
+              loading ? "Creating classroom" : "Create classroom"
+            }
             accessibilityState={{ disabled: loading, busy: loading }}
           >
             {loading ? (
@@ -210,7 +213,7 @@ export default function CreateSessionScreen() {
                   color: "#FFFFFF",
                 }}
               >
-                Create Session
+                Create Classroom
               </Text>
             )}
           </TouchableOpacity>

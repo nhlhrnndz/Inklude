@@ -14,7 +14,7 @@ import ScreenContainer from "../components/common/ScreenContainer";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 
-import { getMyProfile } from "../utils/api";
+import { getMyBasicInfo, getMyProfile } from "../utils/api";
 import { validateEmail, validatePassword } from "../utils/validators/auth";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -84,12 +84,33 @@ export default function LoginScreen() {
         return;
       }
 
+      // Student onboarding chain:
+      // 1) Preferences (accessibility) must exist
+      // 2) Basic Information must exist (mandatory, no skip)
+      // 3) Otherwise -> dashboard
       try {
         await getMyProfile();
-        router.replace("/student");
       } catch (profileErr: any) {
         if (profileErr?.response?.status === 404) {
-          router.replace("/accessibility");
+          router.replace({
+            pathname: "/accessibility",
+            params: { onboarding: "1" },
+          });
+          return;
+        }
+        router.replace("/student");
+        return;
+      }
+
+      try {
+        await getMyBasicInfo();
+        router.replace("/student");
+      } catch (basicInfoErr: any) {
+        if (basicInfoErr?.response?.status === 404) {
+          router.replace({
+            pathname: "/basic-info",
+            params: { onboarding: "1" },
+          });
         } else {
           router.replace("/student");
         }

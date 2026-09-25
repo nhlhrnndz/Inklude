@@ -1,6 +1,8 @@
+//accessibility.tsx
+
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -36,7 +38,9 @@ const PREFERENCE_OPTIONS: { key: string; label: string }[] = [
 const SUCCESS_DISPLAY_MS = 1200;
 
 export default function AccessibilityPreferencesScreen() {
+  const router = useRouter();
   const { colors, typography, spacing, radius } = useTheme();
+  const { onboarding } = useLocalSearchParams<{ onboarding?: string }>();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -76,9 +80,7 @@ export default function AccessibilityPreferencesScreen() {
 
   const toggleDisabilityType = (type: string) => {
     setSelectedTypes((prev) =>
-      prev.includes(type)
-        ? prev.filter((t) => t !== type)
-        : [...prev, type],
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type],
     );
   };
 
@@ -111,7 +113,14 @@ export default function AccessibilityPreferencesScreen() {
       setSaveSuccess(true);
 
       setTimeout(() => {
-        router.replace("/student");
+        if (onboarding === "1") {
+          router.replace({
+            pathname: "/basic-info",
+            params: { onboarding: "1" },
+          });
+        } else {
+          router.replace("/student");
+        }
       }, SUCCESS_DISPLAY_MS);
     } catch (err) {
       console.error("Error saving preferences:", err);
@@ -189,7 +198,9 @@ export default function AccessibilityPreferencesScreen() {
             marginTop: 6,
           }}
         >
-          Taking you to your dashboard…
+          {onboarding === "1"
+            ? "Taking you to a few more details…"
+            : "Taking you to your dashboard…"}
         </Text>
 
         <ActivityIndicator
@@ -230,11 +241,7 @@ export default function AccessibilityPreferencesScreen() {
           accessibilityLabel="Back to Student Dashboard"
           accessibilityHint="Returns to the Student Dashboard"
         >
-          <Ionicons
-            name="arrow-back"
-            size={22}
-            color={colors.primary}
-          />
+          <Ionicons name="arrow-back" size={22} color={colors.primary} />
 
           <Text
             style={{
@@ -302,12 +309,8 @@ export default function AccessibilityPreferencesScreen() {
                   styles.chip,
                   {
                     borderRadius: radius.xl,
-                    borderColor: selected
-                      ? colors.primary
-                      : colors.border,
-                    backgroundColor: selected
-                      ? colors.primary
-                      : "transparent",
+                    borderColor: selected ? colors.primary : colors.border,
+                    backgroundColor: selected ? colors.primary : "transparent",
                     marginRight: 8,
                     marginBottom: 8,
                     paddingVertical: 8,
@@ -388,9 +391,7 @@ export default function AccessibilityPreferencesScreen() {
           style={[
             styles.saveButton,
             {
-              backgroundColor: saving
-                ? colors.disabled
-                : colors.primary,
+              backgroundColor: saving ? colors.disabled : colors.primary,
               borderRadius: radius.md,
               paddingVertical: 14,
               marginTop: spacing.xl,
@@ -418,7 +419,7 @@ export default function AccessibilityPreferencesScreen() {
                 fontSize: typography.button.fontSize,
               }}
             >
-              Save Preferences
+              {onboarding === "1" ? "Save & Continue" : "Save Preferences"}
             </Text>
           )}
         </TouchableOpacity>

@@ -86,11 +86,9 @@ export const transcribeAudioChunk = async (
   const formData = new FormData();
 
   if (Platform.OS === "web") {
-    // On web, expo-av gives us a blob: URL — fetch it and attach as a real Blob
     const audioBlob = await (await fetch(fileUri)).blob();
     formData.append("audio", audioBlob, "chunk.webm");
   } else {
-    // Native (iOS/Android) — RN's FormData understands this {uri,name,type} shape
     // @ts-ignore — React Native's FormData accepts this shape even though the DOM type doesn't
     formData.append("audio", {
       uri: fileUri,
@@ -100,10 +98,17 @@ export const transcribeAudioChunk = async (
   }
 
   const response = await api.post("/api/transcribe", formData, {
-    headers: { "Content-Type": undefined }, // let the platform set its own multipart boundary
+    headers: { "Content-Type": undefined },
   });
 
   return response.data.text;
+};
+
+// 🖥️ Classroom Viewboard: catch-up on recent transcript lines when
+// opening mid-class or after a reconnect.
+export const getSessionTranscripts = async (sessionId: number) => {
+  const response = await api.get(`/api/transcripts/${sessionId}`);
+  return response.data;
 };
 
 // 📊 Guidance Dashboard
@@ -115,6 +120,9 @@ export const getDashboardStats = async () => {
 export const getStudents = async (filters?: {
   disability?: string;
   search?: string;
+  course?: string;
+  section?: string;
+  yearLevel?: string;
 }) => {
   const response = await api.get("/api/guidance/students", {
     params: filters,
@@ -164,6 +172,39 @@ export const postAnnouncement = async (payload: {
 
 export const getMyAnnouncements = async () => {
   const response = await api.get("/api/announcements/mine");
+  return response.data;
+};
+
+export const getSessionAnnouncements = async (sessionId: number) => {
+  const response = await api.get(`/api/announcements/session/${sessionId}`);
+  return response.data;
+};
+
+// =========================
+// Basic Information (mandatory onboarding step)
+// =========================
+
+export interface BasicInfoData {
+  id?: number;
+  userId?: number;
+  yearLevel: string;
+  age: number | string;
+  dateOfBirth: string;
+  course: string;
+  section: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export const getMyBasicInfo = async (): Promise<BasicInfoData> => {
+  const response = await api.get("/api/basic-info");
+  return response.data;
+};
+
+export const saveMyBasicInfo = async (
+  data: BasicInfoData,
+): Promise<{ message: string; basicInfo: BasicInfoData }> => {
+  const response = await api.post("/api/basic-info", data);
   return response.data;
 };
 

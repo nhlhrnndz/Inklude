@@ -34,6 +34,21 @@ async function getAnnouncementsByAuthor(authorId) {
   return rows;
 }
 
+// Announcements for one specific session/classroom, newest first.
+// Used by the classroom detail screen.
+async function getAnnouncementsBySession(sessionId) {
+  const [rows] = await pool.query(
+    `SELECT a.*, s.title AS session_title
+     FROM announcements a
+     LEFT JOIN sessions s ON a.session_id = s.id
+     WHERE a.session_id = ?
+     ORDER BY a.created_at DESC
+     LIMIT 50`,
+    [sessionId],
+  );
+  return rows;
+}
+
 // Recipients for a teacher announcement: every student who has joined this session.
 // If you later rework sessions into Google Classroom-style enrollment,
 // this is the ONLY function that needs to change.
@@ -59,6 +74,7 @@ async function getAllStudentIds() {
 module.exports = {
   createAnnouncement,
   getAnnouncementsByAuthor,
+  getAnnouncementsBySession,
   getSessionStudentIds,
   getAllStudentIds,
 };
