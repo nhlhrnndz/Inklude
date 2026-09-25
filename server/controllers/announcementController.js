@@ -1,6 +1,6 @@
 // server/controllers/announcementController.js
 const announcementModel = require("../models/announcementModel");
-const { getSessionById } = require("../models/sessionModel");
+const { getSessionById, isParticipant } = require("../models/sessionModel");
 const { notifyUsers } = require("../services/notificationService");
 
 const TITLE_MAX = 150;
@@ -144,4 +144,44 @@ async function getMyAnnouncements(req, res) {
   }
 }
 
-module.exports = { postAnnouncement, getMyAnnouncements };
+// GET /api/announcements/session/:sessionId
+// Classroom detail screen — announcements posted to this specific session.
+// Teacher (owner), guidance (any), or a student who joined can read.
+async function getSessionAnnouncements(req, res) {
+  try {
+    const { id: userId, role } = req.user;
+    const sessionId = req.params.sessionId;
+
+    const session = await getSessionById(sessionId);
+    if (!session) {
+      return res.status(404).json({ message: "Session not found." });
+    }
+
+    if (role === "teacher" && session.teacher_id !== userId) {
+      return res.status(403).json({ message: "Access denied." });
+    }
+
+    if (role === "student") {
+      const joined = await isParticipant(sessionId, userId);
+      if (!joined) {
+        return res
+          .status(403)
+          .json({ message: "You have not joined this classroom." });
+      }
+    }
+
+    const rows = await announcementModel.getAnnouncementsBySession(sessionId);
+    res.json({ announcements: rows.map(toDto) });
+  } catch (err) {
+    console.error("getSessionAnnouncements error:", err);
+    res
+      .status(500)
+      .json({ message: "Server error while fetching announcements." });
+  }
+}
+
+module.exports = {
+  postAnnouncement,
+  getMyAnnouncements,
+  getSessionAnnouncements,
+};

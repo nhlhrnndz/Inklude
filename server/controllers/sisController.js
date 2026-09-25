@@ -46,8 +46,7 @@ function mapSIS(row) {
     parentGuardianOccupation: row.parent_guardian_occupation,
 
     preferredCommunicationMethod: row.preferred_communication_method,
-    learningCommunicationPreferences:
-      row.learning_communication_preferences,
+    learningCommunicationPreferences: row.learning_communication_preferences,
     additionalSupportNotes: row.additional_support_notes,
 
     status: row.status,
@@ -61,15 +60,20 @@ function validateSISData(data) {
     return "SIS data is required.";
   }
 
-  if (!data.fullName || !String(data.fullName).trim()) {
-    return "Full name is required.";
-  }
-
   if (
     data.status &&
     !["not_started", "in_progress", "completed"].includes(data.status)
   ) {
     return "Invalid SIS status.";
+  }
+
+  // Full name is only mandatory once the student marks the SIS as completed.
+  // Saving progress (in_progress) should accept partial data.
+  if (
+    data.status === "completed" &&
+    (!data.fullName || !String(data.fullName).trim())
+  ) {
+    return "Full name is required to complete the SIS.";
   }
 
   return null;
@@ -173,10 +177,7 @@ async function getGuidanceSISList(req, res) {
 
     const { status, search } = req.query;
 
-    const rows = await getAllStudentSIS(
-      status || null,
-      search || null,
-    );
+    const rows = await getAllStudentSIS(status || null, search || null);
 
     res.json({
       students: rows.map(mapSIS),

@@ -11,6 +11,7 @@ const {
   getParticipants,
   leaveSession,
 } = require("../models/sessionModel");
+const { getIO } = require("../utils/ioRegistry");
 
 // POST /api/sessions - Create a new session (Teacher only)
 async function createSessionController(req, res) {
@@ -199,6 +200,15 @@ async function endSessionController(req, res) {
     }
 
     await endSession(sessionId, userId);
+
+    // Let anyone in the room — students and the Classroom Viewboard —
+    // know the session is over, in real time.
+    const io = getIO();
+    if (io) {
+      io.to(`session-${sessionId}`).emit("session-ended", {
+        sessionId: Number(sessionId),
+      });
+    }
 
     res.json({ message: "Session ended successfully." });
   } catch (err) {

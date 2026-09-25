@@ -217,38 +217,47 @@ async function getSISById(sisId) {
 
 async function getAllStudentSIS(status, searchTerm) {
   let query = `
-    SELECT
-      sis.id,
-      sis.user_id,
-      sis.student_id,
-      sis.full_name,
-      sis.email,
-      sis.mobile_number,
-      sis.program_course,
-      sis.year_level,
-      sis.section_block,
-      sis.academic_year,
-      sis.status,
-      sis.created_at,
-      sis.updated_at
-    FROM student_sis sis
-    INNER JOIN users u ON u.id = sis.user_id
-    WHERE u.role = 'student'
+    SELECT * FROM (
+      SELECT
+        u.id AS user_id,
+        sis.id,
+        sis.student_id,
+        COALESCE(sis.full_name, u.name) AS full_name,
+        COALESCE(sis.email, u.email) AS email,
+        sis.mobile_number,
+        sis.program_course,
+        sis.year_level,
+        sis.section_block,
+        sis.academic_year,
+        CASE
+          WHEN sis.status = 'completed' THEN 'completed'
+          WHEN sis.id IS NOT NULL THEN 'in_progress'
+          WHEN bi.id IS NOT NULL THEN 'in_progress'
+          ELSE 'not_started'
+        END AS status,
+        COALESCE(sis.updated_at, bi.updated_at) AS updated_at,
+        sis.created_at
+      FROM users u
+      LEFT JOIN student_sis sis ON sis.user_id = u.id
+      LEFT JOIN student_basic_info bi ON bi.user_id = u.id
+      WHERE u.role = 'student'
+    ) t
+    WHERE 1 = 1
   `;
 
   const params = [];
 
   if (status) {
-    query += " AND sis.status = ?";
+    query += " AND status = ?";
     params.push(status);
   }
 
   if (searchTerm) {
-    query += " AND (sis.full_name LIKE ? OR sis.email LIKE ?)";
+    query += " AND (full_name LIKE ? OR email LIKE ?)";
     params.push(`%${searchTerm}%`, `%${searchTerm}%`);
   }
 
-  query += " ORDER BY sis.updated_at DESC";
+  query += " ORDER BY updated_at DESC";
 
   const [rows] = await pool.query(query, params);
 
