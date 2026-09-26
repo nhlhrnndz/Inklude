@@ -1,3 +1,4 @@
+//guidanceController.js
 const {
   getAllStudents,
   getStudentById,
@@ -6,7 +7,7 @@ const {
   getDashboardStats,
 } = require("../models/guidanceModel");
 
-// GET /api/guidance/students?disability=Autism&search=juan
+// GET /api/guidance/students?disability=Autism&course=BS%20Information%20Technology&search=juan
 async function getStudentsController(req, res) {
   try {
     const userRole = req.user.role;
@@ -17,9 +18,9 @@ async function getStudentsController(req, res) {
         .json({ message: "Only guidance counselors can view this." });
     }
 
-    const { disability, search } = req.query;
+    const { disability, search, course } = req.query;
 
-    const students = await getAllStudents(disability, search);
+    const students = await getAllStudents(disability, search, course);
 
     res.json({
       students: students.map((s) => ({
@@ -33,6 +34,9 @@ async function getStudentsController(req, res) {
         accessibilityPreferences: s.accessibility_preferences
           ? JSON.parse(s.accessibility_preferences)
           : {},
+        course: s.course ?? null,
+        yearLevel: s.year_level ?? null,
+        section: s.section ?? null,
       })),
     });
   } catch (err) {
@@ -74,6 +78,11 @@ async function getStudentDetailController(req, res) {
         accessibilityPreferences: student.accessibility_preferences
           ? JSON.parse(student.accessibility_preferences)
           : {},
+        course: student.course ?? null,
+        yearLevel: student.year_level ?? null,
+        section: student.section ?? null,
+        age: student.age ?? null,
+        dateOfBirth: student.date_of_birth ?? null,
       },
       attendance: attendance.map((a) => ({
         sessionId: a.id,
