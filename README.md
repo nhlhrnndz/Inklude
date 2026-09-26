@@ -1,3 +1,4 @@
+
 ```
 IncluEd
 ├─ .claude
@@ -33,7 +34,9 @@ IncluEd
 │  ├─ register.tsx
 │  ├─ role-select.tsx
 │  ├─ session
-│  │  └─ [id].tsx
+│  │  └─ [id]
+│  │     ├─ index.tsx
+│  │     └─ live.tsx
 │  ├─ viewboard
 │  │  └─ [id].tsx
 │  └─ _layout.tsx

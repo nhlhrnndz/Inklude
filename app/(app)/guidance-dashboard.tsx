@@ -1,14 +1,11 @@
+//guidance-dashboard.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  SectionList,
   StyleSheet,
   Text,
   TextInput,
@@ -18,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 
+import { ALL_COURSES, getCollegeCodeForCourse } from "../../constants/courses";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
 import {
@@ -36,6 +34,8 @@ const DISABILITY_FILTERS = [
   "ADHD",
   "Dyslexia",
 ];
+
+const COURSE_FILTERS = ["All", ...ALL_COURSES];
 
 const SIS_FILTERS: {
   label: string;
@@ -74,6 +74,9 @@ type Student = {
   createdAt: string;
   disabilityTypes: string[];
   accessibilityPreferences: Record<string, boolean>;
+  course?: string | null;
+  yearLevel?: string | null;
+  section?: string | null;
 };
 
 type SISRecord = {
@@ -96,6 +99,12 @@ type SISCounts = {
   notStarted: number;
 };
 
+type CourseSection = {
+  title: string;
+  college: string;
+  data: Student[];
+};
+
 export default function GuidanceDashboard() {
   const router = useRouter();
   const { user } = useAuth();
@@ -103,16 +112,15 @@ export default function GuidanceDashboard() {
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
-  const [sisStatuses, setSisStatuses] =
-    useState<SISStatusMap>({});
-  const [sisUpdatedAt, setSisUpdatedAt] =
-    useState<SISUpdatedMap>({});
+  const [sisStatuses, setSisStatuses] = useState<SISStatusMap>({});
+  const [sisUpdatedAt, setSisUpdatedAt] = useState<SISUpdatedMap>({});
 
   const [search, setSearch] = useState("");
-  const [activeFilter, setActiveFilter] =
-    useState("All");
-  const [activeSISFilter, setActiveSISFilter] =
-    useState<SISStatus | "all">("all");
+  const [activeFilter, setActiveFilter] = useState("All");
+  const [activeCourseFilter, setActiveCourseFilter] = useState("All");
+  const [activeSISFilter, setActiveSISFilter] = useState<SISStatus | "all">(
+    "all",
+  );
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -130,18 +138,12 @@ export default function GuidanceDashboard() {
        * current student population instead of changing
        * their totals when the user taps a status filter.
        */
-      const [
-        statsRes,
-        studentsRes,
-        sisRes,
-      ] = await Promise.all([
+      const [statsRes, studentsRes, sisRes] = await Promise.all([
         getDashboardStats(),
 
         getStudents({
-          disability:
-            activeFilter === "All"
-              ? undefined
-              : activeFilter,
+          disability: activeFilter === "All" ? undefined : activeFilter,
+          course: activeCourseFilter === "All" ? undefined : activeCourseFilter,
           search: search.trim() || undefined,
         }),
 
@@ -156,25 +158,19 @@ export default function GuidanceDashboard() {
       const statusMap: SISStatusMap = {};
       const updatedMap: SISUpdatedMap = {};
 
-      const sisRecords: SISRecord[] =
-        Array.isArray(sisRes)
-          ? sisRes
-          : Array.isArray(sisRes?.students)
-            ? sisRes.students
-            : Array.isArray(sisRes?.sis)
-              ? sisRes.sis
-              : [];
+      const sisRecords: SISRecord[] = Array.isArray(sisRes)
+        ? sisRes
+        : Array.isArray(sisRes?.students)
+          ? sisRes.students
+          : Array.isArray(sisRes?.sis)
+            ? sisRes.sis
+            : [];
 
       sisRecords.forEach((record) => {
-        if (
-          typeof record.userId === "number" &&
-          record.status
-        ) {
-          statusMap[record.userId] =
-            record.status;
+        if (typeof record.userId === "number" && record.status) {
+          statusMap[record.userId] = record.status;
 
-          updatedMap[record.userId] =
-            record.updatedAt;
+          updatedMap[record.userId] = record.updatedAt;
         }
       });
 
@@ -186,28 +182,21 @@ export default function GuidanceDashboard() {
       Toast.show({
         type: "error",
         text1: "Failed to load dashboard",
-        text2:
-          err.response?.data?.message ??
-          "Please try again.",
+        text2: err.response?.data?.message ?? "Please try again.",
       });
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [activeFilter, search]);
+  }, [activeFilter, activeCourseFilter, search]);
 
   useEffect(() => {
     setLoading(true);
     loadData();
   }, [loadData]);
 
-  const getSISStatus = (
-    studentId: number
-  ): SISStatus => {
-    return (
-      sisStatuses[studentId] ??
-      "not_started"
-    );
+  const getSISStatus = (studentId: number): SISStatus => {
+    return sisStatuses[studentId] ?? "not_started";
   };
 
   /*
@@ -254,28 +243,64 @@ export default function GuidanceDashboard() {
     }
 
     return students.filter(
-      (student) =>
-        getSISStatus(student.id) ===
-        activeSISFilter
+      (student) => getSISStatus(student.id) === activeSISFilter,
     );
-  }, [
-    students,
-    sisStatuses,
-    activeSISFilter,
-  ]);
+  }, [students, sisStatuses, activeSISFilter]);
+
+  /*
+   * Group the visible students by course so guidance can see the
+   * separation between programs at a glance. Courses are ordered
+   * following the official BSU ARASOF college list; students who
+   * haven't completed Basic Information yet land in a trailing
+   * "No Course Set" section instead of disappearing.
+   */
+  const groupedSections: CourseSection[] = useMemo(() => {
+    const groups = new Map<string, Student[]>();
+
+    visibleStudents.forEach((student) => {
+      const key =
+        student.course && student.course.trim()
+          ? student.course
+          : "No Course Set";
+
+      if (!groups.has(key)) {
+        groups.set(key, []);
+      }
+
+      groups.get(key)!.push(student);
+    });
+
+    const orderedCourses = ALL_COURSES.filter((course) => groups.has(course));
+
+    const extraCourses = Array.from(groups.keys()).filter(
+      (key) => key !== "No Course Set" && !ALL_COURSES.includes(key),
+    );
+
+    const sections: CourseSection[] = [...orderedCourses, ...extraCourses].map(
+      (course) => ({
+        title: course,
+        college: getCollegeCodeForCourse(course),
+        data: groups.get(course) ?? [],
+      }),
+    );
+
+    if (groups.has("No Course Set")) {
+      sections.push({
+        title: "No Course Set",
+        college: "",
+        data: groups.get("No Course Set") ?? [],
+      });
+    }
+
+    return sections;
+  }, [visibleStudents]);
 
   const completionPercentage =
     sisCounts.total > 0
-      ? Math.round(
-          (sisCounts.completed /
-            sisCounts.total) *
-            100
-        )
+      ? Math.round((sisCounts.completed / sisCounts.total) * 100)
       : 0;
 
-  const getSISStatusLabel = (
-    status: SISStatus
-  ) => {
+  const getSISStatusLabel = (status: SISStatus) => {
     switch (status) {
       case "completed":
         return "Completed";
@@ -289,9 +314,7 @@ export default function GuidanceDashboard() {
     }
   };
 
-  const getSISStatusDescription = (
-    status: SISStatus
-  ) => {
+  const getSISStatusDescription = (status: SISStatus) => {
     switch (status) {
       case "completed":
         return "The student has completed the SIS.";
@@ -305,9 +328,7 @@ export default function GuidanceDashboard() {
     }
   };
 
-  const getSISActionText = (
-    status: SISStatus
-  ) => {
+  const getSISActionText = (status: SISStatus) => {
     switch (status) {
       case "completed":
         return "Review submitted information.";
@@ -321,9 +342,7 @@ export default function GuidanceDashboard() {
     }
   };
 
-  const getSISStatusIcon = (
-    status: SISStatus
-  ) => {
+  const getSISStatusIcon = (status: SISStatus) => {
     switch (status) {
       case "completed":
         return "checkmark-circle";
@@ -337,22 +356,18 @@ export default function GuidanceDashboard() {
     }
   };
 
-  const getSISStatusColors = (
-    status: SISStatus
-  ) => {
+  const getSISStatusColors = (status: SISStatus) => {
     switch (status) {
       case "completed":
         return {
-          background:
-            colors.success + "18",
+          background: colors.success + "18",
           border: colors.success,
           text: colors.success,
         };
 
       case "in_progress":
         return {
-          background:
-            colors.warning + "18",
+          background: colors.warning + "18",
           border: colors.warning,
           text: colors.warning,
         };
@@ -360,8 +375,7 @@ export default function GuidanceDashboard() {
       case "not_started":
       default:
         return {
-          background:
-            colors.secondaryBackground,
+          background: colors.secondaryBackground,
           border: colors.border,
           text: colors.textSecondary,
         };
@@ -374,16 +388,12 @@ export default function GuidanceDashboard() {
     }
 
     return (
-      SIS_FILTERS.find(
-        (filter) =>
-          filter.value === activeSISFilter
-      )?.label ?? "All students"
+      SIS_FILTERS.find((filter) => filter.value === activeSISFilter)?.label ??
+      "All students"
     );
   };
 
-  const formatUpdatedDate = (
-    value?: string
-  ) => {
+  const formatUpdatedDate = (value?: string) => {
     if (!value) {
       return null;
     }
@@ -394,42 +404,32 @@ export default function GuidanceDashboard() {
       return null;
     }
 
-    return date.toLocaleDateString(
-      undefined,
-      {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }
-    );
+    return date.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
   };
 
-  const renderStatCard = (
-    label: string,
-    value: number | string
-  ) => (
+  const renderStatCard = (label: string, value: number | string) => (
     <View
       key={label}
       style={[
         styles.statCard,
         {
-          backgroundColor:
-            colors.secondaryBackground,
+          backgroundColor: colors.secondaryBackground,
           borderColor: colors.border,
           borderRadius: radius.md,
           paddingVertical: spacing.md,
-          paddingHorizontal:
-            spacing.sm + 2,
+          paddingHorizontal: spacing.sm + 2,
         },
       ]}
       accessibilityLabel={`${label}: ${value}`}
     >
       <Text
         style={{
-          fontFamily:
-            typography.h2.fontFamily,
-          fontSize:
-            typography.h2.fontSize,
+          fontFamily: typography.h2.fontFamily,
+          fontSize: typography.h2.fontSize,
           fontWeight: "700",
           color: colors.primary,
         }}
@@ -439,10 +439,8 @@ export default function GuidanceDashboard() {
 
       <Text
         style={{
-          fontFamily:
-            typography.caption.fontFamily,
-          fontSize:
-            typography.caption.fontSize,
+          fontFamily: typography.caption.fontFamily,
+          fontSize: typography.caption.fontSize,
           color: colors.textSecondary,
           marginTop: 2,
         }}
@@ -455,22 +453,18 @@ export default function GuidanceDashboard() {
   const renderSISStatCard = (
     label: string,
     value: number,
-    status: SISStatus
+    status: SISStatus,
   ) => {
-    const statusColors =
-      getSISStatusColors(status);
+    const statusColors = getSISStatusColors(status);
 
-    const isActive =
-      activeSISFilter === status;
+    const isActive = activeSISFilter === status;
 
     return (
       <TouchableOpacity
         key={label}
         activeOpacity={0.8}
         onPress={() => {
-          setActiveSISFilter(
-            isActive ? "all" : status
-          );
+          setActiveSISFilter(isActive ? "all" : status);
         }}
         style={[
           styles.sisStatCard,
@@ -478,9 +472,7 @@ export default function GuidanceDashboard() {
             backgroundColor: isActive
               ? statusColors.background
               : colors.surface,
-            borderColor: isActive
-              ? statusColors.border
-              : colors.border,
+            borderColor: isActive ? statusColors.border : colors.border,
             borderRadius: radius.md,
             padding: spacing.md,
           },
@@ -495,32 +487,20 @@ export default function GuidanceDashboard() {
           selected: isActive,
         }}
       >
-        <View
-          style={[
-            styles.sisStatTopRow,
-          ]}
-        >
+        <View style={[styles.sisStatTopRow]}>
           <View
             style={[
               styles.sisStatIcon,
               {
-                backgroundColor:
-                  statusColors.background,
-                borderRadius:
-                  radius.round,
+                backgroundColor: statusColors.background,
+                borderRadius: radius.round,
               },
             ]}
           >
             <Ionicons
-              name={
-                getSISStatusIcon(
-                  status
-                ) as any
-              }
+              name={getSISStatusIcon(status) as any}
               size={18}
-              color={
-                statusColors.text
-              }
+              color={statusColors.text}
             />
           </View>
 
@@ -535,10 +515,8 @@ export default function GuidanceDashboard() {
 
         <Text
           style={{
-            fontFamily:
-              typography.h2.fontFamily,
-            fontSize:
-              typography.h2.fontSize,
+            fontFamily: typography.h2.fontFamily,
+            fontSize: typography.h2.fontSize,
             fontWeight: "700",
             color: colors.text,
             marginTop: spacing.sm,
@@ -549,10 +527,8 @@ export default function GuidanceDashboard() {
 
         <Text
           style={{
-            fontFamily:
-              typography.caption.fontFamily,
-            fontSize:
-              typography.caption.fontSize,
+            fontFamily: typography.caption.fontFamily,
+            fontSize: typography.caption.fontSize,
             fontWeight: "600",
             color: colors.text,
             marginTop: 2,
@@ -564,15 +540,11 @@ export default function GuidanceDashboard() {
         <Text
           numberOfLines={2}
           style={{
-            fontFamily:
-              typography.caption.fontFamily,
-            fontSize:
-              typography.caption.fontSize - 1,
+            fontFamily: typography.caption.fontFamily,
+            fontSize: typography.caption.fontSize - 1,
             color: colors.textSecondary,
             marginTop: 4,
-            lineHeight:
-              typography.caption.fontSize +
-              4,
+            lineHeight: typography.caption.fontSize + 4,
           }}
         >
           {status === "completed"
@@ -585,89 +557,120 @@ export default function GuidanceDashboard() {
     );
   };
 
-  const renderStudent = ({
-    item,
+  const renderCourseSectionHeader = ({
+    section,
   }: {
-    item: Student;
-  }) => {
-    const sisStatus =
-      getSISStatus(item.id);
+    section: CourseSection;
+  }) => (
+    <View
+      style={[
+        styles.courseSectionHeader,
+        {
+          backgroundColor: colors.background,
+          borderBottomColor: colors.border,
+          paddingVertical: spacing.sm,
+        },
+      ]}
+    >
+      <Text
+        style={{
+          fontFamily: typography.body.fontFamily,
+          fontSize: typography.body.fontSize,
+          fontWeight: "700",
+          color: colors.text,
+          flex: 1,
+        }}
+        numberOfLines={1}
+      >
+        {section.title}
+      </Text>
 
-    const sisColors =
-      getSISStatusColors(
-        sisStatus
-      );
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        {!!section.college && (
+          <View
+            style={{
+              paddingHorizontal: 8,
+              paddingVertical: 2,
+              borderRadius: radius.sm,
+              backgroundColor: colors.secondaryBackground,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 10,
+                fontWeight: "700",
+                color: colors.textSecondary,
+              }}
+            >
+              {section.college}
+            </Text>
+          </View>
+        )}
 
-    const updatedDate =
-      formatUpdatedDate(
-        sisUpdatedAt[item.id]
-      );
+        <Text
+          style={{
+            fontFamily: typography.caption.fontFamily,
+            fontSize: typography.caption.fontSize,
+            fontWeight: "700",
+            color: colors.primary,
+          }}
+        >
+          {section.data.length}
+        </Text>
+      </View>
+    </View>
+  );
+
+  const renderStudent = ({ item }: { item: Student }) => {
+    const sisStatus = getSISStatus(item.id);
+
+    const sisColors = getSISStatusColors(sisStatus);
+
+    const updatedDate = formatUpdatedDate(sisUpdatedAt[item.id]);
 
     return (
       <TouchableOpacity
         style={[
           styles.studentCard,
           {
-            backgroundColor:
-              colors.surface,
-            borderColor:
-              colors.border,
-            borderRadius:
-              radius.md,
-            padding:
-              spacing.md,
-            marginBottom:
-              spacing.sm,
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+            borderRadius: radius.md,
+            padding: spacing.md,
+            marginBottom: spacing.sm,
           },
         ]}
-        onPress={() =>
-          router.push(
-            `/guidance/student/${item.id}`
-          )
-        }
+        onPress={() => router.push(`/guidance/student/${item.id}`)}
         activeOpacity={0.8}
         accessibilityRole="button"
         accessibilityLabel={`${item.name}, ${item.email}, SIS ${getSISStatusLabel(
-          sisStatus
+          sisStatus,
         )}`}
       >
         <View
           style={[
             styles.studentAvatar,
             {
-              borderRadius:
-                radius.round,
-              backgroundColor:
-                colors.primary,
-              marginRight:
-                spacing.sm + 2,
+              borderRadius: radius.round,
+              backgroundColor: colors.primary,
+              marginRight: spacing.sm + 2,
             },
           ]}
         >
           <Text
             style={{
-              fontFamily:
-                typography.body.fontFamily,
+              fontFamily: typography.body.fontFamily,
               color: "#FFFFFF",
               fontWeight: "700",
-              fontSize:
-                typography.body.fontSize,
+              fontSize: typography.body.fontSize,
             }}
           >
-            {item.name
-              .charAt(0)
-              .toUpperCase()}
+            {item.name.charAt(0).toUpperCase()}
           </Text>
         </View>
 
-        <View
-          style={styles.studentInfo}
-        >
-          <View
-            style={
-              styles.studentNameRow
-            }
-          >
+        <View style={styles.studentInfo}>
+          <View style={styles.studentNameRow}>
             <View
               style={{
                 flex: 1,
@@ -676,15 +679,10 @@ export default function GuidanceDashboard() {
             >
               <Text
                 style={{
-                  fontFamily:
-                    typography.body
-                      .fontFamily,
-                  fontSize:
-                    typography.body
-                      .fontSize,
+                  fontFamily: typography.body.fontFamily,
+                  fontSize: typography.body.fontSize,
                   fontWeight: "700",
-                  color:
-                    colors.text,
+                  color: colors.text,
                 }}
               >
                 {item.name}
@@ -692,28 +690,35 @@ export default function GuidanceDashboard() {
 
               <Text
                 style={{
-                  fontFamily:
-                    typography.caption
-                      .fontFamily,
-                  fontSize:
-                    typography.caption
-                      .fontSize,
-                  color:
-                    colors.textSecondary,
+                  fontFamily: typography.caption.fontFamily,
+                  fontSize: typography.caption.fontSize,
+                  color: colors.textSecondary,
                   marginTop: 1,
                 }}
                 numberOfLines={1}
               >
                 {item.email}
               </Text>
+
+              {(item.yearLevel || item.section) && (
+                <Text
+                  style={{
+                    fontFamily: typography.caption.fontFamily,
+                    fontSize: typography.caption.fontSize - 1,
+                    color: colors.placeholder,
+                    marginTop: 1,
+                  }}
+                  numberOfLines={1}
+                >
+                  {[item.yearLevel, item.section].filter(Boolean).join(" • ")}
+                </Text>
+              )}
             </View>
 
             <Ionicons
               name="chevron-forward"
               size={20}
-              color={
-                colors.textSecondary
-              }
+              color={colors.textSecondary}
             />
           </View>
 
@@ -721,84 +726,53 @@ export default function GuidanceDashboard() {
             style={[
               styles.statusBadge,
               {
-                backgroundColor:
-                  sisColors.background,
-                borderColor:
-                  sisColors.border,
-                borderRadius:
-                  radius.sm,
-                marginTop:
-                  spacing.sm,
+                backgroundColor: sisColors.background,
+                borderColor: sisColors.border,
+                borderRadius: radius.sm,
+                marginTop: spacing.sm,
               },
             ]}
           >
             <Ionicons
-              name={
-                getSISStatusIcon(
-                  sisStatus
-                ) as any
-              }
+              name={getSISStatusIcon(sisStatus) as any}
               size={14}
-              color={
-                sisColors.text
-              }
+              color={sisColors.text}
             />
 
             <Text
               style={{
-                fontFamily:
-                  typography.caption
-                    .fontFamily,
-                fontSize:
-                  typography.caption
-                    .fontSize,
+                fontFamily: typography.caption.fontFamily,
+                fontSize: typography.caption.fontSize,
                 fontWeight: "700",
-                color:
-                  sisColors.text,
+                color: sisColors.text,
                 marginLeft: 5,
               }}
             >
-              SIS{" "}
-              {getSISStatusLabel(
-                sisStatus
-              )}
+              SIS {getSISStatusLabel(sisStatus)}
             </Text>
           </View>
 
           <Text
             style={{
-              fontFamily:
-                typography.caption
-                  .fontFamily,
-              fontSize:
-                typography.caption
-                  .fontSize,
-              color:
-                colors.textSecondary,
+              fontFamily: typography.caption.fontFamily,
+              fontSize: typography.caption.fontSize,
+              color: colors.textSecondary,
               marginTop: 6,
             }}
           >
-            {getSISStatusDescription(
-              sisStatus
-            )}
+            {getSISStatusDescription(sisStatus)}
           </Text>
 
           {updatedDate && (
             <Text
               style={{
-                fontFamily:
-                  typography.caption
-                    .fontFamily,
-                fontSize:
-                  typography.caption
-                    .fontSize - 1,
-                color:
-                  colors.placeholder,
+                fontFamily: typography.caption.fontFamily,
+                fontSize: typography.caption.fontSize - 1,
+                color: colors.placeholder,
                 marginTop: 4,
               }}
             >
-              Last updated:{" "}
-              {updatedDate}
+              Last updated: {updatedDate}
             </Text>
           )}
 
@@ -806,8 +780,7 @@ export default function GuidanceDashboard() {
             style={[
               styles.studentBottomRow,
               {
-                marginTop:
-                  spacing.sm,
+                marginTop: spacing.sm,
               },
             ]}
           >
@@ -817,53 +790,40 @@ export default function GuidanceDashboard() {
                 {
                   gap: 6,
                   flex: 1,
-                  paddingRight:
-                    spacing.sm,
+                  paddingRight: spacing.sm,
                 },
               ]}
             >
-              {item.disabilityTypes
-                .length > 0 ? (
-                item.disabilityTypes.map(
-                  (type) => (
-                    <View
-                      key={type}
-                      style={[
-                        styles.tag,
-                        {
-                          backgroundColor:
-                            colors
-                              .primaryLight +
-                            "1A",
-                          borderColor:
-                            colors.primary,
-                          borderRadius:
-                            radius.sm,
-                        },
-                      ]}
+              {item.disabilityTypes.length > 0 ? (
+                item.disabilityTypes.map((type) => (
+                  <View
+                    key={type}
+                    style={[
+                      styles.tag,
+                      {
+                        backgroundColor: colors.primaryLight + "1A",
+                        borderColor: colors.primary,
+                        borderRadius: radius.sm,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        color: colors.primary,
+                        fontWeight: "600",
+                      }}
                     >
-                      <Text
-                        style={{
-                          fontSize: 11,
-                          color:
-                            colors.primary,
-                          fontWeight:
-                            "600",
-                        }}
-                      >
-                        {type}
-                      </Text>
-                    </View>
-                  )
-                )
+                      {type}
+                    </Text>
+                  </View>
+                ))
               ) : (
                 <Text
                   style={{
                     fontSize: 11,
-                    color:
-                      colors.placeholder,
-                    fontStyle:
-                      "italic",
+                    color: colors.placeholder,
+                    fontStyle: "italic",
                   }}
                 >
                   No profile yet
@@ -875,27 +835,19 @@ export default function GuidanceDashboard() {
               style={[
                 styles.viewSISAction,
                 {
-                  borderColor:
-                    colors.border,
-                  borderRadius:
-                    radius.sm,
-                  paddingHorizontal:
-                    spacing.sm,
+                  borderColor: colors.border,
+                  borderRadius: radius.sm,
+                  paddingHorizontal: spacing.sm,
                   paddingVertical: 6,
                 },
               ]}
             >
               <Text
                 style={{
-                  fontFamily:
-                    typography.caption
-                      .fontFamily,
-                  fontSize:
-                    typography.caption
-                      .fontSize,
+                  fontFamily: typography.caption.fontFamily,
+                  fontSize: typography.caption.fontSize,
                   fontWeight: "700",
-                  color:
-                    colors.primary,
+                  color: colors.primary,
                 }}
               >
                 View SIS
@@ -904,9 +856,7 @@ export default function GuidanceDashboard() {
               <Ionicons
                 name="arrow-forward"
                 size={14}
-                color={
-                  colors.primary
-                }
+                color={colors.primary}
                 style={{
                   marginLeft: 4,
                 }}
@@ -923,8 +873,7 @@ export default function GuidanceDashboard() {
       style={[
         styles.safeArea,
         {
-          backgroundColor:
-            colors.background,
+          backgroundColor: colors.background,
         },
       ]}
     >
@@ -933,21 +882,16 @@ export default function GuidanceDashboard() {
         style={[
           styles.header,
           {
-            paddingHorizontal:
-              spacing.lg,
-            paddingTop:
-              spacing.sm + 4,
-            paddingBottom:
-              spacing.sm,
+            paddingHorizontal: spacing.lg,
+            paddingTop: spacing.sm + 4,
+            paddingBottom: spacing.sm,
           },
         ]}
       >
         <Text
           style={{
-            fontFamily:
-              typography.title.fontFamily,
-            fontSize:
-              typography.title.fontSize,
+            fontFamily: typography.title.fontFamily,
+            fontSize: typography.title.fontSize,
             fontWeight: "700",
             color: colors.text,
           }}
@@ -958,17 +902,13 @@ export default function GuidanceDashboard() {
 
         <Text
           style={{
-            fontFamily:
-              typography.caption.fontFamily,
-            fontSize:
-              typography.caption.fontSize,
-            color:
-              colors.textSecondary,
+            fontFamily: typography.caption.fontFamily,
+            fontSize: typography.caption.fontSize,
+            color: colors.textSecondary,
             marginTop: 2,
           }}
         >
-          Welcome,{" "}
-          {user?.name || "Counselor"}
+          Welcome, {user?.name || "Counselor"}
         </Text>
       </View>
 
@@ -982,15 +922,14 @@ export default function GuidanceDashboard() {
           accessibilityLabel="Loading dashboard"
         />
       ) : (
-        <FlatList
-          data={visibleStudents}
-          keyExtractor={(item) =>
-            String(item.id)
-          }
+        <SectionList
+          sections={groupedSections}
+          keyExtractor={(item) => String(item.id)}
           renderItem={renderStudent}
+          renderSectionHeader={renderCourseSectionHeader}
+          stickySectionHeadersEnabled
           contentContainerStyle={{
-            paddingHorizontal:
-              spacing.lg,
+            paddingHorizontal: spacing.lg,
             paddingBottom: 40,
           }}
           refreshing={refreshing}
@@ -1007,31 +946,20 @@ export default function GuidanceDashboard() {
                     styles.statsRow,
                     {
                       gap: 10,
-                      marginTop:
-                        spacing.sm + 4,
-                      marginBottom:
-                        spacing.lg,
+                      marginTop: spacing.sm + 4,
+                      marginBottom: spacing.lg,
                     },
                   ]}
                 >
-                  {renderStatCard(
-                    "Students",
-                    stats.totalStudents
-                  )}
+                  {renderStatCard("Students", stats.totalStudents)}
 
-                  {renderStatCard(
-                    "Sessions",
-                    stats.totalSessions
-                  )}
+                  {renderStatCard("Sessions", stats.totalSessions)}
 
-                  {renderStatCard(
-                    "Active Now",
-                    stats.activeSessions
-                  )}
+                  {renderStatCard("Active Now", stats.activeSessions)}
 
                   {renderStatCard(
                     "Profiles Done",
-                    `${stats.profileCompletionRate}%`
+                    `${stats.profileCompletionRate}%`,
                   )}
                 </View>
               )}
@@ -1041,65 +969,44 @@ export default function GuidanceDashboard() {
                 style={[
                   styles.sisTrackingCard,
                   {
-                    backgroundColor:
-                      colors.surface,
-                    borderColor:
-                      colors.border,
-                    borderRadius:
-                      radius.lg,
-                    padding:
-                      spacing.md,
-                    marginBottom:
-                      spacing.lg,
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    borderRadius: radius.lg,
+                    padding: spacing.md,
+                    marginBottom: spacing.lg,
                   },
                 ]}
               >
                 {/* Section Header */}
-                <View
-                  style={
-                    styles.sectionHeaderRow
-                  }
-                >
+                <View style={styles.sectionHeaderRow}>
                   <View
                     style={[
                       styles.sectionIcon,
                       {
-                        backgroundColor:
-                          colors
-                            .primaryLight +
-                          "18",
-                        borderRadius:
-                          radius.md,
+                        backgroundColor: colors.primaryLight + "18",
+                        borderRadius: radius.md,
                       },
                     ]}
                   >
                     <Ionicons
                       name="document-text-outline"
                       size={22}
-                      color={
-                        colors.primary
-                      }
+                      color={colors.primary}
                     />
                   </View>
 
                   <View
                     style={{
                       flex: 1,
-                      marginLeft:
-                        spacing.sm,
+                      marginLeft: spacing.sm,
                     }}
                   >
                     <Text
                       style={{
-                        fontFamily:
-                          typography.body
-                            .fontFamily,
-                        fontSize:
-                          typography.body
-                            .fontSize,
+                        fontFamily: typography.body.fontFamily,
+                        fontSize: typography.body.fontSize,
                         fontWeight: "700",
-                        color:
-                          colors.text,
+                        color: colors.text,
                       }}
                       accessibilityRole="header"
                     >
@@ -1108,23 +1015,14 @@ export default function GuidanceDashboard() {
 
                     <Text
                       style={{
-                        fontFamily:
-                          typography.caption
-                            .fontFamily,
-                        fontSize:
-                          typography.caption
-                            .fontSize,
-                        color:
-                          colors.textSecondary,
+                        fontFamily: typography.caption.fontFamily,
+                        fontSize: typography.caption.fontSize,
+                        color: colors.textSecondary,
                         marginTop: 2,
-                        lineHeight:
-                          typography.caption
-                            .fontSize + 5,
+                        lineHeight: typography.caption.fontSize + 5,
                       }}
                     >
-                      Track each student's
-                      Student Information
-                      Sheet progress.
+                      Track each student's Student Information Sheet progress.
                     </Text>
                   </View>
                 </View>
@@ -1134,87 +1032,57 @@ export default function GuidanceDashboard() {
                   style={[
                     styles.infoBox,
                     {
-                      backgroundColor:
-                        colors
-                          .secondaryBackground,
-                      borderColor:
-                        colors.border,
-                      borderRadius:
-                        radius.md,
-                      padding:
-                        spacing.sm + 2,
-                      marginTop:
-                        spacing.md,
+                      backgroundColor: colors.secondaryBackground,
+                      borderColor: colors.border,
+                      borderRadius: radius.md,
+                      padding: spacing.sm + 2,
+                      marginTop: spacing.md,
                     },
                   ]}
                 >
                   <Ionicons
                     name="information-circle-outline"
                     size={18}
-                    color={
-                      colors.primary
-                    }
+                    color={colors.primary}
                   />
 
                   <Text
                     style={{
                       flex: 1,
-                      fontFamily:
-                        typography.caption
-                          .fontFamily,
-                      fontSize:
-                        typography.caption
-                          .fontSize,
-                      color:
-                        colors.textSecondary,
+                      fontFamily: typography.caption.fontFamily,
+                      fontSize: typography.caption.fontSize,
+                      color: colors.textSecondary,
                       marginLeft: 7,
-                      lineHeight:
-                        typography.caption
-                          .fontSize + 5,
+                      lineHeight: typography.caption.fontSize + 5,
                     }}
                   >
                     <Text
                       style={{
                         fontWeight: "700",
-                        color:
-                          colors.text,
+                        color: colors.text,
                       }}
                     >
                       Status guide:{" "}
                     </Text>
-                    Completed means the
-                    SIS was submitted.
-                    In Progress means the
-                    student has started it.
-                    Not Started means no
-                    SIS information has
-                    been submitted yet.
+                    Completed means the SIS was submitted. In Progress means the
+                    student has started it. Not Started means no SIS information
+                    has been submitted yet.
                   </Text>
                 </View>
 
                 {/* Completion Overview */}
                 <View
                   style={{
-                    marginTop:
-                      spacing.md,
+                    marginTop: spacing.md,
                   }}
                 >
-                  <View
-                    style={
-                      styles.completionHeader
-                    }
-                  >
+                  <View style={styles.completionHeader}>
                     <Text
                       style={{
-                        fontFamily:
-                          typography.caption
-                            .fontFamily,
-                        fontSize:
-                          typography.caption
-                            .fontSize,
+                        fontFamily: typography.caption.fontFamily,
+                        fontSize: typography.caption.fontSize,
                         fontWeight: "700",
-                        color:
-                          colors.text,
+                        color: colors.text,
                       }}
                     >
                       Overall completion
@@ -1222,21 +1090,13 @@ export default function GuidanceDashboard() {
 
                     <Text
                       style={{
-                        fontFamily:
-                          typography.body
-                            .fontFamily,
-                        fontSize:
-                          typography.body
-                            .fontSize,
+                        fontFamily: typography.body.fontFamily,
+                        fontSize: typography.body.fontSize,
                         fontWeight: "700",
-                        color:
-                          colors.primary,
+                        color: colors.primary,
                       }}
                     >
-                      {
-                        completionPercentage
-                      }
-                      %
+                      {completionPercentage}%
                     </Text>
                   </View>
 
@@ -1244,13 +1104,9 @@ export default function GuidanceDashboard() {
                     style={[
                       styles.progressTrack,
                       {
-                        backgroundColor:
-                          colors
-                            .secondaryBackground,
-                        borderRadius:
-                          radius.round,
-                        marginTop:
-                          spacing.sm,
+                        backgroundColor: colors.secondaryBackground,
+                        borderRadius: radius.round,
+                        marginTop: spacing.sm,
                       },
                     ]}
                     accessibilityLabel={`SIS completion: ${completionPercentage}%`}
@@ -1260,10 +1116,8 @@ export default function GuidanceDashboard() {
                         styles.progressFill,
                         {
                           width: `${completionPercentage}%`,
-                          backgroundColor:
-                            colors.success,
-                          borderRadius:
-                            radius.round,
+                          backgroundColor: colors.success,
+                          borderRadius: radius.round,
                         },
                       ]}
                     />
@@ -1271,24 +1125,14 @@ export default function GuidanceDashboard() {
 
                   <Text
                     style={{
-                      fontFamily:
-                        typography.caption
-                          .fontFamily,
-                      fontSize:
-                        typography.caption
-                          .fontSize - 1,
-                      color:
-                        colors.textSecondary,
+                      fontFamily: typography.caption.fontFamily,
+                      fontSize: typography.caption.fontSize - 1,
+                      color: colors.textSecondary,
                       marginTop: 5,
                     }}
                   >
-                    {
-                      sisCounts.completed
-                    }{" "}
-                    of{" "}
-                    {sisCounts.total}{" "}
-                    students have completed
-                    their SIS.
+                    {sisCounts.completed} of {sisCounts.total} students have
+                    completed their SIS.
                   </Text>
                 </View>
 
@@ -1298,27 +1142,26 @@ export default function GuidanceDashboard() {
                     styles.sisStatsRow,
                     {
                       gap: 8,
-                      marginTop:
-                        spacing.md,
+                      marginTop: spacing.md,
                     },
                   ]}
                 >
                   {renderSISStatCard(
                     "Completed",
                     sisCounts.completed,
-                    "completed"
+                    "completed",
                   )}
 
                   {renderSISStatCard(
                     "In Progress",
                     sisCounts.inProgress,
-                    "in_progress"
+                    "in_progress",
                   )}
 
                   {renderSISStatCard(
                     "Not Started",
                     sisCounts.notStarted,
-                    "not_started"
+                    "not_started",
                   )}
                 </View>
               </View>
@@ -1326,15 +1169,10 @@ export default function GuidanceDashboard() {
               {/* Search */}
               <Text
                 style={{
-                  fontFamily:
-                    typography.caption
-                      .fontFamily,
-                  fontSize:
-                    typography.caption
-                      .fontSize,
+                  fontFamily: typography.caption.fontFamily,
+                  fontSize: typography.caption.fontSize,
                   fontWeight: "700",
-                  color:
-                    colors.text,
+                  color: colors.text,
                   marginBottom: 6,
                 }}
               >
@@ -1345,38 +1183,22 @@ export default function GuidanceDashboard() {
                 style={[
                   styles.searchInput,
                   {
-                    backgroundColor:
-                      colors.secondaryBackground,
-                    borderColor:
-                      colors.border,
-                    borderRadius:
-                      radius.sm + 2,
-                    paddingHorizontal:
-                      spacing.sm + 6,
-                    paddingVertical:
-                      spacing.sm + 2,
-                    fontFamily:
-                      typography.body
-                        .fontFamily,
-                    fontSize:
-                      typography.body
-                        .fontSize,
+                    backgroundColor: colors.secondaryBackground,
+                    borderColor: colors.border,
+                    borderRadius: radius.sm + 2,
+                    paddingHorizontal: spacing.sm + 6,
+                    paddingVertical: spacing.sm + 2,
+                    fontFamily: typography.body.fontFamily,
+                    fontSize: typography.body.fontSize,
                     color: colors.text,
-                    marginBottom:
-                      spacing.md,
+                    marginBottom: spacing.md,
                   },
                 ]}
                 placeholder="Search by name or email"
-                placeholderTextColor={
-                  colors.placeholder
-                }
+                placeholderTextColor={colors.placeholder}
                 value={search}
-                onChangeText={
-                  setSearch
-                }
-                onSubmitEditing={
-                  loadData
-                }
+                onChangeText={setSearch}
+                onSubmitEditing={loadData}
                 returnKeyType="search"
                 accessibilityLabel="Search students by name or email"
               />
@@ -1384,15 +1206,10 @@ export default function GuidanceDashboard() {
               {/* Profile Filters */}
               <Text
                 style={{
-                  fontFamily:
-                    typography.caption
-                      .fontFamily,
-                  fontSize:
-                    typography.caption
-                      .fontSize,
+                  fontFamily: typography.caption.fontFamily,
+                  fontSize: typography.caption.fontSize,
                   fontWeight: "700",
-                  color:
-                    colors.text,
+                  color: colors.text,
                   marginBottom: 6,
                 }}
               >
@@ -1401,77 +1218,108 @@ export default function GuidanceDashboard() {
 
               <FlatList
                 horizontal
-                data={
-                  DISABILITY_FILTERS
-                }
-                keyExtractor={(item) =>
-                  item
-                }
-                showsHorizontalScrollIndicator={
-                  false
-                }
+                data={DISABILITY_FILTERS}
+                keyExtractor={(item) => item}
+                showsHorizontalScrollIndicator={false}
                 style={{
-                  marginBottom:
-                    spacing.md,
+                  marginBottom: spacing.md,
                 }}
-                renderItem={({
-                  item,
-                }) => {
-                  const isActive =
-                    activeFilter ===
-                    item;
+                renderItem={({ item }) => {
+                  const isActive = activeFilter === item;
 
                   return (
                     <TouchableOpacity
                       style={[
                         styles.filterChip,
                         {
-                          paddingHorizontal:
-                            spacing.sm +
-                            6,
-                          paddingVertical:
-                            spacing.sm,
-                          borderRadius:
-                            radius.xl,
-                          borderColor:
-                            isActive
-                              ? colors.primary
-                              : colors.border,
-                          backgroundColor:
-                            isActive
-                              ? colors.primary
-                              : colors.surface,
+                          paddingHorizontal: spacing.sm + 6,
+                          paddingVertical: spacing.sm,
+                          borderRadius: radius.xl,
+                          borderColor: isActive
+                            ? colors.primary
+                            : colors.border,
+                          backgroundColor: isActive
+                            ? colors.primary
+                            : colors.surface,
                           marginRight: 8,
                         },
                       ]}
-                      onPress={() =>
-                        setActiveFilter(
-                          item
-                        )
-                      }
+                      onPress={() => setActiveFilter(item)}
                       accessibilityRole="button"
                       accessibilityLabel={`Profile filter: ${item}`}
                       accessibilityState={{
-                        selected:
-                          isActive,
+                        selected: isActive,
                       }}
                     >
                       <Text
                         style={{
-                          fontFamily:
-                            typography
-                              .caption
-                              .fontFamily,
-                          fontSize:
-                            typography
-                              .caption
-                              .fontSize,
-                          fontWeight:
-                            "600",
-                          color:
-                            isActive
-                              ? "#FFFFFF"
-                              : colors.textSecondary,
+                          fontFamily: typography.caption.fontFamily,
+                          fontSize: typography.caption.fontSize,
+                          fontWeight: "600",
+                          color: isActive ? "#FFFFFF" : colors.textSecondary,
+                        }}
+                      >
+                        {item}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                }}
+              />
+
+              {/* Course Filters */}
+              <Text
+                style={{
+                  fontFamily: typography.caption.fontFamily,
+                  fontSize: typography.caption.fontSize,
+                  fontWeight: "700",
+                  color: colors.text,
+                  marginBottom: 6,
+                }}
+              >
+                Course Filter
+              </Text>
+
+              <FlatList
+                horizontal
+                data={COURSE_FILTERS}
+                keyExtractor={(item) => item}
+                showsHorizontalScrollIndicator={false}
+                style={{
+                  marginBottom: spacing.md,
+                }}
+                renderItem={({ item }) => {
+                  const isActive = activeCourseFilter === item;
+
+                  return (
+                    <TouchableOpacity
+                      style={[
+                        styles.filterChip,
+                        {
+                          paddingHorizontal: spacing.sm + 6,
+                          paddingVertical: spacing.sm,
+                          borderRadius: radius.xl,
+                          borderColor: isActive
+                            ? colors.primary
+                            : colors.border,
+                          backgroundColor: isActive
+                            ? colors.primary
+                            : colors.surface,
+                          marginRight: 8,
+                        },
+                      ]}
+                      onPress={() => setActiveCourseFilter(item)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Course filter: ${item}`}
+                      accessibilityState={{
+                        selected: isActive,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontFamily: typography.caption.fontFamily,
+                          fontSize: typography.caption.fontSize,
+                          fontWeight: "600",
+                          color: isActive ? "#FFFFFF" : colors.textSecondary,
                         }}
                       >
                         {item}
@@ -1482,23 +1330,14 @@ export default function GuidanceDashboard() {
               />
 
               {/* SIS Status Filters */}
-              <View
-                style={
-                  styles.sisFilterHeader
-                }
-              >
+              <View style={styles.sisFilterHeader}>
                 <View>
                   <Text
                     style={{
-                      fontFamily:
-                        typography.caption
-                          .fontFamily,
-                      fontSize:
-                        typography.caption
-                          .fontSize,
+                      fontFamily: typography.caption.fontFamily,
+                      fontSize: typography.caption.fontSize,
                       fontWeight: "700",
-                      color:
-                        colors.text,
+                      color: colors.text,
                     }}
                   >
                     SIS Status Filter
@@ -1506,50 +1345,32 @@ export default function GuidanceDashboard() {
 
                   <Text
                     style={{
-                      fontFamily:
-                        typography.caption
-                          .fontFamily,
-                      fontSize:
-                        typography.caption
-                          .fontSize - 1,
-                      color:
-                        colors.textSecondary,
+                      fontFamily: typography.caption.fontFamily,
+                      fontSize: typography.caption.fontSize - 1,
+                      color: colors.textSecondary,
                       marginTop: 2,
                     }}
                   >
-                    Choose a status to narrow
-                    the student list.
+                    Choose a status to narrow the student list.
                   </Text>
                 </View>
 
-                {activeSISFilter !==
-                  "all" && (
+                {activeSISFilter !== "all" && (
                   <TouchableOpacity
-                    onPress={() =>
-                      setActiveSISFilter(
-                        "all"
-                      )
-                    }
+                    onPress={() => setActiveSISFilter("all")}
                     accessibilityRole="button"
                     accessibilityLabel="Clear SIS status filter"
                     style={{
-                      paddingHorizontal:
-                        spacing.sm,
+                      paddingHorizontal: spacing.sm,
                       paddingVertical: 5,
                     }}
                   >
                     <Text
                       style={{
-                        fontFamily:
-                          typography.caption
-                            .fontFamily,
-                        fontSize:
-                          typography.caption
-                            .fontSize,
-                        fontWeight:
-                          "700",
-                        color:
-                          colors.primary,
+                        fontFamily: typography.caption.fontFamily,
+                        fontSize: typography.caption.fontSize,
+                        fontWeight: "700",
+                        color: colors.primary,
                       }}
                     >
                       Clear
@@ -1561,75 +1382,45 @@ export default function GuidanceDashboard() {
               <FlatList
                 horizontal
                 data={SIS_FILTERS}
-                keyExtractor={(item) =>
-                  item.value
-                }
-                showsHorizontalScrollIndicator={
-                  false
-                }
+                keyExtractor={(item) => item.value}
+                showsHorizontalScrollIndicator={false}
                 style={{
                   marginTop: spacing.sm,
-                  marginBottom:
-                    spacing.md,
+                  marginBottom: spacing.md,
                 }}
-                renderItem={({
-                  item,
-                }) => {
-                  const isActive =
-                    activeSISFilter ===
-                    item.value;
+                renderItem={({ item }) => {
+                  const isActive = activeSISFilter === item.value;
 
                   return (
                     <TouchableOpacity
                       style={[
                         styles.filterChip,
                         {
-                          paddingHorizontal:
-                            spacing.sm +
-                            8,
-                          paddingVertical:
-                            spacing.sm,
-                          borderRadius:
-                            radius.xl,
-                          borderColor:
-                            isActive
-                              ? colors.primary
-                              : colors.border,
-                          backgroundColor:
-                            isActive
-                              ? colors.primary
-                              : colors.surface,
+                          paddingHorizontal: spacing.sm + 8,
+                          paddingVertical: spacing.sm,
+                          borderRadius: radius.xl,
+                          borderColor: isActive
+                            ? colors.primary
+                            : colors.border,
+                          backgroundColor: isActive
+                            ? colors.primary
+                            : colors.surface,
                           marginRight: 8,
                         },
                       ]}
-                      onPress={() =>
-                        setActiveSISFilter(
-                          item.value
-                        )
-                      }
+                      onPress={() => setActiveSISFilter(item.value)}
                       accessibilityRole="button"
                       accessibilityLabel={`SIS status filter: ${item.label}`}
                       accessibilityState={{
-                        selected:
-                          isActive,
+                        selected: isActive,
                       }}
                     >
                       <Text
                         style={{
-                          fontFamily:
-                            typography
-                              .caption
-                              .fontFamily,
-                          fontSize:
-                            typography
-                              .caption
-                              .fontSize,
-                          fontWeight:
-                            "600",
-                          color:
-                            isActive
-                              ? "#FFFFFF"
-                              : colors.textSecondary,
+                          fontFamily: typography.caption.fontFamily,
+                          fontSize: typography.caption.fontSize,
+                          fontWeight: "600",
+                          color: isActive ? "#FFFFFF" : colors.textSecondary,
                         }}
                       >
                         {item.label}
@@ -1644,30 +1435,19 @@ export default function GuidanceDashboard() {
                 style={[
                   styles.currentViewCard,
                   {
-                    backgroundColor:
-                      colors.secondaryBackground,
-                    borderColor:
-                      colors.border,
-                    borderRadius:
-                      radius.md,
-                    padding:
-                      spacing.sm + 2,
-                    marginBottom:
-                      spacing.md,
+                    backgroundColor: colors.secondaryBackground,
+                    borderColor: colors.border,
+                    borderRadius: radius.md,
+                    padding: spacing.sm + 2,
+                    marginBottom: spacing.md,
                   },
                 ]}
               >
-                <View
-                  style={
-                    styles.currentViewIcon
-                  }
-                >
+                <View style={styles.currentViewIcon}>
                   <Ionicons
                     name="funnel-outline"
                     size={17}
-                    color={
-                      colors.primary
-                    }
+                    color={colors.primary}
                   />
                 </View>
 
@@ -1679,14 +1459,9 @@ export default function GuidanceDashboard() {
                 >
                   <Text
                     style={{
-                      fontFamily:
-                        typography.caption
-                          .fontFamily,
-                      fontSize:
-                        typography.caption
-                          .fontSize - 1,
-                      color:
-                        colors.textSecondary,
+                      fontFamily: typography.caption.fontFamily,
+                      fontSize: typography.caption.fontSize - 1,
+                      color: colors.textSecondary,
                     }}
                   >
                     CURRENT VIEW
@@ -1694,77 +1469,51 @@ export default function GuidanceDashboard() {
 
                   <Text
                     style={{
-                      fontFamily:
-                        typography.body
-                          .fontFamily,
-                      fontSize:
-                        typography.body
-                          .fontSize,
+                      fontFamily: typography.body.fontFamily,
+                      fontSize: typography.body.fontSize,
                       fontWeight: "700",
-                      color:
-                        colors.text,
+                      color: colors.text,
                       marginTop: 1,
                     }}
                   >
                     {getCurrentSISFilterLabel()}
+                    {activeCourseFilter !== "All"
+                      ? ` • ${activeCourseFilter}`
+                      : ""}
                   </Text>
                 </View>
 
                 <Text
                   style={{
-                    fontFamily:
-                      typography.body
-                        .fontFamily,
-                    fontSize:
-                      typography.body
-                        .fontSize,
+                    fontFamily: typography.body.fontFamily,
+                    fontSize: typography.body.fontSize,
                     fontWeight: "700",
-                    color:
-                      colors.primary,
+                    color: colors.primary,
                   }}
                 >
-                  {
-                    visibleStudents.length
-                  }
+                  {visibleStudents.length}
                 </Text>
               </View>
 
               {/* Action Guidance */}
-              {activeSISFilter !==
-                "all" && (
+              {activeSISFilter !== "all" && (
                 <View
                   style={[
                     styles.actionHint,
                     {
                       backgroundColor:
-                        getSISStatusColors(
-                          activeSISFilter
-                        ).background,
-                      borderColor:
-                        getSISStatusColors(
-                          activeSISFilter
-                        ).border,
-                      borderRadius:
-                        radius.md,
-                      padding:
-                        spacing.sm + 2,
-                      marginBottom:
-                        spacing.md,
+                        getSISStatusColors(activeSISFilter).background,
+                      borderColor: getSISStatusColors(activeSISFilter).border,
+                      borderRadius: radius.md,
+                      padding: spacing.sm + 2,
+                      marginBottom: spacing.md,
                     },
                   ]}
                 >
                   <Ionicons
-                    name={
-                      getSISStatusIcon(
-                        activeSISFilter
-                      ) as any
-                    }
+                    name={getSISStatusIcon(activeSISFilter) as any}
                     size={18}
-                    color={
-                      getSISStatusColors(
-                        activeSISFilter
-                      ).text
-                    }
+                    color={getSISStatusColors(activeSISFilter).text}
                   />
 
                   <View
@@ -1775,134 +1524,89 @@ export default function GuidanceDashboard() {
                   >
                     <Text
                       style={{
-                        fontFamily:
-                          typography.caption
-                            .fontFamily,
-                        fontSize:
-                          typography.caption
-                            .fontSize,
+                        fontFamily: typography.caption.fontFamily,
+                        fontSize: typography.caption.fontSize,
                         fontWeight: "700",
-                        color:
-                          colors.text,
+                        color: colors.text,
                       }}
                     >
-                      {
-                        getSISStatusLabel(
-                          activeSISFilter
-                        )
-                      } students
+                      {getSISStatusLabel(activeSISFilter)} students
                     </Text>
 
                     <Text
                       style={{
-                        fontFamily:
-                          typography.caption
-                            .fontFamily,
-                        fontSize:
-                          typography.caption
-                            .fontSize,
-                        color:
-                          colors.textSecondary,
+                        fontFamily: typography.caption.fontFamily,
+                        fontSize: typography.caption.fontSize,
+                        color: colors.textSecondary,
                         marginTop: 2,
-                        lineHeight:
-                          typography.caption
-                            .fontSize + 4,
+                        lineHeight: typography.caption.fontSize + 4,
                       }}
                     >
-                      {getSISActionText(
-                        activeSISFilter
-                      )}
+                      {getSISActionText(activeSISFilter)}
                     </Text>
                   </View>
                 </View>
               )}
 
               {/* Error */}
-              {error &&
-                students.length === 0 && (
-                  <View
+              {error && students.length === 0 && (
+                <View
+                  style={[
+                    styles.stateBox,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      borderRadius: radius.lg,
+                      padding: spacing.lg,
+                      marginBottom: spacing.md,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="cloud-offline-outline"
+                    size={28}
+                    color={colors.textSecondary}
+                  />
+
+                  <Text
+                    style={{
+                      fontFamily: typography.body.fontFamily,
+                      fontSize: typography.body.fontSize,
+                      color: colors.text,
+                      textAlign: "center",
+                      marginTop: spacing.sm,
+                    }}
+                  >
+                    We couldn't load the dashboard.
+                  </Text>
+
+                  <TouchableOpacity
                     style={[
-                      styles.stateBox,
+                      styles.retryButton,
                       {
-                        backgroundColor:
-                          colors.surface,
-                        borderColor:
-                          colors.border,
-                        borderRadius:
-                          radius.lg,
-                        padding:
-                          spacing.lg,
-                        marginBottom:
-                          spacing.md,
+                        backgroundColor: colors.primary,
+                        borderRadius: radius.md,
+                        paddingVertical: spacing.sm,
+                        paddingHorizontal: spacing.lg,
+                        marginTop: spacing.md,
                       },
                     ]}
+                    onPress={loadData}
+                    accessibilityRole="button"
+                    accessibilityLabel="Retry loading dashboard"
                   >
-                    <Ionicons
-                      name="cloud-offline-outline"
-                      size={28}
-                      color={
-                        colors.textSecondary
-                      }
-                    />
-
                     <Text
                       style={{
-                        fontFamily:
-                          typography.body
-                            .fontFamily,
-                        fontSize:
-                          typography.body
-                            .fontSize,
-                        color:
-                          colors.text,
-                        textAlign:
-                          "center",
-                        marginTop:
-                          spacing.sm,
+                        fontFamily: typography.body.fontFamily,
+                        fontWeight: "700",
+                        color: "#FFFFFF",
                       }}
                     >
-                      We couldn't load the
-                      dashboard.
+                      Retry
                     </Text>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.retryButton,
-                        {
-                          backgroundColor:
-                            colors.primary,
-                          borderRadius:
-                            radius.md,
-                          paddingVertical:
-                            spacing.sm,
-                          paddingHorizontal:
-                            spacing.lg,
-                          marginTop:
-                            spacing.md,
-                        },
-                      ]}
-                      onPress={
-                        loadData
-                      }
-                      accessibilityRole="button"
-                      accessibilityLabel="Retry loading dashboard"
-                    >
-                      <Text
-                        style={{
-                          fontFamily:
-                            typography.body
-                              .fontFamily,
-                          fontWeight:
-                            "700",
-                          color:
-                            "#FFFFFF",
-                        }}
-                      >
-                        Retry
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+                  </TouchableOpacity>
+                </View>
+              )}
             </>
           }
           ListEmptyComponent={
@@ -1911,14 +1615,10 @@ export default function GuidanceDashboard() {
                 style={[
                   styles.emptyState,
                   {
-                    backgroundColor:
-                      colors.surface,
-                    borderColor:
-                      colors.border,
-                    borderRadius:
-                      radius.lg,
-                    padding:
-                      spacing.lg,
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    borderRadius: radius.lg,
+                    padding: spacing.lg,
                   },
                 ]}
               >
@@ -1926,94 +1626,65 @@ export default function GuidanceDashboard() {
                   style={[
                     styles.emptyIcon,
                     {
-                      backgroundColor:
-                        colors
-                          .secondaryBackground,
-                      borderRadius:
-                        radius.round,
+                      backgroundColor: colors.secondaryBackground,
+                      borderRadius: radius.round,
                     },
                   ]}
                 >
                   <Ionicons
                     name="people-outline"
                     size={30}
-                    color={
-                      colors.textSecondary
-                    }
+                    color={colors.textSecondary}
                   />
                 </View>
 
                 <Text
                   style={{
-                    fontFamily:
-                      typography.body
-                        .fontFamily,
-                    fontSize:
-                      typography.body
-                        .fontSize,
-                    fontWeight:
-                      "700",
-                    color:
-                      colors.text,
-                    textAlign:
-                      "center",
-                    marginTop:
-                      spacing.sm,
+                    fontFamily: typography.body.fontFamily,
+                    fontSize: typography.body.fontSize,
+                    fontWeight: "700",
+                    color: colors.text,
+                    textAlign: "center",
+                    marginTop: spacing.sm,
                   }}
                 >
-                  {activeSISFilter ===
-                  "all"
+                  {activeSISFilter === "all"
                     ? "No students found"
                     : `No ${getSISStatusLabel(
-                        activeSISFilter
+                        activeSISFilter,
                       ).toLowerCase()} students`}
                 </Text>
 
                 <Text
                   style={{
-                    fontFamily:
-                      typography.caption
-                        .fontFamily,
-                    fontSize:
-                      typography.caption
-                        .fontSize,
-                    color:
-                      colors.textSecondary,
-                    textAlign:
-                      "center",
+                    fontFamily: typography.caption.fontFamily,
+                    fontSize: typography.caption.fontSize,
+                    color: colors.textSecondary,
+                    textAlign: "center",
                     marginTop: 4,
-                    lineHeight:
-                      typography.caption
-                        .fontSize + 5,
+                    lineHeight: typography.caption.fontSize + 5,
                   }}
                 >
-                  {activeSISFilter ===
-                  "all"
-                    ? "Try changing your search or profile filter."
+                  {activeSISFilter === "all"
+                    ? "Try changing your search, profile, or course filter."
                     : "Try selecting another SIS status or clearing the current filters."}
                 </Text>
 
-                {activeSISFilter !==
-                  "all" && (
+                {(activeSISFilter !== "all" ||
+                  activeCourseFilter !== "All") && (
                   <TouchableOpacity
-                    onPress={() =>
-                      setActiveSISFilter(
-                        "all"
-                      )
-                    }
+                    onPress={() => {
+                      setActiveSISFilter("all");
+                      setActiveCourseFilter("All");
+                    }}
                     style={[
                       styles.clearFilterButton,
                       {
-                        borderColor:
-                          colors.primary,
-                        borderRadius:
-                          radius.md,
-                        paddingHorizontal:
-                          spacing.md,
-                        paddingVertical:
-                          spacing.sm,
-                        marginTop:
-                          spacing.md,
+                        borderColor: colors.primary,
+                        borderRadius: radius.md,
+                        paddingHorizontal: spacing.md,
+                        paddingVertical: spacing.sm,
+                        marginTop: spacing.md,
                       },
                     ]}
                     accessibilityRole="button"
@@ -2021,16 +1692,10 @@ export default function GuidanceDashboard() {
                   >
                     <Text
                       style={{
-                        fontFamily:
-                          typography.caption
-                            .fontFamily,
-                        fontSize:
-                          typography.caption
-                            .fontSize,
-                        fontWeight:
-                          "700",
-                        color:
-                          colors.primary,
+                        fontFamily: typography.caption.fontFamily,
+                        fontSize: typography.caption.fontSize,
+                        fontWeight: "700",
+                        color: colors.primary,
                       }}
                     >
                       Show All Students
@@ -2162,6 +1827,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     borderWidth: 1,
+  },
+
+  /*
+   * Course grouping
+   */
+  courseSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderBottomWidth: 1,
   },
 
   /*

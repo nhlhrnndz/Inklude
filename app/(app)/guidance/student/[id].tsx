@@ -1,3 +1,4 @@
+//app/(app)/guidance/student/[id].tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -29,6 +30,11 @@ type StudentDetail = {
     createdAt: string;
     disabilityTypes: string[];
     accessibilityPreferences: Record<string, boolean>;
+    course?: string | null;
+    yearLevel?: string | null;
+    section?: string | null;
+    age?: number | null;
+    dateOfBirth?: string | null;
   };
   attendance: {
     sessionId: number;
@@ -103,9 +109,7 @@ export default function StudentDetailScreen() {
   }, [id]);
 
   const goToDashboard = () => {
-    router.replace(
-      (ROLE_HOME[user?.role ?? "guidance"] ?? "/") as any
-    );
+    router.replace((ROLE_HOME[user?.role ?? "guidance"] ?? "/") as any);
   };
 
   const getSISStatusLabel = (status: SISStatus) => {
@@ -179,7 +183,7 @@ export default function StudentDetailScreen() {
   const renderInfoRow = (
     label: string,
     value?: string | null,
-    multiline = false
+    multiline = false,
   ) => {
     const displayValue =
       value && value.trim().length > 0 ? value : "Not provided";
@@ -214,8 +218,7 @@ export default function StudentDetailScreen() {
               displayValue === "Not provided"
                 ? colors.placeholder
                 : colors.text,
-            fontStyle:
-              displayValue === "Not provided" ? "italic" : "normal",
+            fontStyle: displayValue === "Not provided" ? "italic" : "normal",
             flex: multiline ? undefined : 0.58,
             textAlign: multiline ? "left" : "right",
             lineHeight: 20,
@@ -230,7 +233,7 @@ export default function StudentDetailScreen() {
   const renderSISSection = (
     title: string,
     icon: keyof typeof Ionicons.glyphMap,
-    children: React.ReactNode
+    children: React.ReactNode,
   ) => (
     <View
       style={[
@@ -254,11 +257,7 @@ export default function StudentDetailScreen() {
         ]}
       >
         <View style={styles.sisSectionTitleRow}>
-          <Ionicons
-            name={icon}
-            size={19}
-            color={colors.primary}
-          />
+          <Ionicons name={icon} size={19} color={colors.primary} />
 
           <Text
             style={{
@@ -274,9 +273,7 @@ export default function StudentDetailScreen() {
         </View>
       </View>
 
-      <View style={{ paddingHorizontal: spacing.md }}>
-        {children}
-      </View>
+      <View style={{ paddingHorizontal: spacing.md }}>{children}</View>
     </View>
   );
 
@@ -333,11 +330,7 @@ export default function StudentDetailScreen() {
           accessibilityLabel="Back to dashboard"
           hitSlop={8}
         >
-          <Ionicons
-            name="arrow-back"
-            size={18}
-            color={colors.primary}
-          />
+          <Ionicons name="arrow-back" size={18} color={colors.primary} />
 
           <Text
             style={{
@@ -412,6 +405,38 @@ export default function StudentDetailScreen() {
             {student.email}
           </Text>
 
+          {(student.course || student.yearLevel || student.section) && (
+            <View style={{ alignItems: "center", marginBottom: 12 }}>
+              {student.course && (
+                <Text
+                  style={{
+                    fontFamily: typography.body.fontFamily,
+                    fontSize: typography.caption.fontSize,
+                    fontWeight: "600",
+                    color: colors.text,
+                  }}
+                >
+                  {student.course}
+                </Text>
+              )}
+
+              {(student.yearLevel || student.section) && (
+                <Text
+                  style={{
+                    fontFamily: typography.caption.fontFamily,
+                    fontSize: typography.caption.fontSize - 1,
+                    color: colors.textSecondary,
+                    marginTop: 2,
+                  }}
+                >
+                  {[student.yearLevel, student.section]
+                    .filter(Boolean)
+                    .join(" • ")}
+                </Text>
+              )}
+            </View>
+          )}
+
           <View
             style={[
               styles.tagRow,
@@ -485,7 +510,7 @@ export default function StudentDetailScreen() {
               },
             ]}
             accessibilityLabel={`Student Information Sheet status: ${getSISStatusLabel(
-              sisStatus
+              sisStatus,
             )}`}
           >
             <View style={styles.sisStatusIcon}>
@@ -538,18 +563,12 @@ export default function StudentDetailScreen() {
                 {renderInfoRow("Full Name", sisData.fullName)}
                 {renderInfoRow(
                   "Date of Birth",
-                  formatDate(sisData.dateOfBirth)
+                  formatDate(sisData.dateOfBirth),
                 )}
                 {renderInfoRow("Sex", sisData.sex)}
-                {renderInfoRow(
-                  "Civil Status",
-                  sisData.civilStatus
-                )}
-                {renderInfoRow(
-                  "Nationality",
-                  sisData.nationality
-                )}
-              </>
+                {renderInfoRow("Civil Status", sisData.civilStatus)}
+                {renderInfoRow("Nationality", sisData.nationality)}
+              </>,
             )}
 
             {renderSISSection(
@@ -557,91 +576,60 @@ export default function StudentDetailScreen() {
               "call-outline",
               <>
                 {renderInfoRow("Email", sisData.email)}
-                {renderInfoRow(
-                  "Mobile Number",
-                  sisData.mobileNumber
-                )}
-                {renderInfoRow(
-                  "Current Address",
-                  sisData.currentAddress,
-                  true
-                )}
+                {renderInfoRow("Mobile Number", sisData.mobileNumber)}
+                {renderInfoRow("Current Address", sisData.currentAddress, true)}
                 {renderInfoRow(
                   "Permanent Address",
                   sisData.permanentAddress,
-                  true
+                  true,
                 )}
-              </>
+              </>,
             )}
 
             {renderSISSection(
               "Academic Information",
               "school-outline",
               <>
-                {renderInfoRow(
-                  "Program / Course",
-                  sisData.programCourse
-                )}
-                {renderInfoRow(
-                  "Year Level",
-                  sisData.yearLevel
-                )}
-                {renderInfoRow(
-                  "Section / Block",
-                  sisData.sectionBlock
-                )}
-                {renderInfoRow(
-                  "Academic Year",
-                  sisData.academicYear
-                )}
-              </>
+                {renderInfoRow("Program / Course", sisData.programCourse)}
+                {renderInfoRow("Year Level", sisData.yearLevel)}
+                {renderInfoRow("Section / Block", sisData.sectionBlock)}
+                {renderInfoRow("Academic Year", sisData.academicYear)}
+              </>,
             )}
 
             {renderSISSection(
               "Emergency Contact",
               "alert-circle-outline",
               <>
-                {renderInfoRow(
-                  "Name",
-                  sisData.emergencyContactName
-                )}
+                {renderInfoRow("Name", sisData.emergencyContactName)}
                 {renderInfoRow(
                   "Relationship",
-                  sisData.emergencyContactRelationship
+                  sisData.emergencyContactRelationship,
                 )}
                 {renderInfoRow(
                   "Contact Number",
-                  sisData.emergencyContactNumber
+                  sisData.emergencyContactNumber,
                 )}
                 {renderInfoRow(
                   "Address",
                   sisData.emergencyContactAddress,
-                  true
+                  true,
                 )}
-              </>
+              </>,
             )}
 
             {renderSISSection(
               "Parent / Guardian",
               "people-outline",
               <>
-                {renderInfoRow(
-                  "Name",
-                  sisData.parentGuardianName
-                )}
+                {renderInfoRow("Name", sisData.parentGuardianName)}
                 {renderInfoRow(
                   "Relationship",
-                  sisData.parentGuardianRelationship
+                  sisData.parentGuardianRelationship,
                 )}
-                {renderInfoRow(
-                  "Contact",
-                  sisData.parentGuardianContact
-                )}
-                {renderInfoRow(
-                  "Occupation",
-                  sisData.parentGuardianOccupation
-                )}
-              </>
+                {renderInfoRow("Contact", sisData.parentGuardianContact)}
+                {renderInfoRow("Occupation", sisData.parentGuardianOccupation)}
+              </>,
             )}
 
             {renderSISSection(
@@ -650,19 +638,19 @@ export default function StudentDetailScreen() {
               <>
                 {renderInfoRow(
                   "Preferred Communication",
-                  sisData.preferredCommunicationMethod
+                  sisData.preferredCommunicationMethod,
                 )}
                 {renderInfoRow(
                   "Learning / Communication Preferences",
                   sisData.learningCommunicationPreferences,
-                  true
+                  true,
                 )}
                 {renderInfoRow(
                   "Additional Support Notes",
                   sisData.additionalSupportNotes,
-                  true
+                  true,
                 )}
-              </>
+              </>,
             )}
 
             <View
@@ -728,40 +716,34 @@ export default function StudentDetailScreen() {
             </Text>
 
             <View style={[styles.prefGrid, { gap: 8 }]}>
-              {Object.entries(
-                student.accessibilityPreferences
-              ).map(([key, value]) => (
-                <View
-                  key={key}
-                  style={[
-                    styles.prefChip,
-                    {
-                      borderRadius: radius.sm,
-                      backgroundColor: value
-                        ? colors.success + "1A"
-                        : colors.secondaryBackground,
-                      borderColor: value
-                        ? colors.success
-                        : colors.border,
-                    },
-                  ]}
-                  accessibilityLabel={`${key}: ${
-                    value ? "on" : "off"
-                  }`}
-                >
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      fontWeight: "600",
-                      color: value
-                        ? colors.success
-                        : colors.textSecondary,
-                    }}
+              {Object.entries(student.accessibilityPreferences).map(
+                ([key, value]) => (
+                  <View
+                    key={key}
+                    style={[
+                      styles.prefChip,
+                      {
+                        borderRadius: radius.sm,
+                        backgroundColor: value
+                          ? colors.success + "1A"
+                          : colors.secondaryBackground,
+                        borderColor: value ? colors.success : colors.border,
+                      },
+                    ]}
+                    accessibilityLabel={`${key}: ${value ? "on" : "off"}`}
                   >
-                    {key} {value ? "✓" : "✕"}
-                  </Text>
-                </View>
-              ))}
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: "600",
+                        color: value ? colors.success : colors.textSecondary,
+                      }}
+                    >
+                      {key} {value ? "✓" : "✕"}
+                    </Text>
+                  </View>
+                ),
+              )}
             </View>
           </View>
         )}
@@ -808,7 +790,7 @@ export default function StudentDetailScreen() {
                 accessibilityLabel={`${a.title}, taught by ${
                   a.teacherName
                 }, status ${a.status}, joined ${new Date(
-                  a.joinedAt
+                  a.joinedAt,
                 ).toLocaleString()}`}
               >
                 <View style={{ flex: 1 }}>
@@ -830,8 +812,7 @@ export default function StudentDetailScreen() {
                       marginTop: 2,
                     }}
                   >
-                    Teacher: {a.teacherName} • Code:{" "}
-                    {a.sessionCode}
+                    Teacher: {a.teacherName} • Code: {a.sessionCode}
                   </Text>
 
                   <Text
@@ -841,8 +822,7 @@ export default function StudentDetailScreen() {
                       marginTop: 4,
                     }}
                   >
-                    Joined:{" "}
-                    {new Date(a.joinedAt).toLocaleString()}
+                    Joined: {new Date(a.joinedAt).toLocaleString()}
                   </Text>
                 </View>
 
@@ -915,9 +895,7 @@ export default function StudentDetailScreen() {
                 ]}
                 accessibilityLabel={`Transcript from ${
                   t.sessionTitle
-                }, ${new Date(t.createdAt).toLocaleString()}: ${
-                  t.text
-                }`}
+                }, ${new Date(t.createdAt).toLocaleString()}: ${t.text}`}
               >
                 <Text
                   style={{

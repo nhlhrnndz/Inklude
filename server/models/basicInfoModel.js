@@ -1,3 +1,4 @@
+//basicInfoModel.js
 const pool = require("../config/db");
 
 async function getBasicInfoByUserId(userId) {

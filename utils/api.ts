@@ -254,9 +254,21 @@ export interface SISData {
   updatedAt?: string;
 }
 
+// Basic Information (Course / Year Level / Section / Date of Birth) is the
+// single source of truth. The backend merges it into every SIS response
+// under `basicInfo` so the SIS screen can show those fields read-only.
+export type SISBasicInfo = {
+  yearLevel?: string;
+  age?: number;
+  dateOfBirth?: string;
+  course?: string;
+  section?: string;
+};
+
 export const getMySIS = async (): Promise<{
   sis: SISData | null;
   status: SISStatus;
+  basicInfo: SISBasicInfo | null;
 }> => {
   const response = await api.get("/api/sis/me");
   return response.data;
@@ -268,6 +280,7 @@ export const saveMySIS = async (
   message: string;
   sis: SISData;
   status: SISStatus;
+  basicInfo: SISBasicInfo | null;
 }> => {
   const response = await api.post("/api/sis/me", data);
   return response.data;
@@ -279,6 +292,7 @@ export const updateMySIS = async (
   message: string;
   sis: SISData;
   status: SISStatus;
+  basicInfo: SISBasicInfo | null;
 }> => {
   const response = await api.put("/api/sis/me", data);
   return response.data;
@@ -295,7 +309,13 @@ export const getGuidanceSIS = async (filters?: {
   return response.data;
 };
 
-export const getGuidanceStudentSIS = async (studentId: number) => {
+export const getGuidanceStudentSIS = async (
+  studentId: number,
+): Promise<{
+  sis: SISData | null;
+  status: SISStatus;
+  basicInfo: SISBasicInfo | null;
+}> => {
   const response = await api.get(`/api/sis/students/${studentId}`);
   return response.data;
 };

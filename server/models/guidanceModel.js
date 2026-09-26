@@ -1,12 +1,16 @@
+//guidanceModel.js
 const pool = require("../config/db");
 
-// Get all students with their disability profiles, optional filter + search
-async function getAllStudents(disabilityFilter, searchTerm) {
+// Get all students with their disability profiles and basic info
+// (course/year level/section), with optional filters (disability, course) + search
+async function getAllStudents(disabilityFilter, searchTerm, courseFilter) {
   let query = `
     SELECT u.id, u.name, u.email, u.created_at,
-           dp.disability_types, dp.accessibility_preferences
+           dp.disability_types, dp.accessibility_preferences,
+           bi.course, bi.year_level, bi.section
     FROM users u
     LEFT JOIN disability_profiles dp ON dp.user_id = u.id
+    LEFT JOIN student_basic_info bi ON bi.user_id = u.id
     WHERE u.role = 'student'
   `;
   const params = [];
@@ -16,24 +20,31 @@ async function getAllStudents(disabilityFilter, searchTerm) {
     params.push(disabilityFilter);
   }
 
+  if (courseFilter) {
+    query += " AND bi.course = ?";
+    params.push(courseFilter);
+  }
+
   if (searchTerm) {
     query += " AND (u.name LIKE ? OR u.email LIKE ?)";
     params.push(`%${searchTerm}%`, `%${searchTerm}%`);
   }
 
-  query += " ORDER BY u.name ASC";
+  query += " ORDER BY bi.course ASC, u.name ASC";
 
   const [rows] = await pool.query(query, params);
   return rows;
 }
 
-// Get a single student's full profile
+// Get a single student's full profile, including basic info
 async function getStudentById(studentId) {
   const [rows] = await pool.query(
     `SELECT u.id, u.name, u.email, u.created_at,
-            dp.disability_types, dp.accessibility_preferences
+            dp.disability_types, dp.accessibility_preferences,
+            bi.course, bi.year_level, bi.section, bi.age, bi.date_of_birth
      FROM users u
      LEFT JOIN disability_profiles dp ON dp.user_id = u.id
+     LEFT JOIN student_basic_info bi ON bi.user_id = u.id
      WHERE u.id = ? AND u.role = 'student'`,
     [studentId],
   );

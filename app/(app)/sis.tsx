@@ -1,6 +1,7 @@
+//sis.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -31,6 +32,14 @@ type SectionKey =
   | "emergency"
   | "family"
   | "support";
+
+type BasicInfo = {
+  yearLevel?: string;
+  age?: number;
+  dateOfBirth?: string;
+  course?: string;
+  section?: string;
+};
 
 const createEmptyForm = (): SISData => ({
   studentId: "",
@@ -97,8 +106,7 @@ const normalizeSIS = (sis: SISData | null, status: SISStatus): SISData => {
     parentGuardianRelationship: sis.parentGuardianRelationship ?? "",
     parentGuardianContact: sis.parentGuardianContact ?? "",
     parentGuardianOccupation: sis.parentGuardianOccupation ?? "",
-    preferredCommunicationMethod:
-      sis.preferredCommunicationMethod ?? "",
+    preferredCommunicationMethod: sis.preferredCommunicationMethod ?? "",
     learningCommunicationPreferences:
       sis.learningCommunicationPreferences ?? "",
     additionalSupportNotes: sis.additionalSupportNotes ?? "",
@@ -132,14 +140,14 @@ export default function SISScreen() {
   const [lastSavedForm, setLastSavedForm] =
     useState<SISData>(createEmptyForm());
 
-  const [currentStatus, setCurrentStatus] =
-    useState<SISStatus>("not_started");
+  const [basicInfo, setBasicInfo] = useState<BasicInfo | null>(null);
+
+  const [currentStatus, setCurrentStatus] = useState<SISStatus>("not_started");
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const [openSection, setOpenSection] =
-    useState<SectionKey | null>("student");
+  const [openSection, setOpenSection] = useState<SectionKey | null>("student");
 
   const [editingCompleted, setEditingCompleted] = useState(false);
 
@@ -158,14 +166,12 @@ export default function SISScreen() {
       const loadedStatus: SISStatus =
         response.status ?? response.sis?.status ?? "not_started";
 
-      const normalized = normalizeSIS(
-        response.sis,
-        loadedStatus,
-      );
+      const normalized = normalizeSIS(response.sis, loadedStatus);
 
       setForm(normalized);
       setLastSavedForm(normalized);
       setCurrentStatus(loadedStatus);
+      setBasicInfo(response.basicInfo ?? null);
 
       if (loadedStatus === "completed") {
         setIntroVisible(false);
@@ -189,10 +195,7 @@ export default function SISScreen() {
     }
   };
 
-  const updateField = <K extends keyof SISData>(
-    key: K,
-    value: SISData[K],
-  ) => {
+  const updateField = <K extends keyof SISData>(key: K, value: SISData[K]) => {
     setForm((previous) => ({
       ...previous,
       [key]: value,
@@ -207,26 +210,18 @@ export default function SISScreen() {
     return REQUIRED_FIELDS.filter(({ key }) => {
       const value = form[key];
 
-      return (
-        typeof value !== "string" ||
-        value.trim().length === 0
-      );
+      return typeof value !== "string" || value.trim().length === 0;
     });
   }, [form]);
 
-  const isCompletedReview =
-    currentStatus === "completed" && !editingCompleted;
+  const isCompletedReview = currentStatus === "completed" && !editingCompleted;
 
-  const isCompletedEditing =
-    currentStatus === "completed" && editingCompleted;
+  const isCompletedEditing = currentStatus === "completed" && editingCompleted;
 
-  const canEdit =
-    currentStatus !== "completed" || editingCompleted;
+  const canEdit = currentStatus !== "completed" || editingCompleted;
 
   const toggleSection = (section: SectionKey) => {
-    setOpenSection((previous) =>
-      previous === section ? null : section,
-    );
+    setOpenSection((previous) => (previous === section ? null : section));
   };
 
   const goToStudentDashboard = () => {
@@ -289,10 +284,7 @@ export default function SISScreen() {
       .map((item) => item.label)
       .join(", ");
 
-    Alert.alert(
-      "Information still needed",
-      `Please provide: ${missingNames}.`,
-    );
+    Alert.alert("Information still needed", `Please provide: ${missingNames}.`);
 
     setOpenSection("student");
 
@@ -304,10 +296,7 @@ export default function SISScreen() {
       return;
     }
 
-    if (
-      currentStatus === "completed" &&
-      targetStatus === "in_progress"
-    ) {
+    if (currentStatus === "completed" && targetStatus === "in_progress") {
       return;
     }
 
@@ -332,14 +321,12 @@ export default function SISScreen() {
           ? await saveMySIS(payload)
           : await updateMySIS(payload);
 
-      const saved = normalizeSIS(
-        response.sis ?? payload,
-        targetStatus,
-      );
+      const saved = normalizeSIS(response.sis ?? payload, targetStatus);
 
       setForm(saved);
       setLastSavedForm(saved);
       setCurrentStatus(targetStatus);
+      setBasicInfo(response.basicInfo ?? basicInfo);
 
       if (targetStatus === "completed") {
         setEditingCompleted(false);
@@ -378,46 +365,46 @@ export default function SISScreen() {
     }
   };
 
-const skipForNow = () => {
-  if (saving) {
-    return;
-  }
+  const skipForNow = () => {
+    if (saving) {
+      return;
+    }
 
-  if (currentStatus === "completed") {
-    return;
-  }
+    if (currentStatus === "completed") {
+      return;
+    }
 
-  if (currentStatus === "not_started") {
-    router.replace("/student");
-    return;
-  }
-
-  if (currentStatus === "in_progress") {
-    if (!hasUnsavedChanges) {
+    if (currentStatus === "not_started") {
       router.replace("/student");
       return;
     }
 
-    Alert.alert(
-      "Leave without saving?",
-      "Your previously saved SIS information will remain available. Any changes made since your last save will be discarded.",
-      [
-        {
-          text: "Continue Editing",
-          style: "cancel",
-        },
-        {
-          text: "Leave",
-          style: "destructive",
-          onPress: () => {
-            setForm({ ...lastSavedForm });
-            router.replace("/student");
+    if (currentStatus === "in_progress") {
+      if (!hasUnsavedChanges) {
+        router.replace("/student");
+        return;
+      }
+
+      Alert.alert(
+        "Leave without saving?",
+        "Your previously saved SIS information will remain available. Any changes made since your last save will be discarded.",
+        [
+          {
+            text: "Continue Editing",
+            style: "cancel",
           },
-        },
-      ],
-    );
-  }
-};
+          {
+            text: "Leave",
+            style: "destructive",
+            onPress: () => {
+              setForm({ ...lastSavedForm });
+              router.replace("/student");
+            },
+          },
+        ],
+      );
+    }
+  };
 
   const handleBack = () => {
     if (saving) {
@@ -439,11 +426,7 @@ const skipForNow = () => {
     options?: {
       placeholder?: string;
       multiline?: boolean;
-      keyboardType?:
-        | "default"
-        | "email-address"
-        | "phone-pad"
-        | "numeric";
+      keyboardType?: "default" | "email-address" | "phone-pad" | "numeric";
       editable?: boolean;
     },
   ) => {
@@ -477,15 +460,11 @@ const skipForNow = () => {
             styles.input,
             {
               color: colors.text,
-              backgroundColor: editable
-                ? colors.surface
-                : colors.background,
+              backgroundColor: editable ? colors.surface : colors.background,
               borderColor: colors.border,
               borderRadius: radius.md,
               minHeight: options?.multiline ? 110 : 48,
-              textAlignVertical: options?.multiline
-                ? "top"
-                : "center",
+              textAlignVertical: options?.multiline ? "top" : "center",
               opacity: editable ? 1 : 0.75,
             },
           ]}
@@ -494,9 +473,7 @@ const skipForNow = () => {
     );
   };
 
-  const renderSectionHeader = (
-    section: SectionKey,
-  ) => {
+  const renderSectionHeader = (section: SectionKey) => {
     const isOpen = openSection === section;
 
     return (
@@ -561,21 +538,41 @@ const skipForNow = () => {
 
       {renderTextInput(
         "Date of Birth",
-        form.dateOfBirth,
-        (value) => updateField("dateOfBirth", value),
+        basicInfo?.dateOfBirth || form.dateOfBirth,
+        () => {},
         {
-          placeholder: "YYYY-MM-DD",
+          placeholder: "Not set yet",
+          editable: false,
         },
       )}
 
-      {renderTextInput(
-        "Sex",
-        form.sex,
-        (value) => updateField("sex", value),
-        {
-          placeholder: "Enter sex",
-        },
-      )}
+      <TouchableOpacity
+        onPress={() => router.push("/basic-info?edit=1")}
+        accessibilityRole="button"
+        accessibilityLabel="Edit Date of Birth in Basic Information"
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          marginTop: -8,
+          marginBottom: 16,
+        }}
+      >
+        <Ionicons name="create-outline" size={14} color={colors.primary} />
+        <Text
+          style={{
+            fontSize: 12,
+            color: colors.primary,
+            fontWeight: "600",
+            marginLeft: 4,
+          }}
+        >
+          Set in Basic Information — tap to edit
+        </Text>
+      </TouchableOpacity>
+
+      {renderTextInput("Sex", form.sex, (value) => updateField("sex", value), {
+        placeholder: "Enter sex",
+      })}
 
       {renderTextInput(
         "Civil Status",
@@ -643,32 +640,71 @@ const skipForNow = () => {
 
   const renderAcademicSection = () => (
     <View>
+      <Text
+        style={{
+          fontSize: 12,
+          color: colors.textSecondary,
+          marginBottom: 10,
+          lineHeight: 17,
+        }}
+      >
+        Program/Course, Year Level, and Section come from your Basic Information
+        and stay in sync automatically.
+      </Text>
+
       {renderTextInput(
         "Program / Course",
-        form.programCourse,
-        (value) => updateField("programCourse", value),
+        basicInfo?.course || form.programCourse,
+        () => {},
         {
-          placeholder: "Enter program or course",
+          placeholder: "Not set yet",
+          editable: false,
         },
       )}
 
       {renderTextInput(
         "Year Level",
-        form.yearLevel,
-        (value) => updateField("yearLevel", value),
+        basicInfo?.yearLevel || form.yearLevel,
+        () => {},
         {
-          placeholder: "Enter year level",
+          placeholder: "Not set yet",
+          editable: false,
         },
       )}
 
       {renderTextInput(
         "Section / Block",
-        form.sectionBlock,
-        (value) => updateField("sectionBlock", value),
+        basicInfo?.section || form.sectionBlock,
+        () => {},
         {
-          placeholder: "Enter section or block",
+          placeholder: "Not set yet",
+          editable: false,
         },
       )}
+
+      <TouchableOpacity
+        onPress={() => router.push("/basic-info?edit=1")}
+        accessibilityRole="button"
+        accessibilityLabel="Edit in Basic Information"
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          marginTop: -6,
+          marginBottom: 16,
+        }}
+      >
+        <Ionicons name="create-outline" size={16} color={colors.primary} />
+        <Text
+          style={{
+            fontSize: 13,
+            color: colors.primary,
+            fontWeight: "600",
+            marginLeft: 6,
+          }}
+        >
+          Edit in Basic Information
+        </Text>
+      </TouchableOpacity>
 
       {renderTextInput(
         "Academic Year",
@@ -686,8 +722,7 @@ const skipForNow = () => {
       {renderTextInput(
         "Contact Name",
         form.emergencyContactName,
-        (value) =>
-          updateField("emergencyContactName", value),
+        (value) => updateField("emergencyContactName", value),
         {
           placeholder: "Enter emergency contact name",
         },
@@ -696,11 +731,7 @@ const skipForNow = () => {
       {renderTextInput(
         "Relationship",
         form.emergencyContactRelationship,
-        (value) =>
-          updateField(
-            "emergencyContactRelationship",
-            value,
-          ),
+        (value) => updateField("emergencyContactRelationship", value),
         {
           placeholder: "Example: Parent, sibling, guardian",
         },
@@ -709,8 +740,7 @@ const skipForNow = () => {
       {renderTextInput(
         "Mobile Number",
         form.emergencyContactNumber,
-        (value) =>
-          updateField("emergencyContactNumber", value),
+        (value) => updateField("emergencyContactNumber", value),
         {
           placeholder: "Enter mobile number",
           keyboardType: "phone-pad",
@@ -720,8 +750,7 @@ const skipForNow = () => {
       {renderTextInput(
         "Address",
         form.emergencyContactAddress,
-        (value) =>
-          updateField("emergencyContactAddress", value),
+        (value) => updateField("emergencyContactAddress", value),
         {
           placeholder: "Enter address",
           multiline: true,
@@ -735,8 +764,7 @@ const skipForNow = () => {
       {renderTextInput(
         "Parent / Guardian Name",
         form.parentGuardianName,
-        (value) =>
-          updateField("parentGuardianName", value),
+        (value) => updateField("parentGuardianName", value),
         {
           placeholder: "Enter parent or guardian name",
         },
@@ -745,11 +773,7 @@ const skipForNow = () => {
       {renderTextInput(
         "Relationship",
         form.parentGuardianRelationship,
-        (value) =>
-          updateField(
-            "parentGuardianRelationship",
-            value,
-          ),
+        (value) => updateField("parentGuardianRelationship", value),
         {
           placeholder: "Example: Parent, guardian",
         },
@@ -758,8 +782,7 @@ const skipForNow = () => {
       {renderTextInput(
         "Contact Number",
         form.parentGuardianContact,
-        (value) =>
-          updateField("parentGuardianContact", value),
+        (value) => updateField("parentGuardianContact", value),
         {
           placeholder: "Enter contact number",
           keyboardType: "phone-pad",
@@ -769,11 +792,7 @@ const skipForNow = () => {
       {renderTextInput(
         "Occupation",
         form.parentGuardianOccupation,
-        (value) =>
-          updateField(
-            "parentGuardianOccupation",
-            value,
-          ),
+        (value) => updateField("parentGuardianOccupation", value),
         {
           placeholder: "Enter occupation",
         },
@@ -786,25 +805,16 @@ const skipForNow = () => {
       {renderTextInput(
         "Preferred Communication Method",
         form.preferredCommunicationMethod,
-        (value) =>
-          updateField(
-            "preferredCommunicationMethod",
-            value,
-          ),
+        (value) => updateField("preferredCommunicationMethod", value),
         {
-          placeholder:
-            "Example: Email, SMS, in-person",
+          placeholder: "Example: Email, SMS, in-person",
         },
       )}
 
       {renderTextInput(
         "Learning / Communication Preferences",
         form.learningCommunicationPreferences,
-        (value) =>
-          updateField(
-            "learningCommunicationPreferences",
-            value,
-          ),
+        (value) => updateField("learningCommunicationPreferences", value),
         {
           placeholder:
             "Share preferences that help us support your learning experience",
@@ -815,14 +825,9 @@ const skipForNow = () => {
       {renderTextInput(
         "Additional Support Notes",
         form.additionalSupportNotes,
-        (value) =>
-          updateField(
-            "additionalSupportNotes",
-            value,
-          ),
+        (value) => updateField("additionalSupportNotes", value),
         {
-          placeholder:
-            "Add anything else you would like the school to know",
+          placeholder: "Add anything else you would like the school to know",
           multiline: true,
         },
       )}
@@ -860,8 +865,7 @@ const skipForNow = () => {
 
   const renderStatusBadge = () => {
     let label = "Not started";
-    let icon: keyof typeof Ionicons.glyphMap =
-      "ellipse-outline";
+    let icon: keyof typeof Ionicons.glyphMap = "ellipse-outline";
 
     if (currentStatus === "in_progress") {
       label = "In progress";
@@ -883,9 +887,7 @@ const skipForNow = () => {
                 ? colors.success
                 : colors.background,
             borderColor:
-              currentStatus === "completed"
-                ? colors.success
-                : colors.border,
+              currentStatus === "completed" ? colors.success : colors.border,
           },
         ]}
       >
@@ -928,10 +930,7 @@ const skipForNow = () => {
             },
           ]}
         >
-          <ActivityIndicator
-            size="large"
-            color={colors.primary}
-          />
+          <ActivityIndicator size="large" color={colors.primary} />
 
           <Text
             style={[
@@ -954,9 +953,7 @@ const skipForNow = () => {
       <ScreenContainer>
         <KeyboardAvoidingView
           style={styles.flex}
-          behavior={
-            Platform.OS === "ios" ? "padding" : undefined
-          }
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
           <ScrollView
             contentContainerStyle={[
@@ -979,11 +976,7 @@ const skipForNow = () => {
                 },
               ]}
             >
-              <Ionicons
-                name="arrow-back"
-                size={22}
-                color={colors.text}
-              />
+              <Ionicons name="arrow-back" size={22} color={colors.text} />
 
               <Text
                 style={[
@@ -1033,9 +1026,8 @@ const skipForNow = () => {
                 },
               ]}
             >
-              Complete your student information so your
-              school can keep your records organized and
-              provide a smoother support experience.
+              Complete your student information so your school can keep your
+              records organized and provide a smoother support experience.
             </Text>
 
             <View
@@ -1093,11 +1085,7 @@ const skipForNow = () => {
                 Start SIS
               </Text>
 
-              <Ionicons
-                name="arrow-forward"
-                size={20}
-                color={colors.surface}
-              />
+              <Ionicons name="arrow-forward" size={20} color={colors.surface} />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1133,9 +1121,7 @@ const skipForNow = () => {
     <ScreenContainer>
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={
-          Platform.OS === "ios" ? "padding" : undefined
-        }
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
           contentContainerStyle={[
@@ -1162,11 +1148,7 @@ const skipForNow = () => {
                 },
               ]}
             >
-              <Ionicons
-                name="arrow-back"
-                size={22}
-                color={colors.text}
-              />
+              <Ionicons name="arrow-back" size={22} color={colors.text} />
             </TouchableOpacity>
 
             <View style={styles.headerTextContainer}>
@@ -1210,11 +1192,7 @@ const skipForNow = () => {
                   },
                 ]}
               >
-                <Ionicons
-                  name="ellipse"
-                  size={8}
-                  color={colors.surface}
-                />
+                <Ionicons name="ellipse" size={8} color={colors.surface} />
 
                 <Text
                   style={[
@@ -1267,8 +1245,8 @@ const skipForNow = () => {
                     },
                   ]}
                 >
-                  Your information has been saved. You can
-                  review it or edit it when needed.
+                  Your information has been saved. You can review it or edit it
+                  when needed.
                 </Text>
               </View>
             </View>
@@ -1282,9 +1260,7 @@ const skipForNow = () => {
               },
             ]}
           >
-            {(Object.keys(
-              SECTION_LABELS,
-            ) as SectionKey[]).map((section) => (
+            {(Object.keys(SECTION_LABELS) as SectionKey[]).map((section) => (
               <View key={section}>
                 {renderSectionHeader(section)}
 
@@ -1356,10 +1332,7 @@ const skipForNow = () => {
                 ]}
               >
                 {saving ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={colors.surface}
-                  />
+                  <ActivityIndicator size="small" color={colors.surface} />
                 ) : (
                   <Ionicons
                     name="checkmark-circle-outline"
@@ -1376,9 +1349,7 @@ const skipForNow = () => {
                     },
                   ]}
                 >
-                  {saving
-                    ? "Saving..."
-                    : "Save Changes"}
+                  {saving ? "Saving..." : "Save Changes"}
                 </Text>
               </TouchableOpacity>
 
@@ -1411,109 +1382,103 @@ const skipForNow = () => {
             </View>
           )}
 
-          {!isCompletedReview &&
-            currentStatus !== "completed" && (
-              <View style={styles.actionContainer}>
-                <TouchableOpacity
-                  onPress={() => save("completed")}
-                  disabled={saving}
-                  accessibilityRole="button"
-                  accessibilityLabel="Complete Student Information Sheet"
-                  style={[
-                    styles.primaryButton,
-                    {
-                      backgroundColor: colors.primary,
-                      borderRadius: radius.md,
-                      opacity: saving ? 0.6 : 1,
-                    },
-                  ]}
-                >
-                  {saving ? (
-                    <ActivityIndicator
-                      size="small"
-                      color={colors.surface}
-                    />
-                  ) : (
-                    <Ionicons
-                      name="checkmark-circle-outline"
-                      size={20}
-                      color={colors.surface}
-                    />
-                  )}
-
-                  <Text
-                    style={[
-                      typography.button,
-                      {
-                        color: colors.surface,
-                      },
-                    ]}
-                  >
-                    {saving
-                      ? "Saving..."
-                      : "Complete SIS"}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={() => save("in_progress")}
-                  disabled={saving}
-                  accessibilityRole="button"
-                  accessibilityLabel="Save SIS progress"
-                  style={[
-                    styles.secondaryButton,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.primary,
-                      borderRadius: radius.md,
-                      opacity: saving ? 0.5 : 1,
-                    },
-                  ]}
-                >
+          {!isCompletedReview && currentStatus !== "completed" && (
+            <View style={styles.actionContainer}>
+              <TouchableOpacity
+                onPress={() => save("completed")}
+                disabled={saving}
+                accessibilityRole="button"
+                accessibilityLabel="Complete Student Information Sheet"
+                style={[
+                  styles.primaryButton,
+                  {
+                    backgroundColor: colors.primary,
+                    borderRadius: radius.md,
+                    opacity: saving ? 0.6 : 1,
+                  },
+                ]}
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color={colors.surface} />
+                ) : (
                   <Ionicons
-                    name="save-outline"
+                    name="checkmark-circle-outline"
                     size={20}
-                    color={colors.primary}
+                    color={colors.surface}
                   />
+                )}
 
-                  <Text
-                    style={[
-                      typography.button,
-                      {
-                        color: colors.primary,
-                      },
-                    ]}
-                  >
-                    Save Progress
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={skipForNow}
-                  disabled={saving}
-                  accessibilityRole="button"
-                  accessibilityLabel="Skip Student Information Sheet for now"
+                <Text
                   style={[
-                    styles.skipButton,
+                    typography.button,
                     {
-                      opacity: saving ? 0.5 : 1,
+                      color: colors.surface,
                     },
                   ]}
                 >
-                  <Text
-                    style={[
-                      typography.body,
-                      styles.skipText,
-                      {
-                        color: colors.textSecondary,
-                      },
-                    ]}
-                  >
-                    Skip for now
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
+                  {saving ? "Saving..." : "Complete SIS"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => save("in_progress")}
+                disabled={saving}
+                accessibilityRole="button"
+                accessibilityLabel="Save SIS progress"
+                style={[
+                  styles.secondaryButton,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.primary,
+                    borderRadius: radius.md,
+                    opacity: saving ? 0.5 : 1,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="save-outline"
+                  size={20}
+                  color={colors.primary}
+                />
+
+                <Text
+                  style={[
+                    typography.button,
+                    {
+                      color: colors.primary,
+                    },
+                  ]}
+                >
+                  Save Progress
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={skipForNow}
+                disabled={saving}
+                accessibilityRole="button"
+                accessibilityLabel="Skip Student Information Sheet for now"
+                style={[
+                  styles.skipButton,
+                  {
+                    opacity: saving ? 0.5 : 1,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    typography.body,
+                    styles.skipText,
+                    {
+                      color: colors.textSecondary,
+                    },
+                  ]}
+                >
+                  Skip for now
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           <View style={styles.bottomSpace} />
         </ScrollView>
@@ -1535,11 +1500,7 @@ function InfoRow({
 }) {
   return (
     <View style={styles.infoRow}>
-      <Ionicons
-        name={icon}
-        size={21}
-        color={colors.primary}
-      />
+      <Ionicons name={icon} size={21} color={colors.primary} />
 
       <Text
         style={[

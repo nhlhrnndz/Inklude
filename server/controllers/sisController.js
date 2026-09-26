@@ -1,3 +1,4 @@
+//sisController.js
 const {
   getSISByUserId,
   createSIS,
@@ -7,6 +8,8 @@ const {
   markSISRemindersRead,
   hasUnreadSISReminder,
 } = require("../models/sisModel");
+
+const { getBasicInfoByUserId } = require("../models/basicInfoModel");
 
 const { notifyUser } = require("../services/notificationService");
 
@@ -55,6 +58,40 @@ function mapSIS(row) {
   };
 }
 
+function mapBasicInfo(row) {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    userId: row.user_id,
+    yearLevel: row.year_level,
+    age: row.age,
+    dateOfBirth: row.date_of_birth,
+    course: row.course,
+    section: row.section,
+    updatedAt: row.updated_at,
+  };
+}
+
+// Basic Information is the single source of truth for Year Level, Course,
+// Section, and Date of Birth. Whenever it exists, it overrides whatever is
+// stored on the SIS record so the two forms can never drift apart.
+function applyBasicInfoOverride(sis, basicInfo) {
+  if (!sis || !basicInfo) {
+    return sis;
+  }
+
+  return {
+    ...sis,
+    dateOfBirth: basicInfo.dateOfBirth ?? sis.dateOfBirth,
+    programCourse: basicInfo.course ?? sis.programCourse,
+    yearLevel: basicInfo.yearLevel ?? sis.yearLevel,
+    sectionBlock: basicInfo.section ?? sis.sectionBlock,
+  };
+}
+
 function validateSISData(data) {
   if (!data || typeof data !== "object") {
     return "SIS data is required.";
@@ -87,18 +124,27 @@ async function getMySIS(req, res) {
   try {
     const userId = req.user.id;
 
-    const sis = await getSISByUserId(userId);
+    const [sisRow, basicInfoRow] = await Promise.all([
+      getSISByUserId(userId),
+      getBasicInfoByUserId(userId),
+    ]);
 
-    if (!sis) {
+    const basicInfo = mapBasicInfo(basicInfoRow);
+
+    if (!sisRow) {
       return res.json({
         sis: null,
         status: "not_started",
+        basicInfo,
       });
     }
 
+    const mergedSIS = applyBasicInfoOverride(mapSIS(sisRow), basicInfo);
+
     res.json({
-      sis: mapSIS(sis),
-      status: sis.status,
+      sis: mergedSIS,
+      status: sisRow.status,
+      basicInfo,
     });
   } catch (err) {
     console.error("getMySIS error:", err);
@@ -120,11 +166,22 @@ async function saveMySIS(req, res) {
     }
 
     const existing = await getSISByUserId(userId);
+    const basicInfoRow = await getBasicInfoByUserId(userId);
+    const basicInfo = mapBasicInfo(basicInfoRow);
 
     const data = {
       ...req.body,
       status: req.body.status || "in_progress",
     };
+
+    // Basic Information always wins for these fields so the two forms
+    // never disagree, regardless of what the client sent.
+    if (basicInfo) {
+      data.dateOfBirth = basicInfo.dateOfBirth ?? data.dateOfBirth;
+      data.programCourse = basicInfo.course ?? data.programCourse;
+      data.yearLevel = basicInfo.yearLevel ?? data.yearLevel;
+      data.sectionBlock = basicInfo.section ?? data.sectionBlock;
+    }
 
     let sis;
 
@@ -156,8 +213,9 @@ async function saveMySIS(req, res) {
         data.status === "completed"
           ? "SIS completed successfully."
           : "SIS saved successfully.",
-      sis: mapSIS(sis),
+      sis: applyBasicInfoOverride(mapSIS(sis), basicInfo),
       status: sis.status,
+      basicInfo,
     });
   } catch (err) {
     console.error("saveMySIS error:", err);
@@ -206,18 +264,25 @@ async function getGuidanceStudentSIS(req, res) {
       });
     }
 
-    const sis = await getStudentSISByUserId(studentId);
+    const [sisRow, basicInfoRow] = await Promise.all([
+      getStudentSISByUserId(studentId),
+      getBasicInfoByUserId(studentId),
+    ]);
 
-    if (!sis) {
+    const basicInfo = mapBasicInfo(basicInfoRow);
+
+    if (!sisRow) {
       return res.json({
         sis: null,
         status: "not_started",
+        basicInfo,
       });
     }
 
     res.json({
-      sis: mapSIS(sis),
-      status: sis.status,
+      sis: applyBasicInfoOverride(mapSIS(sisRow), basicInfo),
+      status: sisRow.status,
+      basicInfo,
     });
   } catch (err) {
     console.error("getGuidanceStudentSIS error:", err);
