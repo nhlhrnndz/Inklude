@@ -145,10 +145,12 @@ async function isParticipant(sessionId, userId) {
   return rows.length > 0;
 }
 
-// Get session participants (active ones only)
+// Get session participants (active ones only). Includes display_username
+// so the roster resolver can decide, per viewer role, whether to show
+// the real name or the student's chosen peer-facing username.
 async function getParticipants(sessionId) {
   const [rows] = await pool.query(
-    `SELECT u.id, u.name, u.email, p.joined_at
+    `SELECT u.id, u.name, u.email, u.display_username, p.joined_at
      FROM participants p
      JOIN users u ON p.user_id = u.id
      WHERE p.session_id = ? AND p.left_at IS NULL
@@ -169,6 +171,91 @@ async function leaveSession(sessionId, userId) {
   return result.affectedRows > 0;
 }
 
+// --- Phase 2.3 Week 1: Session Roster helpers ---
+//
+// Privacy rule (updated for 1.3): students see each other by chosen
+// username (falling back to "First L." if none set) — never full name
+// or email. Teachers and guidance always see the real full name,
+// regardless of what username a student has set, for accountability.
+
+const AVATAR_COLORS = [
+  "#F94144",
+  "#F3722C",
+  "#F8961E",
+  "#F9C74F",
+  "#90BE6D",
+  "#43AA8B",
+  "#577590",
+  "#277DA1",
+  "#9D4EDD",
+  "#FF5D8F",
+];
+
+function toDisplayName(fullName) {
+  const parts = (fullName || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "Student";
+  if (parts.length === 1) return parts[0];
+  const first = parts[0];
+  const lastInitial = parts[parts.length - 1].charAt(0).toUpperCase();
+  return `${first} ${lastInitial}.`;
+}
+
+function toInitials(name) {
+  const parts = (name || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+}
+
+// Deterministic color from user id — same student always gets the same
+// avatar color across sessions, without storing anything extra in the DB.
+function avatarColorForId(userId) {
+  const index = Number(userId) % AVATAR_COLORS.length;
+  return AVATAR_COLORS[index >= 0 ? index : 0];
+}
+
+const IDENTITY_VISIBLE_ROLES = new Set(["teacher", "guidance", "admin"]);
+
+// Decides what a given viewer role is allowed to see for one participant.
+function resolveDisplayInfo(participant, requestingRole) {
+  if (IDENTITY_VISIBLE_ROLES.has(requestingRole)) {
+    // Teacher/guidance: always real name, never the username.
+    return {
+      displayName: participant.name,
+      initials: toInitials(participant.name),
+    };
+  }
+
+  const username = (participant.display_username || "").trim();
+  if (username) {
+    return {
+      displayName: username,
+      initials: toInitials(username),
+    };
+  }
+
+  // No username set — fall back to the original privacy-safe default.
+  return {
+    displayName: toDisplayName(participant.name),
+    initials: toInitials(participant.name),
+  };
+}
+
+// Role-aware roster for the session screen.
+async function getRosterForSession(sessionId, requestingRole) {
+  const rows = await getParticipants(sessionId);
+  return rows.map((p) => {
+    const { displayName, initials } = resolveDisplayInfo(p, requestingRole);
+    return {
+      id: p.id,
+      displayName,
+      initials,
+      avatarColor: avatarColorForId(p.id),
+      isHere: false, // presence is a live/ephemeral flag, not stored
+    };
+  });
+}
+
 module.exports = {
   createSession,
   getSessionById,
@@ -180,4 +267,5 @@ module.exports = {
   isParticipant,
   getParticipants,
   leaveSession,
+  getRosterForSession,
 };

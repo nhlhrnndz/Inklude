@@ -5,6 +5,7 @@ const {
   createSessionController,
   getMySessions,
   getSessionByIdController,
+  getSessionRoster,
   joinSessionByCode,
   endSessionController,
   leaveSessionController,
@@ -14,6 +15,7 @@ const {
 router.post("/", verifyToken, createSessionController);
 router.get("/", verifyToken, getMySessions);
 router.get("/:id", verifyToken, getSessionByIdController);
+router.get("/:id/participants", verifyToken, getSessionRoster);
 router.delete("/:id", verifyToken, endSessionController);
 
 // Student routes

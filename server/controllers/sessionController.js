@@ -10,6 +10,7 @@ const {
   isParticipant,
   getParticipants,
   leaveSession,
+  getRosterForSession,
 } = require("../models/sessionModel");
 const { getIO } = require("../utils/ioRegistry");
 
@@ -136,6 +137,49 @@ async function getSessionByIdController(req, res) {
   }
 }
 
+// GET /api/sessions/:id/participants - Privacy-safe roster for the
+// session screen (id, displayName, initials, avatarColor only).
+// Same access rules as getSessionByIdController: teacher who owns the
+// session, or a student who has joined it.
+// GET /api/sessions/:id/participants - Role-aware roster for the
+// session screen (students see usernames/initials only; teachers and
+// guidance always see real names).
+async function getSessionRoster(req, res) {
+  try {
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    const sessionId = req.params.id;
+
+    const session = await getSessionById(sessionId);
+
+    if (!session) {
+      return res.status(404).json({ message: "Session not found." });
+    }
+
+    if (userRole === "teacher") {
+      if (session.teacher_id !== userId) {
+        return res.status(403).json({ message: "Access denied." });
+      }
+    } else if (userRole === "student") {
+      const isUserParticipant = await isParticipant(sessionId, userId);
+      if (!isUserParticipant) {
+        return res
+          .status(403)
+          .json({ message: "You are not a participant in this session." });
+      }
+    } else if (userRole !== "guidance" && userRole !== "admin") {
+      return res.status(403).json({ message: "Access denied." });
+    }
+
+    const roster = await getRosterForSession(sessionId, userRole);
+
+    res.json({ participants: roster });
+  } catch (err) {
+    console.error("getSessionRoster error:", err);
+    res.status(500).json({ message: "Server error while fetching roster." });
+  }
+}
+
 // GET /api/sessions/join/:code - Join a session by code (Student only)
 async function joinSessionByCode(req, res) {
   try {
@@ -255,6 +299,7 @@ module.exports = {
   createSessionController,
   getMySessions,
   getSessionByIdController,
+  getSessionRoster,
   joinSessionByCode,
   endSessionController,
   leaveSessionController,

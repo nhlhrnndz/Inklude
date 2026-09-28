@@ -1,9 +1,11 @@
+//IncluEd\server\index.js
 require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
 const http = require("http");
 const { Server } = require("socket.io");
+const messageRoutes = require("./routes/message");
 
 const db = require("./config/db");
 const authRoutes = require("./routes/auth");
@@ -21,11 +23,22 @@ const { setIO: setIOForSockets } = require("./utils/ioRegistry"); // ⬅️ View
 const sisRoutes = require("./routes/sis");
 const basicInfoRoutes = require("./routes/basicInfo");
 
+// Phase 2.3 Week 0 models — required here so startup fails fast if any
+// of them have a syntax error, even before their routes/controllers exist.
+require("./models/PeerShare");
+require("./models/Checkin");
+require("./models/ClassPulse");
+require("./models/Document");
+require("./models/ScheduleItem");
+require("./models/SensorySettings");
+require("./models/MotorSettings");
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+app.use("/api/messages", messageRoutes);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/profile", profileRoutes);

@@ -1,26 +1,27 @@
+//app\session\[id]\index.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "../../../context/AuthContext";
 import { useTheme } from "../../../context/ThemeContext";
 import {
-    endSession,
-    getSessionAnnouncements,
-    getSessionDetails,
-    postAnnouncement,
+  endSession,
+  getSessionAnnouncements,
+  getSessionDetails,
+  postAnnouncement,
 } from "../../../utils/api";
 import { crossAlert } from "../../../utils/crossAlert";
 

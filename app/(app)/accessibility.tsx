@@ -10,13 +10,15 @@ import {
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
-import { getMyProfile, saveMyProfile } from "../../utils/api";
+import { getMyProfile, saveMyProfile, updateMyUsername } from "../../utils/api";
 
 const DISABILITY_OPTIONS = [
   "Deaf",
@@ -25,6 +27,8 @@ const DISABILITY_OPTIONS = [
   "Autism",
   "ADHD",
   "Dyslexia",
+  "Blind / Low Vision",
+  "Physical / Motor",
 ];
 
 const PREFERENCE_OPTIONS: { key: string; label: string }[] = [
@@ -41,6 +45,7 @@ export default function AccessibilityPreferencesScreen() {
   const router = useRouter();
   const { colors, typography, spacing, radius } = useTheme();
   const { onboarding } = useLocalSearchParams<{ onboarding?: string }>();
+  const { updateProfileData } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -52,6 +57,13 @@ export default function AccessibilityPreferencesScreen() {
     dyslexiaFont: false,
     simplifiedUI: false,
   });
+
+  // Phase 2.3 Week 1.3 — peer-facing display username. Separate from
+  // disabilityTypes/preferences: saved via its own endpoint since it's
+  // an account identity choice, not an accessibility setting.
+  const [username, setUsername] = useState("");
+  const [originalUsername, setOriginalUsername] = useState("");
+  const [usernameError, setUsernameError] = useState("");
 
   useEffect(() => {
     loadExistingProfile();
@@ -67,6 +79,10 @@ export default function AccessibilityPreferencesScreen() {
         ...prev,
         ...data.accessibilityPreferences,
       }));
+
+      const existingUsername = data.displayUsername || "";
+      setUsername(existingUsername);
+      setOriginalUsername(existingUsername);
     } catch (err: any) {
       if (err?.response?.status !== 404) {
         console.error("Error loading profile:", err);
@@ -79,9 +95,12 @@ export default function AccessibilityPreferencesScreen() {
   };
 
   const toggleDisabilityType = (type: string) => {
-    setSelectedTypes((prev) =>
-      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type],
-    );
+    setSelectedTypes((prev) => {
+      const safePrev = Array.isArray(prev) ? prev : [];
+      return safePrev.includes(type)
+        ? safePrev.filter((t) => t !== type)
+        : [...safePrev, type];
+    });
   };
 
   const togglePreference = (key: string) => {
@@ -96,6 +115,7 @@ export default function AccessibilityPreferencesScreen() {
   };
 
   const handleSave = async () => {
+    console.log("DEBUG selectedTypes at save time:", selectedTypes); // ← add this
     if (selectedTypes.length === 0) {
       Alert.alert(
         "Missing info",
@@ -104,10 +124,37 @@ export default function AccessibilityPreferencesScreen() {
       return;
     }
 
+    const trimmedUsername = username.trim();
+    if (trimmedUsername.length > 0 && trimmedUsername.length < 3) {
+      setUsernameError(
+        "Username must be at least 3 characters, or left blank.",
+      );
+      return;
+    }
+
+    setUsernameError("");
     setSaving(true);
 
     try {
       await saveMyProfile(selectedTypes, preferences);
+
+      // Only hit the username endpoint if it actually changed — avoids
+      // an unnecessary request (and a possible validation error) on
+      // every save when the student didn't touch this field.
+      if (trimmedUsername !== originalUsername) {
+        await updateMyUsername(
+          trimmedUsername.length > 0 ? trimmedUsername : null,
+        );
+        setOriginalUsername(trimmedUsername);
+      }
+
+      // Update the in-memory/cached profile immediately so useFeatures()
+      // reflects the new preferences right away — no re-login needed,
+      // and no extra network round-trip to re-fetch what we already have.
+      await updateProfileData({
+        disabilityTypes: selectedTypes,
+        accessibilityPreferences: preferences,
+      });
 
       setSaving(false);
       setSaveSuccess(true);
@@ -122,14 +169,17 @@ export default function AccessibilityPreferencesScreen() {
           router.replace("/student");
         }
       }, SUCCESS_DISPLAY_MS);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error saving preferences:", err);
+      console.error("SERVER SAID:", JSON.stringify(err?.response?.data));
+      console.error("FAILED URL:", err?.config?.url);
 
       setSaving(false);
 
+      const serverMessage = err?.response?.data?.message;
       Alert.alert(
         "Error",
-        "Could not save your preferences. Please try again.",
+        serverMessage || "Could not save your preferences. Please try again.",
       );
     }
   };
@@ -386,6 +436,71 @@ export default function AccessibilityPreferencesScreen() {
           </View>
         ))}
 
+        {/* Display Username — Phase 2.3 Week 1.3 */}
+        <Text
+          style={{
+            fontFamily: typography.title.fontFamily,
+            fontSize: 16,
+            fontWeight: "600",
+            color: colors.text,
+            marginTop: spacing.lg,
+            marginBottom: spacing.sm,
+          }}
+          accessibilityRole="header"
+        >
+          Display Name for Classmates
+        </Text>
+
+        <Text
+          style={{
+            fontFamily: typography.body.fontFamily,
+            fontSize: typography.caption.fontSize,
+            color: colors.textSecondary,
+            marginBottom: spacing.sm,
+          }}
+        >
+          Choose how classmates see you in the session roster. Your teacher and
+          the guidance office will always see your real name.
+        </Text>
+
+        <TextInput
+          style={[
+            styles.usernameInput,
+            {
+              backgroundColor: colors.surface,
+              borderColor: usernameError ? colors.danger : colors.border,
+              borderRadius: radius.md,
+              padding: 12,
+              fontFamily: typography.body.fontFamily,
+              fontSize: typography.body.fontSize,
+              color: colors.text,
+            },
+          ]}
+          value={username}
+          onChangeText={(text) => {
+            setUsername(text);
+            if (usernameError) setUsernameError("");
+          }}
+          placeholder="e.g. StarGazer22 (leave blank to use your first name)"
+          placeholderTextColor={colors.placeholder}
+          maxLength={30}
+          autoCapitalize="none"
+          autoCorrect={false}
+          accessibilityLabel="Display name shown to classmates"
+        />
+
+        {usernameError ? (
+          <Text
+            style={{
+              color: colors.danger,
+              fontSize: typography.caption.fontSize,
+              marginTop: 4,
+            }}
+          >
+            {usernameError}
+          </Text>
+        ) : null}
+
         {/* Save */}
         <TouchableOpacity
           style={[
@@ -452,6 +567,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     borderBottomWidth: 1,
+  },
+  usernameInput: {
+    borderWidth: 1,
   },
   saveButton: {
     alignItems: "center",

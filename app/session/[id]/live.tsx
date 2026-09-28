@@ -1,17 +1,19 @@
+//live.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import SessionRoster from "../../../components/SessionRoster";
 import { useAuth } from "../../../context/AuthContext";
 import { useTheme } from "../../../context/ThemeContext";
 import { useCaptionSession } from "../../../hooks/useCaptionSession";
@@ -106,8 +108,6 @@ export default function LiveCaptioningScreen() {
     );
   }
 
-  const joinedCount = session?.participants.length ?? 0;
-
   return (
     <SafeAreaView
       style={[styles.safeArea, { backgroundColor: colors.background }]}
@@ -139,24 +139,6 @@ export default function LiveCaptioningScreen() {
         </TouchableOpacity>
 
         <View style={styles.topBarRight}>
-          <View style={styles.metaChip}>
-            <Ionicons
-              name="people-outline"
-              size={14}
-              color={colors.textSecondary}
-            />
-            <Text
-              style={{
-                fontFamily: typography.caption.fontFamily,
-                fontSize: typography.caption.fontSize,
-                color: colors.textSecondary,
-                marginLeft: 4,
-              }}
-            >
-              {joinedCount} joined
-            </Text>
-          </View>
-
           <View style={styles.metaChip}>
             <View
               style={[
@@ -192,6 +174,14 @@ export default function LiveCaptioningScreen() {
       >
         {session?.title ?? "Live Captions"}
       </Text>
+
+      {/* Session Roster — replaces the old "X joined" count with actual
+          faces (initials) in the room, per Phase 2.3 Week 1. */}
+      {!sessionEnded && (
+        <View style={{ marginTop: spacing.sm }}>
+          <SessionRoster sessionId={id} currentUserId={user?.id} />
+        </View>
+      )}
 
       {sessionEnded ? (
         <View style={[styles.centered, { flex: 1 }]}>
@@ -232,7 +222,7 @@ export default function LiveCaptioningScreen() {
         <>
           {isTeacher && (
             <View
-              style={{ paddingHorizontal: spacing.lg, marginTop: spacing.md }}
+              style={{ paddingHorizontal: spacing.lg, marginTop: spacing.sm }}
             >
               <TouchableOpacity
                 style={[

@@ -2,6 +2,12 @@ const jwt = require("jsonwebtoken");
 const { saveTranscript } = require("../models/transcriptModel");
 const { getSessionById } = require("../models/sessionModel");
 
+// Phase 2.3 Week 1: rate-limit "I'm here" taps per (session, user) so one
+// student can't spam presence pings. Keyed in-memory — resets on server
+// restart, which is fine for a lightweight, non-critical signal like this.
+const PRESENCE_RATE_LIMIT_MS = 30000;
+const lastPresenceTapAt = new Map(); // `${sessionId}:${userId}` -> timestamp
+
 function initCaptionSocket(io) {
   io.on("connection", (socket) => {
     console.log(`🔌 Socket connected: ${socket.id}`);
@@ -69,6 +75,35 @@ function initCaptionSocket(io) {
           message: "Server error while joining.",
         });
       }
+    });
+
+    // Phase 2.3 Week 1: "I'm here" presence tap. Lightweight, no chat,
+    // no persistence — just a momentary broadcast to the room so
+    // classmates see a pulse near that student's avatar.
+    socket.on("presence-here", ({ sessionId, userId, initials }) => {
+      if (!sessionId || !userId) return;
+
+      // Viewboard is listen-only and has no avatar in the roster.
+      if (socket.data.role === "viewboard") return;
+
+      const key = `${sessionId}:${userId}`;
+      const now = Date.now();
+      const lastTap = lastPresenceTapAt.get(key) || 0;
+
+      if (now - lastTap < PRESENCE_RATE_LIMIT_MS) {
+        // Silently ignore spam taps rather than erroring — the button
+        // on the client is disabled during cooldown anyway.
+        return;
+      }
+      lastPresenceTapAt.set(key, now);
+
+      const room = `session-${sessionId}`;
+      io.to(room).emit("presence-update", {
+        userId,
+        initials: initials || "?",
+        timestamp: now,
+      });
+      console.log(`👋 Presence ping: user ${userId} in ${room}`);
     });
 
     // Client leaves a session room

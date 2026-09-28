@@ -14,10 +14,15 @@ IncluEd
 │  │  ├─ edit-profile.tsx
 │  │  ├─ explore.tsx
 │  │  ├─ guidance
-│  │  │  └─ student
-│  │  │     └─ [id].tsx
+│  │  │  ├─ message
+│  │  │  │  └─ [id].tsx
+│  │  │  ├─ messages.tsx
+│  │  │  ├─ student
+│  │  │  │  └─ [id].tsx
+│  │  │  └─ students.tsx
 │  │  ├─ guidance-dashboard.tsx
 │  │  ├─ join.tsx
+│  │  ├─ messages.tsx
 │  │  ├─ my-sessions.tsx
 │  │  ├─ notifications.tsx
 │  │  ├─ profile.tsx
@@ -81,6 +86,7 @@ IncluEd
 │  ├─ notifications
 │  │  └─ NotificationBell.tsx
 │  ├─ parallax-scroll-view.tsx
+│  ├─ SessionRoster.tsx
 │  ├─ themed-text.tsx
 │  ├─ themed-view.tsx
 │  └─ ui
@@ -89,6 +95,8 @@ IncluEd
 │     └─ icon-symbol.tsx
 ├─ constants
 │  ├─ config.ts
+│  ├─ courses.ts
+│  ├─ featureMap.ts
 │  └─ theme.ts
 ├─ context
 │  ├─ AuthContext.tsx
@@ -102,6 +110,7 @@ IncluEd
 │  ├─ useAuth.ts
 │  ├─ useCaptionSession.ts
 │  ├─ useDashboardHome.ts
+│  ├─ useFeatures.ts
 │  ├─ useMicCaptioning.ts
 │  ├─ useQuickTalkListener.ts
 │  └─ useQuickTalkSpeech.ts
@@ -119,6 +128,7 @@ IncluEd
 │  │  ├─ authController.js
 │  │  ├─ basicInfoController.js
 │  │  ├─ guidanceController.js
+│  │  ├─ messageController.js
 │  │  ├─ notificationController.js
 │  │  ├─ profileController.js
 │  │  ├─ sessionController.js
@@ -131,9 +141,17 @@ IncluEd
 │  ├─ models
 │  │  ├─ announcementModel.js
 │  │  ├─ basicInfoModel.js
+│  │  ├─ Checkin.js
+│  │  ├─ ClassPulse.js
+│  │  ├─ Document.js
 │  │  ├─ guidanceModel.js
+│  │  ├─ messageModel.js
+│  │  ├─ MotorSettings.js
 │  │  ├─ notificationModel.js
+│  │  ├─ PeerShare.js
 │  │  ├─ profileModel.js
+│  │  ├─ ScheduleItem.js
+│  │  ├─ SensorySettings.js
 │  │  ├─ sessionModel.js
 │  │  ├─ sisModel.js
 │  │  └─ transcriptModel.js
@@ -144,6 +162,7 @@ IncluEd
 │  │  ├─ auth.js
 │  │  ├─ basicInfo.js
 │  │  ├─ guidance.js
+│  │  ├─ message.js
 │  │  ├─ notification.js
 │  │  ├─ profile.js
 │  │  ├─ session.js
