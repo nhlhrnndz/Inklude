@@ -21,7 +21,7 @@ const ROUTES_BY_ROLE: Record<UserRole, RouteMap> = {
     mySessions: "/my-sessions",
     joinSession: "/join",
     notifications: "/notifications",
-    guidance: null,
+    guidance: "/messages",
     profile: "/profile",
     settings: null,
     accessibility: "/accessibility",
@@ -41,7 +41,8 @@ const ROUTES_BY_ROLE: Record<UserRole, RouteMap> = {
 
   guidance: {
     dashboard: "/guidance-dashboard",
-    students: "/guidance-dashboard",
+    students: "/guidance/students",
+    messages: "/guidance/messages",
     sessions: null,
     reports: null,
     announcements: "/announcements",
@@ -58,23 +59,17 @@ function isKnownRole(role: string | undefined): role is UserRole {
 function findActiveKey(role: UserRole, pathname: string): string {
   const routes = ROUTES_BY_ROLE[role];
 
-  const match = Object.entries(routes).find(
-    ([, path]) => path === pathname,
-  );
+  const match = Object.entries(routes).find(([, path]) => path === pathname);
 
   return match ? match[0] : "dashboard";
 }
 
-function SidebarDrawerContent({
-  navigation,
-}: SidebarDrawerContentProps) {
+function SidebarDrawerContent({ navigation }: SidebarDrawerContentProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useAuth();
 
-  const role: UserRole = isKnownRole(user?.role)
-    ? user.role
-    : "student";
+  const role: UserRole = isKnownRole(user?.role) ? user.role : "student";
 
   const activeRoute = findActiveKey(role, pathname);
 
@@ -85,8 +80,7 @@ function SidebarDrawerContent({
       Toast.show({
         type: "info",
         text1: "Coming Soon",
-        text2:
-          "This section will be available in a future update.",
+        text2: "This section will be available in a future update.",
       });
 
       navigation.closeDrawer();
@@ -101,8 +95,7 @@ function SidebarDrawerContent({
     Toast.show({
       type: "info",
       text1: "Coming Soon",
-      text2:
-        "Help & support will be available in a future update.",
+      text2: "Help & support will be available in a future update.",
     });
 
     navigation.closeDrawer();
@@ -123,9 +116,7 @@ export default function AppDrawerLayout() {
   return (
     <NotificationProvider>
       <Drawer
-        drawerContent={(props) => (
-          <SidebarDrawerContent {...props} />
-        )}
+        drawerContent={(props) => <SidebarDrawerContent {...props} />}
         screenOptions={{
           headerStyle: {
             backgroundColor: colors.background,

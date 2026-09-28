@@ -36,6 +36,13 @@ export const saveMyProfile = async (
   return response.data;
 };
 
+// 🏷️ Set/clear the student's peer-facing display username (Phase 2.3 1.3).
+// Pass null or "" to clear it and fall back to "First L." in rosters.
+export const updateMyUsername = async (username: string | null) => {
+  const response = await api.patch("/api/profile/username", { username });
+  return response.data; // { message, displayUsername }
+};
+
 // ✏️ Update the logged-in user's own basic account info (name/email)
 export const updateProfileInfo = async (name: string, email: string) => {
   const response = await api.put("/api/auth/profile", { name, email });
@@ -68,6 +75,11 @@ export const getSessionDetails = async (sessionId: number) => {
   const response = await api.get(`/api/sessions/${sessionId}`);
   return response.data;
 };
+
+export async function getSessionRoster(sessionId: number) {
+  const res = await api.get(`/api/sessions/${sessionId}/participants`);
+  return res.data; // { participants: [{ id, displayName, initials, avatarColor }] }
+}
 
 export const joinSessionByCode = async (code: string) => {
   const response = await api.get(`/api/sessions/join/${code.toUpperCase()}`);
@@ -321,3 +333,105 @@ export const getGuidanceStudentSIS = async (
 };
 
 export default api;
+
+// =========================
+// Student ↔ Guidance Messaging
+// =========================
+
+export type MessageCategory = "help" | "complaint" | "concern";
+export type MessageThreadStatus = "open" | "in_progress" | "resolved";
+
+export interface MessageItem {
+  id: number;
+  senderId: number;
+  senderRole: "student" | "guidance";
+  senderName?: string;
+  body: string;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface MessageThreadInfo {
+  id: number;
+  studentId: number;
+  studentName?: string;
+  studentEmail?: string;
+  category: MessageCategory;
+  urgent: boolean;
+  status: MessageThreadStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MessageThreadDetail {
+  thread: MessageThreadInfo | null;
+  messages: MessageItem[];
+}
+
+export interface MessageThreadSummary {
+  id: number;
+  studentId: number;
+  studentName: string;
+  studentEmail: string;
+  category: MessageCategory;
+  urgent: boolean;
+  status: MessageThreadStatus;
+  lastMessage: string;
+  lastMessageAt: string;
+  unreadCount: number;
+}
+
+// Student: send a message to guidance (creates or continues their thread)
+export const sendMyMessage = async (payload: {
+  body: string;
+  category?: MessageCategory;
+  urgent?: boolean;
+}): Promise<MessageThreadDetail> => {
+  const response = await api.post("/api/messages/mine", payload);
+  return response.data;
+};
+
+// Student: get my own thread with guidance
+export const getMyMessages = async (): Promise<MessageThreadDetail> => {
+  const response = await api.get("/api/messages/mine");
+  return response.data;
+};
+
+// Guidance: inbox list of threads, with filters
+export const getGuidanceInbox = async (filters?: {
+  category?: MessageCategory;
+  urgent?: boolean;
+  status?: MessageThreadStatus;
+  search?: string;
+}): Promise<{ threads: MessageThreadSummary[] }> => {
+  const response = await api.get("/api/messages", { params: filters });
+  return response.data;
+};
+
+// Guidance: open a specific thread
+export const getGuidanceThread = async (
+  threadId: number,
+): Promise<MessageThreadDetail> => {
+  const response = await api.get(`/api/messages/${threadId}`);
+  return response.data;
+};
+
+// Guidance: reply in a thread
+export const replyToThread = async (
+  threadId: number,
+  body: string,
+): Promise<MessageThreadDetail> => {
+  const response = await api.post(`/api/messages/${threadId}/reply`, { body });
+  return response.data;
+};
+
+// Guidance: update a thread's status
+export const updateThreadStatus = async (
+  threadId: number,
+  status: MessageThreadStatus,
+): Promise<{ message: string; status: MessageThreadStatus }> => {
+  const response = await api.patch(`/api/messages/${threadId}/status`, {
+    status,
+  });
+  return response.data;
+};

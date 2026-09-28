@@ -107,6 +107,7 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
   guidance: [
     { key: "dashboard", label: "Dashboard", icon: "home-outline" },
     { key: "students", label: "Students", icon: "people-outline" },
+    { key: "messages", label: "Messages", icon: "chatbubble-ellipses-outline" },
     { key: "sessions", label: "Sessions", icon: "albums-outline" },
     { key: "reports", label: "Reports", icon: "document-text-outline" },
     { key: "announcements", label: "Announcements", icon: "megaphone-outline" },
