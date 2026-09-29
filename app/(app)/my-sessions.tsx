@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -15,7 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
-import { getMySessions } from "../../utils/api";
+import { downloadSessionReport, getMySessions } from "../../utils/api";
 
 interface Session {
   id: number;
@@ -39,6 +40,7 @@ export default function MySessionsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
 
   useEffect(() => {
     loadSessions();
@@ -62,6 +64,22 @@ export default function MySessionsScreen() {
   const handleRefresh = () => {
     setRefreshing(true);
     loadSessions();
+  };
+
+  const handleDownloadReport = async (session: Session) => {
+    if (downloadingId !== null) return;
+    setDownloadingId(session.id);
+    try {
+      await downloadSessionReport(session.id, session.title);
+    } catch (err) {
+      console.error("Error downloading report:", err);
+      Alert.alert(
+        "Download failed",
+        "Couldn't download the session report. Please try again.",
+      );
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   const handleBack = () => {
@@ -479,7 +497,7 @@ export default function MySessionsScreen() {
                 </Text>
 
                 {endedSessions.map((session) => (
-                  <TouchableOpacity
+                  <View
                     key={session.id}
                     style={[
                       styles.sessionCard,
@@ -489,125 +507,159 @@ export default function MySessionsScreen() {
                         borderRadius: radius.md,
                         padding: spacing.md,
                         marginBottom: spacing.sm,
-                        opacity: 0.7,
+                        opacity: 0.9,
                       },
                     ]}
-                    onPress={() => router.push(`/session/${session.id}`)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${session.title}, code ${session.code}, ended, ${session.participantCount} participants`}
                   >
-                    <View
-                      style={[
-                        styles.sessionHeader,
-                        {
-                          marginBottom: spacing.sm,
-                        },
-                      ]}
+                    <TouchableOpacity
+                      onPress={() => router.push(`/session/${session.id}`)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${session.title}, code ${session.code}, ended, ${session.participantCount} participants`}
                     >
                       <View
-                        style={{
-                          flex: 1,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontFamily: typography.caption.fontFamily,
-                            color: colors.textSecondary,
-                            fontSize: 10,
-                            textTransform: "uppercase",
-                            letterSpacing: 1,
-                          }}
-                        >
-                          Code
-                        </Text>
-
-                        <Text
-                          style={{
-                            fontFamily: typography.title.fontFamily,
-                            color: colors.primary,
-                            fontSize: 18,
-                            fontWeight: "700",
-                            letterSpacing: 1,
-                          }}
-                        >
-                          {session.code}
-                        </Text>
-                      </View>
-
-                      <View
                         style={[
-                          styles.badge,
+                          styles.sessionHeader,
                           {
-                            backgroundColor: colors.disabled,
-                            borderRadius: radius.sm,
+                            marginBottom: spacing.sm,
                           },
                         ]}
                       >
-                        <Text style={styles.badgeText}>ENDED</Text>
+                        <View
+                          style={{
+                            flex: 1,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontFamily: typography.caption.fontFamily,
+                              color: colors.textSecondary,
+                              fontSize: 10,
+                              textTransform: "uppercase",
+                              letterSpacing: 1,
+                            }}
+                          >
+                            Code
+                          </Text>
+
+                          <Text
+                            style={{
+                              fontFamily: typography.title.fontFamily,
+                              color: colors.primary,
+                              fontSize: 18,
+                              fontWeight: "700",
+                              letterSpacing: 1,
+                            }}
+                          >
+                            {session.code}
+                          </Text>
+                        </View>
+
+                        <View
+                          style={[
+                            styles.badge,
+                            {
+                              backgroundColor: colors.disabled,
+                              borderRadius: radius.sm,
+                            },
+                          ]}
+                        >
+                          <Text style={styles.badgeText}>ENDED</Text>
+                        </View>
                       </View>
-                    </View>
 
-                    <Text
-                      style={{
-                        fontFamily: typography.body.fontFamily,
-                        color: colors.text,
-                        fontSize: 16,
-                        fontWeight: "600",
-                        marginBottom: 4,
-                      }}
-                    >
-                      {session.title}
-                    </Text>
-
-                    {session.description ? (
                       <Text
                         style={{
-                          fontFamily: typography.caption.fontFamily,
-                          color: colors.textSecondary,
-                          fontSize: typography.caption.fontSize,
-                          marginBottom: spacing.sm,
+                          fontFamily: typography.body.fontFamily,
+                          color: colors.text,
+                          fontSize: 16,
+                          fontWeight: "600",
+                          marginBottom: 4,
                         }}
-                        numberOfLines={1}
                       >
-                        {session.description}
+                        {session.title}
                       </Text>
-                    ) : null}
 
-                    <View style={styles.sessionFooter}>
-                      <View style={styles.metaRow}>
-                        <Ionicons
-                          name="people-outline"
-                          size={14}
-                          color={colors.textSecondary}
-                        />
-
+                      {session.description ? (
                         <Text
                           style={{
                             fontFamily: typography.caption.fontFamily,
                             color: colors.textSecondary,
                             fontSize: typography.caption.fontSize,
-                            marginLeft: 4,
+                            marginBottom: spacing.sm,
+                          }}
+                          numberOfLines={1}
+                        >
+                          {session.description}
+                        </Text>
+                      ) : null}
+
+                      <View style={styles.sessionFooter}>
+                        <View style={styles.metaRow}>
+                          <Ionicons
+                            name="people-outline"
+                            size={14}
+                            color={colors.textSecondary}
+                          />
+
+                          <Text
+                            style={{
+                              fontFamily: typography.caption.fontFamily,
+                              color: colors.textSecondary,
+                              fontSize: typography.caption.fontSize,
+                              marginLeft: 4,
+                            }}
+                          >
+                            {session.participantCount} participants
+                          </Text>
+                        </View>
+
+                        <Text
+                          style={{
+                            fontFamily: typography.caption.fontFamily,
+                            color: colors.textSecondary,
+                            fontSize: 12,
                           }}
                         >
-                          {session.participantCount} participants
+                          {session.endedAt
+                            ? `Ended ${new Date(
+                                session.endedAt,
+                              ).toLocaleDateString()}`
+                            : new Date(session.createdAt).toLocaleDateString()}
                         </Text>
                       </View>
+                    </TouchableOpacity>
 
-                      <Text
-                        style={{
-                          fontFamily: typography.caption.fontFamily,
-                          color: colors.textSecondary,
-                          fontSize: 12,
-                        }}
-                      >
-                        {session.endedAt
-                          ? `Ended ${new Date(
-                              session.endedAt,
-                            ).toLocaleDateString()}`
-                          : new Date(session.createdAt).toLocaleDateString()}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.downloadButton,
+                        {
+                          backgroundColor: colors.primary,
+                          borderRadius: radius.sm,
+                          paddingVertical: spacing.sm - 2,
+                          marginTop: spacing.sm,
+                        },
+                      ]}
+                      onPress={() => handleDownloadReport(session)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Download report for ${session.title}`}
+                      disabled={downloadingId === session.id}
+                    >
+                      {downloadingId === session.id ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <>
+                          <Ionicons
+                            name="download-outline"
+                            size={16}
+                            color="#FFFFFF"
+                          />
+                          <Text style={styles.downloadButtonText}>
+                            Download Report
+                          </Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
                 ))}
               </View>
             )}
@@ -688,5 +740,18 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 10,
     fontWeight: "bold",
+  },
+
+  downloadButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  downloadButtonText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
+    marginLeft: 6,
   },
 });
