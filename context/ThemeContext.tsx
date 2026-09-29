@@ -7,14 +7,14 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import {
-  Appearance,
-  ColorSchemeName,
-} from "react-native";
+import { Appearance, ColorSchemeName } from "react-native";
 
-import Colors, {
-  ColorPalette,
-} from "../theme/colors";
+import {
+  SENSORY_DARK,
+  SENSORY_LIGHT,
+  scaleSpacing,
+} from "../constants/sensoryTheme";
+import Colors, { ColorPalette } from "../theme/colors";
 import Radius from "../theme/radius";
 import Spacing from "../theme/spacing";
 import Typography from "../theme/typography";
@@ -26,15 +26,15 @@ import Typography from "../theme/typography";
  * Wrap the root layout with <ThemeProvider> once; every screen
  * and component should consume theme values via useTheme(),
  * never by importing theme/colors.ts etc. directly.
+ *
+ * Phase 2.3 Week 7: also carries "sensory-friendly mode" — a muted
+ * palette, roomier spacing and a reduceMotion flag, applied globally.
  */
 
-export type ThemeMode =
-  | "light"
-  | "dark"
-  | "system";
+export type ThemeMode = "light" | "dark" | "system";
 
-const THEME_STORAGE_KEY =
-  "@inklude/theme-mode";
+const THEME_STORAGE_KEY = "@inklude/theme-mode";
+const SENSORY_STORAGE_KEY = "@inklude/sensory-mode";
 
 export interface ThemeContextValue {
   /** User's selected preference: light, dark, or system */
@@ -46,10 +46,10 @@ export interface ThemeContextValue {
   /** Convenience boolean */
   isDark: boolean;
 
-  /** Active color palette for resolvedScheme */
+  /** Active color palette for resolvedScheme (muted when sensory mode is on) */
   colors: ColorPalette;
 
-  /** Static design tokens (do not change with theme) */
+  /** Design tokens (spacing grows slightly in sensory mode) */
   typography: typeof Typography;
   spacing: typeof Spacing;
   radius: typeof Radius;
@@ -62,63 +62,63 @@ export interface ThemeContextValue {
 
   /** True while the persisted preference is still loading */
   isThemeLoading: boolean;
+
+  /** Sensory-friendly mode (muted colors, calmer spacing, no motion) */
+  sensoryMode: boolean;
+  setSensoryMode: (enabled: boolean) => void;
+
+  /** True when animations/motion should be skipped */
+  reduceMotion: boolean;
 }
 
-const ThemeContext =
-  createContext<ThemeContextValue | undefined>(
-    undefined,
-  );
+const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 function resolveScheme(
   mode: ThemeMode,
   systemScheme: ColorSchemeName,
 ): "light" | "dark" {
   if (mode === "system") {
-    return systemScheme === "dark"
-      ? "dark"
-      : "light";
+    return systemScheme === "dark" ? "dark" : "light";
   }
 
   return mode;
 }
 
-export function ThemeProvider({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const [themeMode, setThemeModeState] =
-    useState<ThemeMode>("system");
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [themeMode, setThemeModeState] = useState<ThemeMode>("system");
+  const [sensoryMode, setSensoryModeState] = useState(false);
 
-  const [systemScheme, setSystemScheme] =
-    useState<ColorSchemeName>(
-      Appearance.getColorScheme() ?? "light",
-    );
+  const [systemScheme, setSystemScheme] = useState<ColorSchemeName>(
+    Appearance.getColorScheme() ?? "light",
+  );
 
-  const [isThemeLoading, setIsThemeLoading] =
-    useState(true);
+  const [isThemeLoading, setIsThemeLoading] = useState(true);
 
-  // Load persisted preference on mount
+  // Load persisted preferences on mount
   useEffect(() => {
     let isMounted = true;
 
     (async () => {
       try {
-        const stored =
-          await AsyncStorage.getItem(
-            THEME_STORAGE_KEY,
-          );
+        const [storedTheme, storedSensory] = await Promise.all([
+          AsyncStorage.getItem(THEME_STORAGE_KEY),
+          AsyncStorage.getItem(SENSORY_STORAGE_KEY),
+        ]);
 
         if (
           isMounted &&
-          (stored === "light" ||
-            stored === "dark" ||
-            stored === "system")
+          (storedTheme === "light" ||
+            storedTheme === "dark" ||
+            storedTheme === "system")
         ) {
-          setThemeModeState(stored);
+          setThemeModeState(storedTheme);
+        }
+
+        if (isMounted && storedSensory === "1") {
+          setSensoryModeState(true);
         }
       } catch {
-        // If storage read fails, silently fall back to "system"
+        // If storage read fails, silently fall back to defaults
       } finally {
         if (isMounted) {
           setIsThemeLoading(false);
@@ -131,106 +131,93 @@ export function ThemeProvider({
     };
   }, []);
 
-  // Listen for OS-level appearance changes
-  // when "system" mode is selected.
+  // Listen for OS-level appearance changes when "system" mode is selected.
   useEffect(() => {
-    const subscription =
-      Appearance.addChangeListener(
-        ({ colorScheme }) => {
-          setSystemScheme(colorScheme);
-        },
-      );
+    const subscription = Appearance.addChangeListener(({ colorScheme }) => {
+      setSystemScheme(colorScheme);
+    });
 
     return () => {
       subscription.remove();
     };
   }, []);
 
-  const setThemeMode = useCallback(
-    (mode: ThemeMode) => {
-      setThemeModeState(mode);
+  const setThemeMode = useCallback((mode: ThemeMode) => {
+    setThemeModeState(mode);
 
-      AsyncStorage.setItem(
-        THEME_STORAGE_KEY,
-        mode,
-      ).catch(() => {
-        // Non-fatal: preference simply won't
-        // persist across app restarts.
-      });
-    },
-    [],
-  );
+    AsyncStorage.setItem(THEME_STORAGE_KEY, mode).catch(() => {
+      // Non-fatal: preference simply won't persist across app restarts.
+    });
+  }, []);
+
+  const setSensoryMode = useCallback((enabled: boolean) => {
+    setSensoryModeState(enabled);
+
+    AsyncStorage.setItem(SENSORY_STORAGE_KEY, enabled ? "1" : "0").catch(
+      () => {},
+    );
+  }, []);
 
   const toggleTheme = useCallback(() => {
     setThemeModeState((prev) => {
-      const currentResolved = resolveScheme(
-        prev,
-        systemScheme,
-      );
+      const currentResolved = resolveScheme(prev, systemScheme);
 
-      const next: ThemeMode =
-        currentResolved === "dark"
-          ? "light"
-          : "dark";
+      const next: ThemeMode = currentResolved === "dark" ? "light" : "dark";
 
-      AsyncStorage.setItem(
-        THEME_STORAGE_KEY,
-        next,
-      ).catch(() => {});
+      AsyncStorage.setItem(THEME_STORAGE_KEY, next).catch(() => {});
 
       return next;
     });
   }, [systemScheme]);
 
-  const resolvedScheme = resolveScheme(
-    themeMode,
-    systemScheme,
-  );
+  const resolvedScheme = resolveScheme(themeMode, systemScheme);
 
-  const isDark =
-    resolvedScheme === "dark";
+  const isDark = resolvedScheme === "dark";
 
-  const value =
-    useMemo<ThemeContextValue>(
-      () => ({
-        themeMode,
-        resolvedScheme,
-        isDark,
-        colors: isDark
+  const value = useMemo<ThemeContextValue>(
+    () => ({
+      themeMode,
+      resolvedScheme,
+      isDark,
+      colors: sensoryMode
+        ? isDark
+          ? SENSORY_DARK
+          : SENSORY_LIGHT
+        : isDark
           ? Colors.dark
           : Colors.light,
-        typography: Typography,
-        spacing: Spacing,
-        radius: Radius,
-        setThemeMode,
-        toggleTheme,
-        isThemeLoading,
-      }),
-      [
-        themeMode,
-        resolvedScheme,
-        isDark,
-        setThemeMode,
-        toggleTheme,
-        isThemeLoading,
-      ],
-    );
+      typography: Typography,
+      spacing: sensoryMode ? scaleSpacing(Spacing) : Spacing,
+      radius: Radius,
+      setThemeMode,
+      toggleTheme,
+      isThemeLoading,
+      sensoryMode,
+      setSensoryMode,
+      reduceMotion: sensoryMode,
+    }),
+    [
+      themeMode,
+      resolvedScheme,
+      isDark,
+      sensoryMode,
+      setThemeMode,
+      setSensoryMode,
+      toggleTheme,
+      isThemeLoading,
+    ],
+  );
 
   return (
-    <ThemeContext.Provider value={value}>
-      {children}
-    </ThemeContext.Provider>
+    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
   );
 }
 
 export function useTheme(): ThemeContextValue {
-  const context =
-    useContext(ThemeContext);
+  const context = useContext(ThemeContext);
 
   if (context === undefined) {
-    throw new Error(
-      "useTheme must be used within a ThemeProvider",
-    );
+    throw new Error("useTheme must be used within a ThemeProvider");
   }
 
   return context;

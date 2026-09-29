@@ -6,6 +6,11 @@ const {
   getStudentTranscripts,
   getDashboardStats,
 } = require("../models/guidanceModel");
+const {
+  getNeedsHelpInfo,
+  getNeedsHelpStudentIds,
+} = require("../models/Checkin");
+const { hasLowMoodStreak } = require("../models/ClassPulse");
 
 // GET /api/guidance/students?disability=Autism&course=BS%20Information%20Technology&search=juan
 async function getStudentsController(req, res) {
@@ -22,8 +27,14 @@ async function getStudentsController(req, res) {
 
     const students = await getAllStudents(disability, search, course);
 
+    // Phase 2.3 Week 3 flags (yes/no only, never the underlying answers)
+    const needsHelpIds = await getNeedsHelpStudentIds();
+    const lowMoodFlags = await Promise.all(
+      students.map((s) => hasLowMoodStreak(s.id)),
+    );
+
     res.json({
-      students: students.map((s) => ({
+      students: students.map((s, index) => ({
         id: s.id,
         name: s.name,
         email: s.email,
@@ -37,6 +48,10 @@ async function getStudentsController(req, res) {
         course: s.course ?? null,
         yearLevel: s.year_level ?? null,
         section: s.section ?? null,
+        flags: {
+          needsHelp: needsHelpIds.has(s.id),
+          lowMood: lowMoodFlags[index],
+        },
       })),
     });
   } catch (err) {
@@ -65,6 +80,8 @@ async function getStudentDetailController(req, res) {
 
     const attendance = await getStudentAttendance(studentId);
     const transcripts = await getStudentTranscripts(studentId);
+    const needsHelp = await getNeedsHelpInfo(student.id);
+    const lowMood = await hasLowMoodStreak(student.id);
 
     res.json({
       student: {
@@ -83,6 +100,10 @@ async function getStudentDetailController(req, res) {
         section: student.section ?? null,
         age: student.age ?? null,
         dateOfBirth: student.date_of_birth ?? null,
+      },
+      flags: {
+        needsHelp,
+        lowMood,
       },
       attendance: attendance.map((a) => ({
         sessionId: a.id,

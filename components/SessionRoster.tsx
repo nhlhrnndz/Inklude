@@ -5,20 +5,25 @@
 // avatar is outlined so they can find themselves in the list. Tapping
 // your own avatar sends a lightweight "I'm here" presence ping that
 // briefly pulses your avatar for everyone else.
+//
+// Phase 2.3 Week 7: teachers/guidance also see a subtle pause badge next
+// to students who tapped "I need a break". Classmates never see this.
 
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import Toast from "react-native-toast-message";
 
+import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { getSessionRoster } from "../utils/api";
+import { getSessionBreaks } from "../utils/sensoryApi";
 import { getSocket } from "../utils/socket";
 
 interface RosterParticipant {
@@ -41,11 +46,15 @@ export default function SessionRoster({
   currentUserId,
 }: SessionRosterProps) {
   const { colors, typography, spacing, radius } = useTheme();
+  const { user } = useAuth();
+
+  const canSeeBreaks = user?.role === "teacher" || user?.role === "guidance";
 
   const [participants, setParticipants] = useState<RosterParticipant[]>([]);
   const [loading, setLoading] = useState(true);
   const [pulsingIds, setPulsingIds] = useState<Set<number>>(new Set());
   const [presenceCooldown, setPresenceCooldown] = useState(false);
+  const [onBreakIds, setOnBreakIds] = useState<Set<number>>(new Set());
 
   const pulseTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(
     new Map(),
@@ -71,6 +80,39 @@ export default function SessionRoster({
       cancelled = true;
     };
   }, [sessionId]);
+
+  // Teacher/guidance only: who is currently on a break
+  useEffect(() => {
+    if (!canSeeBreaks) return;
+
+    let cancelled = false;
+    getSessionBreaks(sessionId)
+      .then((ids) => {
+        if (!cancelled) setOnBreakIds(new Set(ids));
+      })
+      .catch(() => {});
+
+    const socket = getSocket();
+    function handleBreakUpdate(payload: {
+      sessionId: number;
+      userId: number;
+      onBreak: boolean;
+    }) {
+      if (Number(payload.sessionId) !== Number(sessionId)) return;
+      setOnBreakIds((prev) => {
+        const next = new Set(prev);
+        if (payload.onBreak) next.add(payload.userId);
+        else next.delete(payload.userId);
+        return next;
+      });
+    }
+
+    socket.on("break-update", handleBreakUpdate);
+    return () => {
+      cancelled = true;
+      socket.off("break-update", handleBreakUpdate);
+    };
+  }, [sessionId, canSeeBreaks]);
 
   useEffect(() => {
     const socket = getSocket();
@@ -164,9 +206,15 @@ export default function SessionRoster({
         {participants.map((p) => {
           const isMe = p.id === currentUserId;
           const isPulsing = pulsingIds.has(p.id);
+          const isOnBreak = canSeeBreaks && onBreakIds.has(p.id);
 
           const avatar = (
-            <View style={styles.avatarWrap}>
+            <View
+              style={styles.avatarWrap}
+              accessibilityLabel={
+                isOnBreak ? `${p.displayName}, on a break` : undefined
+              }
+            >
               <View
                 style={[
                   styles.avatarCircle,
@@ -189,6 +237,17 @@ export default function SessionRoster({
                   ]}
                 >
                   <Ionicons name="hand-right" size={9} color="#fff" />
+                </View>
+              )}
+
+              {isOnBreak && (
+                <View
+                  style={[
+                    styles.breakBadge,
+                    { backgroundColor: "#6B8CA0", borderRadius: radius.round },
+                  ]}
+                >
+                  <Ionicons name="pause" size={9} color="#fff" />
                 </View>
               )}
 
@@ -250,6 +309,15 @@ const styles = StyleSheet.create({
   pulseDot: {
     position: "absolute",
     top: -2,
+    right: -2,
+    width: 16,
+    height: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  breakBadge: {
+    position: "absolute",
+    top: 28,
     right: -2,
     width: 16,
     height: 16,

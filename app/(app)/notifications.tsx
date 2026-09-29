@@ -24,6 +24,9 @@ const TYPE_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   message: "chatbubble-ellipses-outline",
   sis_reminder: "document-text-outline",
   class_started: "radio-outline",
+  checkin: "heart-outline",
+  checkin_reply: "chatbubble-outline",
+  checkin_help: "alert-circle-outline",
 };
 
 function timeAgo(iso: string): string {
@@ -88,6 +91,15 @@ export default function NotificationsScreen() {
       return;
     }
 
+    // Teacher check-ins and student replies open the Check-ins screen.
+    if (item.type === "checkin" || item.type === "checkin_reply") {
+      if (!item.isRead) {
+        await markRead(item.id);
+      }
+
+      router.push("/checkins" as any);
+      return;
+    }
     setExpandedId((prev) => (prev === item.id ? null : item.id));
 
     if (!item.isRead) {
@@ -160,10 +172,7 @@ export default function NotificationsScreen() {
 
             {!item.isRead && (
               <View
-                style={[
-                  styles.unreadDot,
-                  { backgroundColor: colors.primary },
-                ]}
+                style={[styles.unreadDot, { backgroundColor: colors.primary }]}
               />
             )}
           </View>
@@ -268,9 +277,7 @@ export default function NotificationsScreen() {
               marginTop: 2,
             }}
           >
-            {unreadCount > 0
-              ? `${unreadCount} unread`
-              : "You're all caught up"}
+            {unreadCount > 0 ? `${unreadCount} unread` : "You're all caught up"}
           </Text>
         </View>
 

@@ -1,5 +1,28 @@
 const pool = require("../config/db");
 
+// MySQL can hand JSON columns back as strings (TEXT columns, or values that
+// were double-encoded). Always convert them back to real arrays/objects.
+function parseJson(value, fallback) {
+  if (value == null) return fallback;
+  if (typeof value !== "string") return value; // already parsed
+  try {
+    let v = JSON.parse(value);
+    if (typeof v === "string") v = JSON.parse(v); // repair double-encoded rows
+    return v;
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeProfile(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    disability_types: parseJson(row.disability_types, []),
+    accessibility_preferences: parseJson(row.accessibility_preferences, {}),
+  };
+}
+
 // Get a single user's profile — joined with users so displayUsername
 // comes back alongside disability preferences in one query.
 async function getProfileByUserId(userId) {
@@ -10,7 +33,7 @@ async function getProfileByUserId(userId) {
      WHERE dp.user_id = ?`,
     [userId],
   );
-  return rows[0] || null;
+  return normalizeProfile(rows[0]);
 }
 
 // Create or update (upsert) a user's profile

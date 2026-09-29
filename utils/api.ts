@@ -6,14 +6,34 @@ import { API_URL } from "../constants/config";
 
 const api = axios.create({
   baseURL: API_URL,
+  timeout: 15000, // never hang forever — fail loudly after 15s instead
   headers: {
     "Content-Type": "application/json",
   },
 });
 
+// In-memory copy of the JWT. Reading AsyncStorage on every single request
+// is the usual cause of requests silently hanging after a screen
+// transition/reload in Expo Go — AuthContext keeps this in sync via
+// setCachedToken()/clearCachedToken() on login/logout/app-start, so most
+// requests never have to touch AsyncStorage at all.
+let cachedToken: string | null = null;
+
+export function setCachedToken(token: string | null) {
+  cachedToken = token;
+}
+
+export function clearCachedToken() {
+  cachedToken = null;
+}
+
 // Attach the JWT token to every request automatically
 api.interceptors.request.use(async (config) => {
-  const token = await AsyncStorage.getItem("token");
+  let token = cachedToken;
+  if (!token) {
+    token = await AsyncStorage.getItem("token");
+    if (token) cachedToken = token;
+  }
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }

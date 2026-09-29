@@ -1,8 +1,8 @@
 //accessibility.tsx
 
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -41,58 +41,98 @@ const PREFERENCE_OPTIONS: { key: string; label: string }[] = [
 // How long to show the "Preferences Saved" confirmation before redirecting
 const SUCCESS_DISPLAY_MS = 1200;
 
+// Give up on the background username fetch after this long so a slow/stuck
+// request can never leave the field stuck on a spinner.
+const USERNAME_FETCH_TIMEOUT_MS = 8000;
+
+const DEFAULT_PREFERENCES: Record<string, boolean> = {
+  liveCaptions: false,
+  highContrast: false,
+  dyslexiaFont: false,
+  simplifiedUI: false,
+};
+
 export default function AccessibilityPreferencesScreen() {
   const router = useRouter();
   const { colors, typography, spacing, radius } = useTheme();
   const { onboarding } = useLocalSearchParams<{ onboarding?: string }>();
-  const { updateProfileData } = useAuth();
+  const { profile, updateProfileData } = useAuth();
 
-  const [loading, setLoading] = useState(true);
+  // No network wait for the form itself — it's seeded straight from the
+  // profile AuthContext already has cached (same data Settings reads).
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
-  const [preferences, setPreferences] = useState<Record<string, boolean>>({
-    liveCaptions: false,
-    highContrast: false,
-    dyslexiaFont: false,
-    simplifiedUI: false,
-  });
+  const [selectedTypes, setSelectedTypes] = useState<string[]>(
+    () => profile?.disabilityTypes ?? [],
+  );
+  const [preferences, setPreferences] = useState<Record<string, boolean>>(
+    () => ({
+      ...DEFAULT_PREFERENCES,
+      ...(profile?.accessibilityPreferences ?? {}),
+    }),
+  );
 
-  // Phase 2.3 Week 1.3 — peer-facing display username. Separate from
-  // disabilityTypes/preferences: saved via its own endpoint since it's
-  // an account identity choice, not an accessibility setting.
+  // Phase 2.3 Week 1.3 — peer-facing display username. Not stored in
+  // AuthContext's profile, so it's the one thing this screen still fetches
+  // over the network — in the background, without blocking the form above.
   const [username, setUsername] = useState("");
   const [originalUsername, setOriginalUsername] = useState("");
+  const [usernameLoading, setUsernameLoading] = useState(true);
   const [usernameError, setUsernameError] = useState("");
 
+  // Guards against setting state after the screen has unmounted (e.g. the
+  // background fetch resolves after the user already navigated away).
+  const mountedRef = useRef(true);
   useEffect(() => {
-    loadExistingProfile();
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
-  const loadExistingProfile = async () => {
+  const loadUsernameInBackground = async () => {
+    setUsernameLoading(true);
     try {
-      const data = await getMyProfile();
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error("username fetch timed out")),
+          USERNAME_FETCH_TIMEOUT_MS,
+        ),
+      );
+      const data = await Promise.race([getMyProfile(), timeout]);
 
-      setSelectedTypes(data.disabilityTypes || []);
+      if (!mountedRef.current) return;
 
-      setPreferences((prev) => ({
-        ...prev,
-        ...data.accessibilityPreferences,
-      }));
-
-      const existingUsername = data.displayUsername || "";
+      const existingUsername = (data as any).displayUsername || "";
       setUsername(existingUsername);
       setOriginalUsername(existingUsername);
     } catch (err: any) {
+      // 404 = no profile yet, that's fine. A timeout or network error just
+      // means the username field stays blank/editable — never blocks Save.
       if (err?.response?.status !== 404) {
-        console.error("Error loading profile:", err);
+        console.warn("Could not load display username:", err?.message ?? err);
       }
-
-      // 404 just means nothing saved yet — that's fine, keep defaults
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setUsernameLoading(false);
     }
   };
+
+  // Drawer screens are hidden, not unmounted, when you navigate away.
+  // Without this, stale state (e.g. saveSuccess still true from the last
+  // save) would resurface instantly on the next visit instead of a fresh
+  // form — this is what caused the "stuck on Preferences Saved" bug.
+  useFocusEffect(
+    React.useCallback(() => {
+      setSaveSuccess(false);
+      setSelectedTypes(profile?.disabilityTypes ?? []);
+      setPreferences({
+        ...DEFAULT_PREFERENCES,
+        ...(profile?.accessibilityPreferences ?? {}),
+      });
+      setUsernameError("");
+      loadUsernameInBackground();
+    }, [profile]),
+  );
 
   const toggleDisabilityType = (type: string) => {
     setSelectedTypes((prev) => {
@@ -115,8 +155,7 @@ export default function AccessibilityPreferencesScreen() {
   };
 
   const handleSave = async () => {
-    console.log("DEBUG selectedTypes at save time:", selectedTypes); // ← add this
-    if (selectedTypes.length === 0) {
+    if (!Array.isArray(selectedTypes) || selectedTypes.length === 0) {
       Alert.alert(
         "Missing info",
         "Please select at least one option so we can personalize your experience.",
@@ -135,73 +174,77 @@ export default function AccessibilityPreferencesScreen() {
     setUsernameError("");
     setSaving(true);
 
+    // 1) Save disability types + preferences
     try {
       await saveMyProfile(selectedTypes, preferences);
-
-      // Only hit the username endpoint if it actually changed — avoids
-      // an unnecessary request (and a possible validation error) on
-      // every save when the student didn't touch this field.
-      if (trimmedUsername !== originalUsername) {
-        await updateMyUsername(
-          trimmedUsername.length > 0 ? trimmedUsername : null,
-        );
-        setOriginalUsername(trimmedUsername);
-      }
-
-      // Update the in-memory/cached profile immediately so useFeatures()
-      // reflects the new preferences right away — no re-login needed,
-      // and no extra network round-trip to re-fetch what we already have.
-      await updateProfileData({
-        disabilityTypes: selectedTypes,
-        accessibilityPreferences: preferences,
-      });
-
-      setSaving(false);
-      setSaveSuccess(true);
-
-      setTimeout(() => {
-        if (onboarding === "1") {
-          router.replace({
-            pathname: "/basic-info",
-            params: { onboarding: "1" },
-          });
-        } else {
-          router.replace("/student");
-        }
-      }, SUCCESS_DISPLAY_MS);
     } catch (err: any) {
       console.error("Error saving preferences:", err);
       console.error("SERVER SAID:", JSON.stringify(err?.response?.data));
       console.error("FAILED URL:", err?.config?.url);
 
       setSaving(false);
-
-      const serverMessage = err?.response?.data?.message;
       Alert.alert(
         "Error",
-        serverMessage || "Could not save your preferences. Please try again.",
+        err?.response?.data?.message ||
+          "Could not save your preferences. Please try again.",
       );
+      return;
     }
-  };
 
-  if (loading) {
-    return (
-      <SafeAreaView
-        style={[
-          styles.centered,
-          {
-            backgroundColor: colors.background,
-          },
-        ]}
-      >
-        <ActivityIndicator
-          size="large"
-          color={colors.primary}
-          accessibilityLabel="Loading preferences"
-        />
-      </SafeAreaView>
-    );
-  }
+    // 2) Save username separately, so a username problem can never
+    //    block (or be blocked by) the preferences save.
+    let usernameFailedMessage = "";
+    if (trimmedUsername !== originalUsername) {
+      try {
+        await updateMyUsername(
+          trimmedUsername.length > 0 ? trimmedUsername : null,
+        );
+        setOriginalUsername(trimmedUsername);
+      } catch (err: any) {
+        console.error("Error saving username:", err);
+        usernameFailedMessage =
+          err?.response?.data?.message ||
+          "Could not save your display name. Please try again.";
+      }
+    }
+
+    // 3) Update the cached profile so useFeatures() reflects the new
+    //    preferences right away — no re-login needed.
+    try {
+      await updateProfileData({
+        disabilityTypes: selectedTypes,
+        accessibilityPreferences: preferences,
+      });
+    } catch (err) {
+      console.error("Error updating cached profile:", err);
+    }
+
+    setSaving(false);
+
+    // Preferences saved, but the username failed: stay on this screen
+    // so the student can fix the name.
+    if (usernameFailedMessage) {
+      setUsernameError(usernameFailedMessage);
+      Alert.alert(
+        "Preferences saved",
+        `Your preferences were saved, but your display name was not: ${usernameFailedMessage}`,
+      );
+      return;
+    }
+
+    setSaveSuccess(true);
+
+    setTimeout(() => {
+      if (onboarding === "1") {
+        router.replace({
+          pathname: "/basic-info",
+          params: { onboarding: "1" },
+        });
+      } else {
+        router.replace("/student");
+      }
+    }, SUCCESS_DISPLAY_MS);
+  };
 
   if (saveSuccess) {
     return (
@@ -423,7 +466,7 @@ export default function AccessibilityPreferencesScreen() {
             </Text>
 
             <Switch
-              value={preferences[pref.key]}
+              value={!!preferences[pref.key]}
               onValueChange={() => togglePreference(pref.key)}
               trackColor={{
                 false: colors.disabled,
@@ -463,31 +506,42 @@ export default function AccessibilityPreferencesScreen() {
           the guidance office will always see your real name.
         </Text>
 
-        <TextInput
-          style={[
-            styles.usernameInput,
-            {
-              backgroundColor: colors.surface,
-              borderColor: usernameError ? colors.danger : colors.border,
-              borderRadius: radius.md,
-              padding: 12,
-              fontFamily: typography.body.fontFamily,
-              fontSize: typography.body.fontSize,
-              color: colors.text,
-            },
-          ]}
-          value={username}
-          onChangeText={(text) => {
-            setUsername(text);
-            if (usernameError) setUsernameError("");
-          }}
-          placeholder="e.g. StarGazer22 (leave blank to use your first name)"
-          placeholderTextColor={colors.placeholder}
-          maxLength={30}
-          autoCapitalize="none"
-          autoCorrect={false}
-          accessibilityLabel="Display name shown to classmates"
-        />
+        <View style={{ position: "relative" }}>
+          <TextInput
+            style={[
+              styles.usernameInput,
+              {
+                backgroundColor: colors.surface,
+                borderColor: usernameError ? colors.danger : colors.border,
+                borderRadius: radius.md,
+                padding: 12,
+                paddingRight: usernameLoading ? 36 : 12,
+                fontFamily: typography.body.fontFamily,
+                fontSize: typography.body.fontSize,
+                color: colors.text,
+              },
+            ]}
+            value={username}
+            onChangeText={(text) => {
+              setUsername(text);
+              if (usernameError) setUsernameError("");
+            }}
+            placeholder="e.g. StarGazer22 (leave blank to use your first name)"
+            placeholderTextColor={colors.placeholder}
+            maxLength={30}
+            autoCapitalize="none"
+            autoCorrect={false}
+            accessibilityLabel="Display name shown to classmates"
+          />
+          {usernameLoading && (
+            <ActivityIndicator
+              size="small"
+              color={colors.textSecondary}
+              style={{ position: "absolute", right: 12, top: 14 }}
+              accessibilityLabel="Loading your current display name"
+            />
+          )}
+        </View>
 
         {usernameError ? (
           <Text

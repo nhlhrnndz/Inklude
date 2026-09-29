@@ -1,4 +1,4 @@
-//app\session\[id]\index.tsx
+//app/session/[id]/index.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
@@ -15,6 +15,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import ClassPulse from "../../../components/ClassPulse";
+import SessionDocuments from "../../../components/SessionDocuments";
 import { useAuth } from "../../../context/AuthContext";
 import { useTheme } from "../../../context/ThemeContext";
 import {
@@ -24,6 +26,7 @@ import {
   postAnnouncement,
 } from "../../../utils/api";
 import { crossAlert } from "../../../utils/crossAlert";
+import { getSocket } from "../../../utils/socket";
 
 interface Participant {
   id: number;
@@ -38,6 +41,9 @@ interface Session {
   title: string;
   description: string;
   status: "active" | "ended";
+  isLive: boolean;
+  liveEndedAt: string | null;
+  currentLiveRunId: number | null;
   createdAt: string;
   endedAt: string | null;
   participants: Participant[];
@@ -59,7 +65,7 @@ const ROLE_HOME: Record<string, string> = {
 const TITLE_MAX = 150;
 const BODY_MAX = 2000;
 
-type Tab = "people" | "announcements";
+type Tab = "people" | "announcements" | "documents";
 
 export default function ClassroomDetailScreen() {
   const router = useRouter();
@@ -71,10 +77,9 @@ export default function ClassroomDetailScreen() {
 
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [ending, setEnding] = useState(false);
+  const [disabling, setDisabling] = useState(false);
   const [tab, setTab] = useState<Tab>("people");
 
-  // Announcements (scoped to this classroom)
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [announcementsLoading, setAnnouncementsLoading] = useState(true);
   const [annTitle, setAnnTitle] = useState("");
@@ -109,6 +114,36 @@ export default function ClassroomDetailScreen() {
     loadAnnouncements();
   }, [loadSession, loadAnnouncements]);
 
+  // Join the session's socket room just to hear live/disable updates while
+  // sitting on this screen, so the banner status and the pulse card react
+  // right away instead of only refreshing the next time this screen opens.
+  useEffect(() => {
+    if (!id || !user?.id) return;
+    const socket = getSocket();
+
+    const join = () => {
+      socket.emit("join-session", {
+        sessionId: id,
+        userId: user.id,
+        role: isTeacher ? "teacher" : "student",
+      });
+    };
+
+    if (socket.connected) join();
+    socket.on("connect", join);
+    socket.on("live-ended", loadSession);
+    socket.on("live-started", loadSession);
+    socket.on("session-ended", loadSession);
+
+    return () => {
+      socket.emit("leave-session", { sessionId: id });
+      socket.off("connect", join);
+      socket.off("live-ended", loadSession);
+      socket.off("live-started", loadSession);
+      socket.off("session-ended", loadSession);
+    };
+  }, [id, user?.id, isTeacher, loadSession]);
+
   const goToDashboard = () => {
     router.replace((ROLE_HOME[user?.role ?? "student"] ?? "/") as any);
   };
@@ -125,29 +160,33 @@ export default function ClassroomDetailScreen() {
     router.push(`/session/${id}/live` as any);
   };
 
-  const handleEndSession = () => {
+  const handleDisableClassroom = () => {
     crossAlert(
-      "End Classroom Session?",
-      "Are you sure you want to end this session?",
+      "Disable this classroom?",
+      "This permanently closes the classroom. Students won't be able to join, and you won't be able to go live here again — you'll need to create a new classroom next time.",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "End", style: "destructive", onPress: confirmEndSession },
+        {
+          text: "Disable",
+          style: "destructive",
+          onPress: confirmDisableClassroom,
+        },
       ],
     );
   };
 
-  const confirmEndSession = async () => {
-    setEnding(true);
+  const confirmDisableClassroom = async () => {
+    setDisabling(true);
     try {
       await endSession(Number(id));
-      crossAlert("Success", "Session ended successfully", [
+      crossAlert("Classroom disabled", "This classroom is now closed.", [
         { text: "OK", onPress: goToDashboard },
       ]);
     } catch (error) {
-      console.error("Error ending session:", error);
-      crossAlert("Error", "Failed to end session");
+      console.error("Error disabling classroom:", error);
+      crossAlert("Error", "Failed to disable the classroom");
     } finally {
-      setEnding(false);
+      setDisabling(false);
     }
   };
 
@@ -232,7 +271,8 @@ export default function ClassroomDetailScreen() {
     );
   }
 
-  const isActive = session.status === "active";
+  const isEnabled = session.status === "active";
+  const hasHadALiveRun = !!session.liveEndedAt;
 
   return (
     <SafeAreaView
@@ -300,15 +340,17 @@ export default function ClassroomDetailScreen() {
                 style={[
                   styles.statusBadge,
                   {
-                    backgroundColor: isActive
-                      ? colors.success
+                    backgroundColor: isEnabled
+                      ? session.isLive
+                        ? colors.success
+                        : colors.primary
                       : colors.disabled,
                     borderRadius: radius.sm,
                   },
                 ]}
               >
                 <Text style={styles.statusText}>
-                  {isActive ? "● LIVE" : "ENDED"}
+                  {!isEnabled ? "DISABLED" : session.isLive ? "● LIVE" : "OPEN"}
                 </Text>
               </View>
             </View>
@@ -378,7 +420,7 @@ export default function ClassroomDetailScreen() {
           </View>
 
           {/* Go Live / Join entry point */}
-          {isActive && (
+          {isEnabled && (
             <TouchableOpacity
               style={[
                 styles.liveEntryButton,
@@ -412,7 +454,7 @@ export default function ClassroomDetailScreen() {
             </TouchableOpacity>
           )}
 
-          {!isActive && (
+          {!isEnabled && (
             <View
               style={[
                 styles.endedNotice,
@@ -432,8 +474,58 @@ export default function ClassroomDetailScreen() {
                   color: colors.textSecondary,
                 }}
               >
-                This classroom session has ended. Captions are no longer live.
+                This classroom has been disabled. It can no longer be joined or
+                used for live captioning.
               </Text>
+            </View>
+          )}
+
+          {isTeacher && hasHadALiveRun && (
+            <TouchableOpacity
+              style={[
+                styles.liveEntryButton,
+                {
+                  backgroundColor: colors.secondaryBackground,
+                  borderColor: colors.border,
+                  borderWidth: 1,
+                  borderRadius: radius.md,
+                  padding: spacing.md,
+                  marginBottom: spacing.lg,
+                },
+              ]}
+              onPress={() => router.push(`/session/${id}/summary` as any)}
+              accessibilityRole="button"
+              accessibilityLabel="View session summary"
+            >
+              <Ionicons
+                name="stats-chart-outline"
+                size={20}
+                color={colors.primary}
+              />
+              <Text
+                style={{
+                  fontFamily: typography.button.fontFamily,
+                  fontSize: typography.button.fontSize,
+                  fontWeight: typography.button.fontWeight,
+                  color: colors.primary,
+                  marginLeft: spacing.sm,
+                }}
+              >
+                View Session Summary
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Class pulse — keyed by currentLiveRunId so a new live run
+              forces a fresh mount (fresh question) instead of keeping the
+              previous run's "thanks" state. Hidden while currently live,
+              since the pulse only makes sense once a run has ended. */}
+          {!isTeacher && hasHadALiveRun && !session.isLive && (
+            <View style={{ marginBottom: spacing.lg }}>
+              <ClassPulse
+                key={`pulse-${session.currentLiveRunId ?? "none"}`}
+                sessionId={id}
+              />
             </View>
           )}
 
@@ -493,6 +585,31 @@ export default function ClassroomDetailScreen() {
                 }}
               >
                 Announcements
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.tabButton,
+                tab === "documents" && {
+                  borderBottomColor: colors.primary,
+                  borderBottomWidth: 2,
+                },
+              ]}
+              onPress={() => setTab("documents")}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: tab === "documents" }}
+            >
+              <Text
+                style={{
+                  fontFamily: typography.body.fontFamily,
+                  fontSize: typography.body.fontSize,
+                  fontWeight: "700",
+                  color:
+                    tab === "documents" ? colors.primary : colors.textSecondary,
+                }}
+              >
+                Documents
               </Text>
             </TouchableOpacity>
           </View>
@@ -707,7 +824,12 @@ export default function ClassroomDetailScreen() {
             </View>
           )}
 
-          {isTeacher && isActive && (
+          {/* Documents tab */}
+          {tab === "documents" && (
+            <SessionDocuments sessionId={Number(id)} isTeacher={isTeacher} />
+          )}
+
+          {isTeacher && isEnabled && (
             <TouchableOpacity
               style={[
                 styles.endButton,
@@ -718,20 +840,20 @@ export default function ClassroomDetailScreen() {
                   marginTop: spacing.xl,
                 },
               ]}
-              onPress={handleEndSession}
-              disabled={ending}
+              onPress={handleDisableClassroom}
+              disabled={disabling}
               accessibilityRole="button"
-              accessibilityLabel="End Session"
+              accessibilityLabel="Disable Classroom"
             >
-              {ending ? (
+              {disabling ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.endButtonText}>End Session</Text>
+                <Text style={styles.endButtonText}>Disable Classroom</Text>
               )}
             </TouchableOpacity>
           )}
 
-          {!isTeacher && isActive && (
+          {!isTeacher && isEnabled && (
             <TouchableOpacity
               style={[
                 styles.leaveButton,
