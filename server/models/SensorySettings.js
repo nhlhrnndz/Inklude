@@ -10,22 +10,31 @@ async function getSensorySettings(userId) {
 
 async function upsertSensorySettings(
   userId,
-  { mutedColors, noAnimations, noSounds, simplifiedIcons },
+  {
+    mutedColors,
+    noAnimations,
+    noSounds,
+    simplifiedIcons,
+    whatsNextReminders = true,
+  },
 ) {
   await pool.query(
-    `INSERT INTO sensory_settings (user_id, muted_colors, no_animations, no_sounds, simplified_icons)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO sensory_settings
+       (user_id, muted_colors, no_animations, no_sounds, simplified_icons, whats_next_reminders)
+     VALUES (?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
        muted_colors = VALUES(muted_colors),
        no_animations = VALUES(no_animations),
        no_sounds = VALUES(no_sounds),
-       simplified_icons = VALUES(simplified_icons)`,
+       simplified_icons = VALUES(simplified_icons),
+       whats_next_reminders = VALUES(whats_next_reminders)`,
     [
       userId,
       mutedColors ? 1 : 0,
       noAnimations ? 1 : 0,
       noSounds ? 1 : 0,
       simplifiedIcons ? 1 : 0,
+      whatsNextReminders ? 1 : 0,
     ],
   );
   return getSensorySettings(userId);

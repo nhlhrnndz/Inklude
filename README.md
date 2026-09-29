@@ -10,7 +10,9 @@ IncluEd
 │  │  ├─ announcements.tsx
 │  │  ├─ basic-info.tsx
 │  │  ├─ change-password.tsx
+│  │  ├─ checkins.tsx
 │  │  ├─ create-session.tsx
+│  │  ├─ documents.tsx
 │  │  ├─ edit-profile.tsx
 │  │  ├─ explore.tsx
 │  │  ├─ guidance
@@ -27,6 +29,8 @@ IncluEd
 │  │  ├─ notifications.tsx
 │  │  ├─ profile.tsx
 │  │  ├─ quick-talk.tsx
+│  │  ├─ schedule.tsx
+│  │  ├─ settings.tsx
 │  │  ├─ sis.tsx
 │  │  ├─ student.tsx
 │  │  ├─ teacher.tsx
@@ -36,12 +40,15 @@ IncluEd
 │  ├─ index.tsx.bak
 │  ├─ login.tsx
 │  ├─ modal.tsx
+│  ├─ reader
+│  │  └─ [docId].tsx
 │  ├─ register.tsx
 │  ├─ role-select.tsx
 │  ├─ session
 │  │  └─ [id]
 │  │     ├─ index.tsx
-│  │     └─ live.tsx
+│  │     ├─ live.tsx
+│  │     └─ summary.tsx
 │  ├─ viewboard
 │  │  └─ [id].tsx
 │  └─ _layout.tsx
@@ -75,6 +82,8 @@ IncluEd
 │  │  ├─ AuthInput.tsx
 │  │  ├─ PasswordInput.tsx
 │  │  └─ PrimaryButton.tsx
+│  ├─ BreakButton.tsx
+│  ├─ ClassPulse.tsx
 │  ├─ common
 │  │  ├─ ScreenContainer.tsx
 │  │  └─ ToastConfig.tsx
@@ -86,17 +95,23 @@ IncluEd
 │  ├─ notifications
 │  │  └─ NotificationBell.tsx
 │  ├─ parallax-scroll-view.tsx
+│  ├─ SensorySettingsSection.tsx
+│  ├─ SensorySync.tsx
+│  ├─ SessionDocuments.tsx
 │  ├─ SessionRoster.tsx
 │  ├─ themed-text.tsx
 │  ├─ themed-view.tsx
-│  └─ ui
-│     ├─ collapsible.tsx
-│     ├─ icon-symbol.ios.tsx
-│     └─ icon-symbol.tsx
+│  ├─ ui
+│  │  ├─ collapsible.tsx
+│  │  ├─ icon-symbol.ios.tsx
+│  │  └─ icon-symbol.tsx
+│  └─ WhatsActiveBanner.tsx
 ├─ constants
 │  ├─ config.ts
 │  ├─ courses.ts
+│  ├─ featureInfo.ts
 │  ├─ featureMap.ts
+│  ├─ sensoryTheme.ts
 │  └─ theme.ts
 ├─ context
 │  ├─ AuthContext.tsx
@@ -110,6 +125,7 @@ IncluEd
 │  ├─ useAuth.ts
 │  ├─ useCaptionSession.ts
 │  ├─ useDashboardHome.ts
+│  ├─ useDocumentReader.ts
 │  ├─ useFeatures.ts
 │  ├─ useMicCaptioning.ts
 │  ├─ useQuickTalkListener.ts
@@ -127,10 +143,17 @@ IncluEd
 │  │  ├─ announcementController.js
 │  │  ├─ authController.js
 │  │  ├─ basicInfoController.js
+│  │  ├─ breakController.js
+│  │  ├─ checkinController.js
+│  │  ├─ classPulseController.js
+│  │  ├─ documentController.js
 │  │  ├─ guidanceController.js
 │  │  ├─ messageController.js
 │  │  ├─ notificationController.js
 │  │  ├─ profileController.js
+│  │  ├─ scheduleController.js
+│  │  ├─ sensoryController.js
+│  │  ├─ sensoryRoutes.js
 │  │  ├─ sessionController.js
 │  │  ├─ sisController.js
 │  │  ├─ transcribeController.js
@@ -141,6 +164,7 @@ IncluEd
 │  ├─ models
 │  │  ├─ announcementModel.js
 │  │  ├─ basicInfoModel.js
+│  │  ├─ breakModel.js
 │  │  ├─ Checkin.js
 │  │  ├─ ClassPulse.js
 │  │  ├─ Document.js
@@ -149,6 +173,7 @@ IncluEd
 │  │  ├─ MotorSettings.js
 │  │  ├─ notificationModel.js
 │  │  ├─ PeerShare.js
+│  │  ├─ PresenceTap.js
 │  │  ├─ profileModel.js
 │  │  ├─ ScheduleItem.js
 │  │  ├─ SensorySettings.js
@@ -161,16 +186,22 @@ IncluEd
 │  │  ├─ announcement.js
 │  │  ├─ auth.js
 │  │  ├─ basicInfo.js
+│  │  ├─ checkinRoutes.js
+│  │  ├─ classPulseRoutes.js
+│  │  ├─ documentRoutes.js
 │  │  ├─ guidance.js
 │  │  ├─ message.js
 │  │  ├─ notification.js
 │  │  ├─ profile.js
+│  │  ├─ scheduleRoutes.js
 │  │  ├─ session.js
 │  │  ├─ sis.js
 │  │  ├─ transcribe.js
 │  │  └─ transcript.js
 │  ├─ services
-│  │  └─ notificationService.js
+│  │  ├─ documentTextService.js
+│  │  ├─ notificationService.js
+│  │  └─ scheduleReminderService.js
 │  ├─ sockets
 │  │  ├─ captionSocket.js
 │  │  └─ notificationSocket.js
@@ -184,8 +215,14 @@ IncluEd
 ├─ tsconfig.json
 └─ utils
    ├─ api.ts
+   ├─ checkinApi.ts
    ├─ crossAlert.ts
+   ├─ documentApi.ts
+   ├─ liveApi.ts
+   ├─ scheduleApi.ts
+   ├─ sensoryApi.ts
    ├─ socket.ts
+   ├─ speakPrompt.ts
    ├─ stt.ts
    └─ validators
       └─ auth.ts

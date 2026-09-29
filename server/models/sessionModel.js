@@ -14,7 +14,6 @@ function generateSessionCode() {
 async function createSession(teacherId, title, description = "") {
   const code = generateSessionCode();
 
-  // Ensure code is unique (retry if collision)
   let unique = false;
   let attempts = 0;
   let finalCode = code;
@@ -97,19 +96,67 @@ async function getJoinedSessions(studentId) {
   return rows;
 }
 
-// End a session
+// Disable a classroom permanently
 async function endSession(sessionId, teacherId) {
-  console.log("endSession called with:", { sessionId, teacherId });
-
   const [result] = await pool.query(
     `UPDATE sessions 
      SET status = 'ended', ended_at = CURRENT_TIMESTAMP 
      WHERE id = ? AND teacher_id = ? AND status = 'active'`,
     [sessionId, teacherId],
   );
-
-  console.log("Update result:", result);
   return result.affectedRows > 0;
+}
+
+// Start a live captioning run — creates a fresh "live_runs" row, so each
+// run gets its own quiet-student list, check-ins, and class pulse answers.
+async function goLive(sessionId, teacherId) {
+  const session = await getSessionById(sessionId);
+  if (
+    !session ||
+    session.teacher_id !== teacherId ||
+    session.status !== "active"
+  ) {
+    return null;
+  }
+
+  const [result] = await pool.query(
+    "INSERT INTO live_runs (session_id, started_at) VALUES (?, CURRENT_TIMESTAMP)",
+    [sessionId],
+  );
+  const runId = result.insertId;
+
+  await pool.query(
+    "UPDATE sessions SET is_live = 1, current_live_run_id = ? WHERE id = ?",
+    [runId, sessionId],
+  );
+
+  return runId;
+}
+
+// End the current live run — the classroom stays open/reusable, but this
+// run is now closed and its pulse/check-in/presence data is locked in.
+async function endLive(sessionId, teacherId) {
+  const session = await getSessionById(sessionId);
+  if (
+    !session ||
+    session.teacher_id !== teacherId ||
+    session.status !== "active"
+  ) {
+    return false;
+  }
+  if (!session.current_live_run_id) return false;
+
+  await pool.query(
+    "UPDATE live_runs SET ended_at = CURRENT_TIMESTAMP WHERE id = ? AND ended_at IS NULL",
+    [session.current_live_run_id],
+  );
+
+  await pool.query(
+    "UPDATE sessions SET is_live = 0, live_ended_at = CURRENT_TIMESTAMP WHERE id = ?",
+    [sessionId],
+  );
+
+  return true;
 }
 
 // Add participant to session
@@ -123,7 +170,6 @@ async function addParticipant(sessionId, userId) {
     return true;
   } catch (error) {
     if (error.code === "ER_DUP_ENTRY") {
-      // User already exists - update left_at to NULL (rejoin)
       await pool.query(
         `UPDATE participants 
          SET left_at = NULL 
@@ -172,9 +218,7 @@ async function isParticipant(sessionId, userId) {
   return rows.length > 0;
 }
 
-// Get session participants (active ones only). Includes display_username
-// so the roster resolver can decide, per viewer role, whether to show
-// the real name or the student's chosen peer-facing username.
+// Get session participants (active ones only)
 async function getParticipants(sessionId) {
   const [rows] = await pool.query(
     `SELECT u.id, u.name, u.email, u.display_username, p.joined_at
@@ -199,11 +243,6 @@ async function leaveSession(sessionId, userId) {
 }
 
 // --- Phase 2.3 Week 1: Session Roster helpers ---
-//
-// Privacy rule (updated for 1.3): students see each other by chosen
-// username (falling back to "First L." if none set) — never full name
-// or email. Teachers and guidance always see the real full name,
-// regardless of what username a student has set, for accountability.
 
 const AVATAR_COLORS = [
   "#F94144",
@@ -234,8 +273,6 @@ function toInitials(name) {
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
-// Deterministic color from user id — same student always gets the same
-// avatar color across sessions, without storing anything extra in the DB.
 function avatarColorForId(userId) {
   const index = Number(userId) % AVATAR_COLORS.length;
   return AVATAR_COLORS[index >= 0 ? index : 0];
@@ -243,10 +280,8 @@ function avatarColorForId(userId) {
 
 const IDENTITY_VISIBLE_ROLES = new Set(["teacher", "guidance", "admin"]);
 
-// Decides what a given viewer role is allowed to see for one participant.
 function resolveDisplayInfo(participant, requestingRole) {
   if (IDENTITY_VISIBLE_ROLES.has(requestingRole)) {
-    // Teacher/guidance: always real name, never the username.
     return {
       displayName: participant.name,
       initials: toInitials(participant.name),
@@ -261,14 +296,12 @@ function resolveDisplayInfo(participant, requestingRole) {
     };
   }
 
-  // No username set — fall back to the original privacy-safe default.
   return {
     displayName: toDisplayName(participant.name),
     initials: toInitials(participant.name),
   };
 }
 
-// Role-aware roster for the session screen.
 async function getRosterForSession(sessionId, requestingRole) {
   const rows = await getParticipants(sessionId);
   return rows.map((p) => {
@@ -278,7 +311,7 @@ async function getRosterForSession(sessionId, requestingRole) {
       displayName,
       initials,
       avatarColor: avatarColorForId(p.id),
-      isHere: false, // presence is a live/ephemeral flag, not stored
+      isHere: false,
     };
   });
 }
@@ -290,6 +323,8 @@ module.exports = {
   getTeacherSessions,
   getJoinedSessions,
   endSession,
+  goLive,
+  endLive,
   addParticipant,
   isParticipant,
   getParticipants,

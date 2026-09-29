@@ -16,10 +16,28 @@ const VALID_DISABILITY_TYPES = [
   "Physical / Motor",
 ];
 
+// Only these preference keys are ever stored.
+const ALLOWED_PREFS = [
+  "liveCaptions",
+  "highContrast",
+  "dyslexiaFont",
+  "simplifiedUI",
+];
+
 // Letters, numbers, spaces, underscore, hyphen, period. 3–30 chars.
 // Kept simple on purpose — no uniqueness check yet (roadmap flagged
 // this as optional; skip for now to keep the flow one-tap-friendly).
 const USERNAME_PATTERN = /^[A-Za-z0-9 _.-]{3,30}$/;
+
+function formatProfile(profile) {
+  return {
+    id: profile.id,
+    userId: profile.user_id,
+    disabilityTypes: profile.disability_types,
+    accessibilityPreferences: profile.accessibility_preferences,
+    displayUsername: profile.display_username || null,
+  };
+}
 
 // GET /api/profile
 async function getProfile(req, res) {
@@ -33,13 +51,7 @@ async function getProfile(req, res) {
         .json({ message: "No profile found for this user." });
     }
 
-    res.json({
-      id: profile.id,
-      userId: profile.user_id,
-      disabilityTypes: profile.disability_types,
-      accessibilityPreferences: profile.accessibility_preferences,
-      displayUsername: profile.display_username || null,
-    });
+    res.json(formatProfile(profile));
   } catch (err) {
     console.error("getProfile error:", err);
     res.status(500).json({ message: "Server error while fetching profile." });
@@ -53,6 +65,7 @@ async function saveProfile(req, res) {
     const { disabilityTypes, accessibilityPreferences } = req.body;
 
     if (!Array.isArray(disabilityTypes) || disabilityTypes.length === 0) {
+      console.log("saveProfile bad disabilityTypes:", disabilityTypes);
       return res
         .status(400)
         .json({ message: "Please select at least one disability category." });
@@ -69,28 +82,24 @@ async function saveProfile(req, res) {
 
     if (
       typeof accessibilityPreferences !== "object" ||
-      accessibilityPreferences === null
+      accessibilityPreferences === null ||
+      Array.isArray(accessibilityPreferences)
     ) {
       return res
         .status(400)
         .json({ message: "accessibilityPreferences must be an object." });
     }
 
-    const profile = await upsertProfile(
-      userId,
-      disabilityTypes,
-      accessibilityPreferences,
+    // Keep only known keys, force them to true/false.
+    const cleanPrefs = Object.fromEntries(
+      ALLOWED_PREFS.map((k) => [k, !!accessibilityPreferences[k]]),
     );
+
+    const profile = await upsertProfile(userId, disabilityTypes, cleanPrefs);
 
     res.json({
       message: "Profile saved successfully.",
-      profile: {
-        id: profile.id,
-        userId: profile.user_id,
-        disabilityTypes: profile.disability_types,
-        accessibilityPreferences: profile.accessibility_preferences,
-        displayUsername: profile.display_username || null,
-      },
+      profile: formatProfile(profile),
     });
   } catch (err) {
     console.error("saveProfile error:", err);

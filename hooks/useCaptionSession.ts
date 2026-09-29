@@ -18,7 +18,11 @@ export function useCaptionSession(
   const [captions, setCaptions] = useState<Caption[]>([]);
   const [connected, setConnected] = useState(false);
   const [denied, setDenied] = useState<string | null>(null);
+  // Live captioning is currently stopped (either paused by "End Session",
+  // or the classroom was disabled — see classroomDisabled below).
   const [sessionEnded, setSessionEnded] = useState(false);
+  // The classroom itself was disabled — this is terminal, no resuming.
+  const [classroomDisabled, setClassroomDisabled] = useState(false);
   const socketRef = useRef(getSocket());
 
   useEffect(() => {
@@ -59,8 +63,21 @@ export function useCaptionSession(
       setDenied(message || "Could not join the Viewboard.");
     }
 
-    function handleSessionEnded() {
+    // Live captioning stopped for this run — the classroom may still
+    // be reused (teacher can go live again).
+    function handleLiveEnded() {
       setSessionEnded(true);
+    }
+
+    // Teacher went live again in the same classroom.
+    function handleLiveStarted() {
+      setSessionEnded(false);
+    }
+
+    // Classroom permanently disabled — terminal, no resuming.
+    function handleClassroomDisabled() {
+      setSessionEnded(true);
+      setClassroomDisabled(true);
     }
 
     if (socket.connected) {
@@ -71,7 +88,9 @@ export function useCaptionSession(
     socket.on("disconnect", handleDisconnect);
     socket.on("new-caption", handleNewCaption);
     socket.on("viewboard-denied", handleDenied);
-    socket.on("session-ended", handleSessionEnded);
+    socket.on("live-ended", handleLiveEnded);
+    socket.on("live-started", handleLiveStarted);
+    socket.on("session-ended", handleClassroomDisabled);
 
     return () => {
       cancelled = true;
@@ -80,7 +99,9 @@ export function useCaptionSession(
       socket.off("disconnect", handleDisconnect);
       socket.off("new-caption", handleNewCaption);
       socket.off("viewboard-denied", handleDenied);
-      socket.off("session-ended", handleSessionEnded);
+      socket.off("live-ended", handleLiveEnded);
+      socket.off("live-started", handleLiveStarted);
+      socket.off("session-ended", handleClassroomDisabled);
     };
   }, [sessionId, userId, role]);
 
@@ -104,6 +125,7 @@ export function useCaptionSession(
     connected,
     denied,
     sessionEnded,
+    classroomDisabled,
     sendCaption,
     clearCaptions,
   };

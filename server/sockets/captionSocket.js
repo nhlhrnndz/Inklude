@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 const { saveTranscript } = require("../models/transcriptModel");
 const { getSessionById } = require("../models/sessionModel");
+const { recordTap } = require("../models/PresenceTap");
 
 // Phase 2.3 Week 1: rate-limit "I'm here" taps per (session, user) so one
 // student can't spam presence pings. Keyed in-memory — resets on server
@@ -77,9 +78,10 @@ function initCaptionSocket(io) {
       }
     });
 
-    // Phase 2.3 Week 1: "I'm here" presence tap. Lightweight, no chat,
-    // no persistence — just a momentary broadcast to the room so
-    // classmates see a pulse near that student's avatar.
+    // Phase 2.3 Week 1: "I'm here" presence tap. Lightweight, no chat —
+    // a momentary broadcast to the room so classmates see a pulse near
+    // that student's avatar. Phase 2.3 Week 3: the tap is also saved so
+    // the teacher's post-session summary can tell who stayed quiet.
     socket.on("presence-here", ({ sessionId, userId, initials }) => {
       if (!sessionId || !userId) return;
 
@@ -96,6 +98,13 @@ function initCaptionSocket(io) {
         return;
       }
       lastPresenceTapAt.set(key, now);
+
+      // Persist for quiet-student detection (students only)
+      if (socket.data.role === "student") {
+        recordTap(sessionId, userId).catch((err) =>
+          console.error("❌ Failed to save presence tap:", err.message),
+        );
+      }
 
       const room = `session-${sessionId}`;
       io.to(room).emit("presence-update", {

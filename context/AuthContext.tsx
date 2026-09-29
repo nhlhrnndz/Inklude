@@ -1,7 +1,7 @@
 //AuthContext.tsx
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useState } from "react";
-import api from "../utils/api";
+import api, { clearCachedToken, setCachedToken } from "../utils/api";
 
 type User = {
   id: number;
@@ -80,6 +80,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const storedProfile = await AsyncStorage.getItem(PROFILE_STORAGE_KEY);
 
         if (storedToken && storedUser) {
+          setCachedToken(storedToken);
           setToken(storedToken);
           setUser(JSON.parse(storedUser));
         }
@@ -123,6 +124,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const login = async (email: string, password: string) => {
     const res = await api.post("/api/auth/login", { email, password });
     const { token, user } = res.data;
+    setCachedToken(token);
     setToken(token);
     setUser(user);
     await AsyncStorage.setItem("token", token);
@@ -145,6 +147,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } catch (err) {
       console.error("Failed to clear stored auth:", err);
     } finally {
+      clearCachedToken();
       // Clearing user/token here is all this function needs to do.
       // RootLayoutNav watches `user` and redirects to index/login
       // automatically once it flips to null — see _layout.tsx.

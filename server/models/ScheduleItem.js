@@ -46,10 +46,11 @@ async function getWeekForUser(userId) {
 }
 
 async function deleteScheduleItem(id, userId) {
-  await pool.query("DELETE FROM schedule_items WHERE id = ? AND user_id = ?", [
-    id,
-    userId,
-  ]);
+  const [result] = await pool.query(
+    "DELETE FROM schedule_items WHERE id = ? AND user_id = ?",
+    [id, userId],
+  );
+  return result.affectedRows > 0;
 }
 
 module.exports = {

@@ -7,6 +7,8 @@ const {
   getSessionByIdController,
   getSessionRoster,
   joinSessionByCode,
+  goLiveController,
+  endLiveController,
   endSessionController,
   leaveSessionController,
   downloadSessionReport,
@@ -18,6 +20,8 @@ router.get("/", verifyToken, getMySessions);
 router.get("/:id", verifyToken, getSessionByIdController);
 router.get("/:id/participants", verifyToken, getSessionRoster);
 router.get("/:id/report", verifyToken, downloadSessionReport);
+router.post("/:id/go-live", verifyToken, goLiveController);
+router.post("/:id/end-live", verifyToken, endLiveController);
 router.delete("/:id", verifyToken, endSessionController);
 
 // Student routes

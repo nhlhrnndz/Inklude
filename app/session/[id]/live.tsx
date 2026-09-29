@@ -1,7 +1,8 @@
-//live.tsx
+// app/session/[id]/live.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import * as Speech from "expo-speech";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -12,14 +13,19 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Toast from "react-native-toast-message";
 
+import BreakButton from "../../../components/BreakButton";
+import ClassPulse from "../../../components/ClassPulse";
 import SessionRoster from "../../../components/SessionRoster";
 import { useAuth } from "../../../context/AuthContext";
 import { useTheme } from "../../../context/ThemeContext";
 import { useCaptionSession } from "../../../hooks/useCaptionSession";
+import { useFeatures } from "../../../hooks/useFeatures";
 import { useMicCaptioning } from "../../../hooks/useMicCaptioning";
 import { downloadSessionReport, getSessionDetails } from "../../../utils/api";
 import { crossAlert } from "../../../utils/crossAlert";
+import { endLiveSession, goLiveSession } from "../../../utils/liveApi";
 import { getSocket } from "../../../utils/socket";
 
 interface Session {
@@ -27,7 +33,20 @@ interface Session {
   code: string;
   title: string;
   status: "active" | "ended";
+  isLive: boolean;
   participants: { id: number }[];
+}
+
+// Speaks a short prompt only if the student has opted into voice
+// navigation prompts. Failures (e.g. TTS unavailable) are swallowed —
+// this is a nice-to-have, never something that should crash the screen.
+function speakPrompt(enabled: boolean, text: string) {
+  if (!enabled) return;
+  try {
+    Speech.speak(text);
+  } catch (err) {
+    console.warn("voice navigation prompt failed:", err);
+  }
 }
 
 export default function LiveCaptioningScreen() {
@@ -35,19 +54,53 @@ export default function LiveCaptioningScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const { colors, typography, spacing, radius } = useTheme();
+  const { hasFeature } = useFeatures();
 
   const isTeacher = user?.role === "teacher";
+
+  // Phase 2.3 Week 4 — Profile-Driven Adaptive UI
+  const wantsLargeText = hasFeature("large_text");
+  const wantsHighContrast = hasFeature("high_contrast");
+  const wantsLargeTouchTargets = hasFeature("large_touch_targets");
+  const wantsVoicePrompts = hasFeature("voice_navigation_prompts");
+
+  const captionFontSize = wantsLargeText ? 30 : 22;
+  const captionLineHeight = wantsLargeText ? 40 : 30;
+  const buttonPaddingVertical = wantsLargeTouchTargets
+    ? spacing.lg
+    : spacing.md;
+  const buttonMinHeight = wantsLargeTouchTargets ? 64 : undefined;
+  const buttonFontSize = wantsLargeTouchTargets ? 17 : 14;
+
+  const captionAreaBg = wantsHighContrast ? "#000000" : colors.background;
+  const captionTextColor = wantsHighContrast ? "#FFFFFF" : colors.text;
+  const captionPlaceholderColor = wantsHighContrast
+    ? "#CCCCCC"
+    : colors.textSecondary;
 
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [viewboardConnected, setViewboardConnected] = useState(false);
+  const [endingLive, setEndingLive] = useState(false);
+  const [resumingLive, setResumingLive] = useState(false);
+  const [startingLive, setStartingLive] = useState(false);
   const [downloadingReport, setDownloadingReport] = useState(false);
 
-  const { captions, connected, sessionEnded, sendCaption } = useCaptionSession(
-    id,
-    user?.id,
-    isTeacher ? "teacher" : "student",
-  );
+  // Whether a live run is currently open on the server for this classroom.
+  // A ref mirrors the state so button handlers always read the latest value.
+  const [isLive, setIsLive] = useState(false);
+  const isLiveRef = useRef(false);
+  const updateIsLive = (value: boolean) => {
+    isLiveRef.current = value;
+    setIsLive(value);
+  };
+
+  // Track sessionEnded transitions so the "Class ended" voice prompt
+  // only fires once, right when it happens — not on every re-render.
+  const prevSessionEnded = useRef(false);
+
+  const { captions, connected, sessionEnded, classroomDisabled, sendCaption } =
+    useCaptionSession(id, user?.id, isTeacher ? "teacher" : "student");
 
   const {
     isRecording,
@@ -61,6 +114,7 @@ export default function LiveCaptioningScreen() {
       try {
         const data = await getSessionDetails(Number(id));
         setSession(data.session);
+        updateIsLive(!!data.session?.isLive);
       } catch (error) {
         console.error("Error loading classroom:", error);
         crossAlert("Error", "Failed to load classroom details");
@@ -83,6 +137,19 @@ export default function LiveCaptioningScreen() {
     };
   }, [isTeacher]);
 
+  // Voice prompt when the session transitions into "ended"
+  useEffect(() => {
+    if (sessionEnded && !prevSessionEnded.current) {
+      speakPrompt(
+        wantsVoicePrompts,
+        classroomDisabled
+          ? "This classroom has been disabled."
+          : "Class ended.",
+      );
+    }
+    prevSessionEnded.current = sessionEnded;
+  }, [sessionEnded, classroomDisabled, wantsVoicePrompts]);
+
   const goBackToClassroom = () => {
     if (router.canGoBack()) {
       router.back();
@@ -96,6 +163,100 @@ export default function LiveCaptioningScreen() {
       window.open(`/viewboard/${id}`, "_blank");
     } else {
       router.push(`/viewboard/${id}` as any);
+    }
+  };
+
+  // Makes sure a live run exists on the server. Creates one (go-live) if
+  // the classroom isn't live yet. Returns true when a live run is open.
+  const ensureLive = async (): Promise<boolean> => {
+    if (isLiveRef.current) return true;
+    try {
+      await goLiveSession(Number(id));
+      updateIsLive(true);
+      return true;
+    } catch (error: any) {
+      Toast.show({
+        type: "error",
+        text1: "Could not go live",
+        text2: error.response?.data?.message ?? "Please try again.",
+      });
+      return false;
+    }
+  };
+
+  const handleMicToggle = async () => {
+    if (isRecording) {
+      stopCaptioning();
+      speakPrompt(wantsVoicePrompts, "Live captioning stopped.");
+      return;
+    }
+
+    if (startingLive) return;
+    setStartingLive(true);
+    try {
+      // Start a fresh live run first (if needed), then the mic.
+      const ok = await ensureLive();
+      if (!ok) return;
+      startCaptioning();
+      speakPrompt(wantsVoicePrompts, "Starting live captioning.");
+    } finally {
+      setStartingLive(false);
+    }
+  };
+
+  const handleEndLive = () => {
+    if (!isLiveRef.current) {
+      Toast.show({
+        type: "info",
+        text1: "Not live yet",
+        text2: "Tap Start Live Captioning first, then end the session.",
+      });
+      return;
+    }
+
+    crossAlert(
+      "End Session?",
+      "This stops captioning for now. Students will see the wrap-up card. You can go live again in this same classroom later.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "End Session",
+          style: "destructive",
+          onPress: async () => {
+            setEndingLive(true);
+            try {
+              if (isRecording) stopCaptioning();
+              await endLiveSession(Number(id));
+              updateIsLive(false);
+            } catch (error: any) {
+              Toast.show({
+                type: "error",
+                text1: "Could not end the session",
+                text2: error.response?.data?.message ?? "Please try again.",
+              });
+            } finally {
+              setEndingLive(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleResumeLive = async () => {
+    setResumingLive(true);
+    speakPrompt(wantsVoicePrompts, "Resuming live captioning.");
+    try {
+      await goLiveSession(Number(id));
+      updateIsLive(true);
+    } catch (error: any) {
+      Toast.show({
+        type: "error",
+        text1: "Could not resume",
+        text2: error.response?.data?.message ?? "Please try again.",
+      });
+    } finally {
+      setResumingLive(false);
     }
   };
 
@@ -192,8 +353,8 @@ export default function LiveCaptioningScreen() {
         {session?.title ?? "Live Captions"}
       </Text>
 
-      {/* Session Roster — replaces the old "X joined" count with actual
-          faces (initials) in the room, per Phase 2.3 Week 1. */}
+      {/* Session Roster — hidden once captioning has fully stopped, since
+          there's nothing live to show a roster for. */}
       {!sessionEnded && (
         <View style={{ marginTop: spacing.sm }}>
           <SessionRoster sessionId={id} currentUserId={user?.id} />
@@ -201,7 +362,15 @@ export default function LiveCaptioningScreen() {
       )}
 
       {sessionEnded ? (
-        <View style={[styles.centered, { flex: 1 }]}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{
+            flexGrow: 1,
+            alignItems: "center",
+            justifyContent: "center",
+            padding: spacing.lg,
+          }}
+        >
           <Ionicons
             name="checkmark-circle-outline"
             size={48}
@@ -214,11 +383,85 @@ export default function LiveCaptioningScreen() {
               fontWeight: "700",
               color: colors.text,
               marginTop: spacing.md,
+              textAlign: "center",
             }}
           >
-            Class ended
+            {classroomDisabled
+              ? "This classroom has been disabled"
+              : "Class ended"}
           </Text>
 
+          {classroomDisabled && (
+            <Text
+              style={{
+                fontFamily: typography.body.fontFamily,
+                fontSize: typography.body.fontSize,
+                color: colors.textSecondary,
+                marginTop: spacing.sm,
+                textAlign: "center",
+              }}
+            >
+              The teacher closed this classroom. You'll need a new class code to
+              join another session.
+            </Text>
+          )}
+
+          {!classroomDisabled && isTeacher && (
+            <TouchableOpacity
+              onPress={handleResumeLive}
+              disabled={resumingLive}
+              accessibilityRole="button"
+              accessibilityLabel="Resume live captioning"
+              style={{
+                backgroundColor: colors.primary,
+                borderRadius: radius.md,
+                paddingVertical: spacing.md,
+                paddingHorizontal: spacing.xl,
+                marginTop: spacing.lg,
+                opacity: resumingLive ? 0.6 : 1,
+              }}
+            >
+              {resumingLive ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text
+                  style={{
+                    fontFamily: typography.body.fontFamily,
+                    fontWeight: "700",
+                    color: "#FFFFFF",
+                    fontSize: typography.body.fontSize,
+                  }}
+                >
+                  🎙 Resume Live Captioning
+                </Text>
+              )}
+            </TouchableOpacity>
+          )}
+
+          {!classroomDisabled && isTeacher && (
+            <TouchableOpacity
+              onPress={() => router.push(`/session/${id}/summary` as any)}
+              accessibilityRole="button"
+              accessibilityLabel="View session summary"
+              style={{
+                marginTop: spacing.md,
+                padding: spacing.sm,
+              }}
+            >
+              <Text
+                style={{
+                  fontFamily: typography.body.fontFamily,
+                  color: colors.primary,
+                  fontSize: typography.body.fontSize,
+                  fontWeight: "600",
+                }}
+              >
+                View Session Summary
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Download report — available to both teacher and student */}
           <TouchableOpacity
             style={[
               styles.downloadReportButton,
@@ -247,6 +490,12 @@ export default function LiveCaptioningScreen() {
             )}
           </TouchableOpacity>
 
+          {!isTeacher && !classroomDisabled && (
+            <View style={{ width: "100%", marginTop: spacing.lg }}>
+              <ClassPulse sessionId={id} />
+            </View>
+          )}
+
           <TouchableOpacity
             onPress={goBackToClassroom}
             style={{ marginTop: spacing.lg }}
@@ -263,7 +512,7 @@ export default function LiveCaptioningScreen() {
               Back to Classroom
             </Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       ) : (
         <>
           {isTeacher && (
@@ -276,20 +525,63 @@ export default function LiveCaptioningScreen() {
                   {
                     backgroundColor: isRecording ? "#e94560" : colors.primary,
                     borderRadius: radius.md,
-                    padding: spacing.md,
+                    padding: buttonPaddingVertical,
+                    minHeight: buttonMinHeight,
+                    opacity: startingLive ? 0.6 : 1,
                   },
                 ]}
-                onPress={isRecording ? stopCaptioning : startCaptioning}
+                onPress={handleMicToggle}
+                disabled={startingLive}
                 accessibilityRole="button"
                 accessibilityLabel={
                   isRecording ? "Stop Live Captioning" : "Start Live Captioning"
                 }
               >
-                <Text style={styles.micButtonText}>
-                  {isRecording
-                    ? "⏹ Stop Live Captioning"
-                    : "🎙 Start Live Captioning"}
-                </Text>
+                {startingLive ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text
+                    style={[
+                      styles.micButtonText,
+                      { fontSize: wantsLargeTouchTargets ? 17 : 14 },
+                    ]}
+                  >
+                    {isRecording
+                      ? "⏹ Stop Live Captioning"
+                      : "🎙 Start Live Captioning"}
+                  </Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.endSessionButton,
+                  {
+                    borderColor: "#e94560",
+                    borderRadius: radius.md,
+                    padding: wantsLargeTouchTargets ? spacing.md : spacing.sm,
+                    minHeight: wantsLargeTouchTargets ? 56 : undefined,
+                    marginTop: spacing.sm,
+                  },
+                ]}
+                onPress={handleEndLive}
+                disabled={endingLive}
+                accessibilityRole="button"
+                accessibilityLabel="End Session"
+              >
+                {endingLive ? (
+                  <ActivityIndicator color="#e94560" />
+                ) : (
+                  <Text
+                    style={{
+                      color: "#e94560",
+                      fontWeight: "700",
+                      fontSize: buttonFontSize,
+                    }}
+                  >
+                    ⏹ End Session
+                  </Text>
+                )}
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -298,7 +590,8 @@ export default function LiveCaptioningScreen() {
                   {
                     borderColor: colors.primary,
                     borderRadius: radius.md,
-                    padding: spacing.sm,
+                    padding: wantsLargeTouchTargets ? spacing.md : spacing.sm,
+                    minHeight: wantsLargeTouchTargets ? 56 : undefined,
                     marginTop: spacing.sm,
                   },
                 ]}
@@ -310,7 +603,7 @@ export default function LiveCaptioningScreen() {
                   style={{
                     color: colors.primary,
                     fontWeight: "700",
-                    fontSize: 13,
+                    fontSize: buttonFontSize,
                   }}
                 >
                   🖥️ Open Classroom Viewboard
@@ -332,9 +625,14 @@ export default function LiveCaptioningScreen() {
             </View>
           )}
 
-          {/* Captions — the dominant element on this screen */}
+          {!isTeacher && hasFeature("visual_schedule") && (
+            <BreakButton sessionId={id} />
+          )}
+
+          {/* Captions — the dominant element on this screen.
+              Size/contrast adapt to large_text / high_contrast preferences. */}
           <ScrollView
-            style={styles.captionScroll}
+            style={[styles.captionScroll, { backgroundColor: captionAreaBg }]}
             contentContainerStyle={{
               padding: spacing.lg,
               flexGrow: 1,
@@ -346,7 +644,7 @@ export default function LiveCaptioningScreen() {
                 style={{
                   fontFamily: typography.body.fontFamily,
                   fontSize: typography.title.fontSize,
-                  color: colors.textSecondary,
+                  color: captionPlaceholderColor,
                   textAlign: "center",
                   fontStyle: "italic",
                 }}
@@ -361,9 +659,9 @@ export default function LiveCaptioningScreen() {
                   key={i}
                   style={{
                     fontFamily: typography.body.fontFamily,
-                    fontSize: 22,
-                    lineHeight: 30,
-                    color: colors.text,
+                    fontSize: captionFontSize,
+                    lineHeight: captionLineHeight,
+                    color: captionTextColor,
                     marginBottom: spacing.md,
                   }}
                 >
@@ -390,9 +688,18 @@ const styles = StyleSheet.create({
   topBarRight: { flexDirection: "row", alignItems: "center", gap: 12 },
   metaChip: { flexDirection: "row", alignItems: "center" },
   socketDot: { width: 8, height: 8, borderRadius: 4 },
-  micButton: { alignItems: "center" },
-  micButtonText: { color: "#fff", fontSize: 14, fontWeight: "bold" },
-  viewboardButton: { alignItems: "center", borderWidth: 1 },
+  micButton: { alignItems: "center", justifyContent: "center" },
+  micButtonText: { color: "#fff", fontWeight: "bold" },
+  endSessionButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  viewboardButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
   captionScroll: { flex: 1 },
   downloadReportButton: {
     flexDirection: "row",

@@ -6,6 +6,8 @@ const {
   getTeacherSessions,
   getJoinedSessions,
   endSession,
+  goLive,
+  endLive,
   addParticipant,
   isParticipant,
   getParticipants,
@@ -18,7 +20,6 @@ const { getTranscriptsBySession } = require("../models/transcriptModel");
 const { generateSessionReport } = require("../utils/generateSessionReport");
 const { getIO } = require("../utils/ioRegistry");
 
-// POST /api/sessions - Create a new session (Teacher only)
 async function createSessionController(req, res) {
   try {
     const userId = req.user.id;
@@ -60,7 +61,6 @@ async function createSessionController(req, res) {
   }
 }
 
-// GET /api/sessions - Get all sessions for the logged-in user (teacher or student)
 async function getMySessions(req, res) {
   try {
     const userId = req.user.id;
@@ -82,6 +82,7 @@ async function getMySessions(req, res) {
         title: s.title,
         description: s.description,
         status: s.status,
+        isLive: !!s.is_live,
         createdAt: s.created_at,
         endedAt: s.ended_at,
         participantCount: s.participant_count || 0,
@@ -93,7 +94,6 @@ async function getMySessions(req, res) {
   }
 }
 
-// GET /api/sessions/:id - Get session details by ID
 async function getSessionByIdController(req, res) {
   try {
     const userId = req.user.id;
@@ -130,6 +130,9 @@ async function getSessionByIdController(req, res) {
         title: session.title,
         description: session.description,
         status: session.status,
+        isLive: !!session.is_live,
+        liveEndedAt: session.live_ended_at,
+        currentLiveRunId: session.current_live_run_id,
         createdAt: session.created_at,
         endedAt: session.ended_at,
         participants,
@@ -141,13 +144,6 @@ async function getSessionByIdController(req, res) {
   }
 }
 
-// GET /api/sessions/:id/participants - Privacy-safe roster for the
-// session screen (id, displayName, initials, avatarColor only).
-// Same access rules as getSessionByIdController: teacher who owns the
-// session, or a student who has joined it.
-// GET /api/sessions/:id/participants - Role-aware roster for the
-// session screen (students see usernames/initials only; teachers and
-// guidance always see real names).
 async function getSessionRoster(req, res) {
   try {
     const userId = req.user.id;
@@ -221,9 +217,7 @@ async function downloadSessionReport(req, res) {
     generateSessionReport(res, { session, participants, transcripts });
   } catch (err) {
     console.error("downloadSessionReport error:", err);
-    res
-      .status(500)
-      .json({ message: "Server error while generating report." });
+    res.status(500).json({ message: "Server error while generating report." });
   }
 }
 
@@ -243,9 +237,9 @@ async function joinSessionByCode(req, res) {
     const session = await getSessionByCode(code);
 
     if (!session) {
-      return res
-        .status(404)
-        .json({ message: "Invalid session code or session has ended." });
+      return res.status(404).json({
+        message: "Invalid session code or the classroom has been disabled.",
+      });
     }
 
     await addParticipant(session.id, userId);
@@ -261,6 +255,7 @@ async function joinSessionByCode(req, res) {
         description: session.description,
         teacherName: session.teacher_name,
         status: session.status,
+        isLive: !!session.is_live,
         participants,
       },
     });
@@ -270,7 +265,72 @@ async function joinSessionByCode(req, res) {
   }
 }
 
-// DELETE /api/sessions/:id - End a session (Teacher only)
+async function goLiveController(req, res) {
+  try {
+    const userId = req.user.id;
+
+    if (req.user.role !== "teacher") {
+      return res.status(403).json({ message: "Only teachers can go live." });
+    }
+
+    const sessionId = req.params.id;
+    const runId = await goLive(sessionId, userId);
+
+    if (!runId) {
+      return res
+        .status(400)
+        .json({ message: "This classroom is not available to go live in." });
+    }
+
+    const io = getIO();
+    if (io) {
+      io.to(`session-${sessionId}`).emit("live-started", {
+        sessionId: Number(sessionId),
+      });
+    }
+
+    res.json({ message: "You're live." });
+  } catch (err) {
+    console.error("goLiveController error:", err);
+    res.status(500).json({ message: "Server error while going live." });
+  }
+}
+
+async function endLiveController(req, res) {
+  try {
+    const userId = req.user.id;
+
+    if (req.user.role !== "teacher") {
+      return res
+        .status(403)
+        .json({ message: "Only teachers can end the live session." });
+    }
+
+    const sessionId = req.params.id;
+    const ok = await endLive(sessionId, userId);
+
+    if (!ok) {
+      return res
+        .status(400)
+        .json({ message: "There is no live session to end right now." });
+    }
+
+    const io = getIO();
+    if (io) {
+      io.to(`session-${sessionId}`).emit("live-ended", {
+        sessionId: Number(sessionId),
+      });
+    }
+
+    res.json({ message: "Live session ended." });
+  } catch (err) {
+    console.error("endLiveController error:", err);
+    res
+      .status(500)
+      .json({ message: "Server error while ending the live session." });
+  }
+}
+
 async function endSessionController(req, res) {
   try {
     const userId = req.user.id;
@@ -287,28 +347,36 @@ async function endSessionController(req, res) {
     }
 
     if (session.status === "ended") {
-      return res.status(400).json({ message: "Session is already ended." });
+      return res
+        .status(400)
+        .json({ message: "This classroom is already disabled." });
+    }
+
+    if (session.is_live) {
+      await endLive(sessionId, userId);
     }
 
     await endSession(sessionId, userId);
 
-    // Let anyone in the room — students and the Classroom Viewboard —
-    // know the session is over, in real time.
     const io = getIO();
     if (io) {
+      io.to(`session-${sessionId}`).emit("live-ended", {
+        sessionId: Number(sessionId),
+      });
       io.to(`session-${sessionId}`).emit("session-ended", {
         sessionId: Number(sessionId),
       });
     }
 
-    res.json({ message: "Session ended successfully." });
+    res.json({ message: "Classroom disabled successfully." });
   } catch (err) {
     console.error("endSessionController error:", err);
-    res.status(500).json({ message: "Server error while ending session." });
+    res
+      .status(500)
+      .json({ message: "Server error while disabling the classroom." });
   }
 }
 
-// POST /api/sessions/:id/leave - Leave a session (Student only)
 async function leaveSessionController(req, res) {
   try {
     const userId = req.user.id;
@@ -348,6 +416,8 @@ module.exports = {
   getSessionByIdController,
   getSessionRoster,
   joinSessionByCode,
+  goLiveController,
+  endLiveController,
   endSessionController,
   leaveSessionController,
   downloadSessionReport,

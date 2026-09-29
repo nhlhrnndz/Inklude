@@ -5,6 +5,7 @@ import Toast from "react-native-toast-message";
 
 import Sidebar, { UserRole } from "../../components/navigation/Sidebar";
 import NotificationBell from "../../components/notifications/NotificationBell";
+import SensorySync from "../../components/SensorySync";
 import { useAuth } from "../../context/AuthContext";
 import { NotificationProvider } from "../../context/NotificationContext";
 import { useTheme } from "../../context/ThemeContext";
@@ -23,7 +24,7 @@ const ROUTES_BY_ROLE: Record<UserRole, RouteMap> = {
     notifications: "/notifications",
     guidance: "/messages",
     profile: "/profile",
-    settings: null,
+    settings: "/settings",
     accessibility: "/accessibility",
     sis: "/sis",
   },
@@ -115,6 +116,7 @@ export default function AppDrawerLayout() {
 
   return (
     <NotificationProvider>
+      <SensorySync />
       <Drawer
         drawerContent={(props) => <SidebarDrawerContent {...props} />}
         screenOptions={{

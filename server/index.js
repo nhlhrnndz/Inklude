@@ -22,6 +22,15 @@ const { setIO } = require("./services/notificationService");
 const { setIO: setIOForSockets } = require("./utils/ioRegistry"); // ⬅️ Viewboard: lets sessionController emit session-ended
 const sisRoutes = require("./routes/sis");
 const basicInfoRoutes = require("./routes/basicInfo");
+const checkinRoutes = require("./routes/checkinRoutes"); // ⬅️ Phase 2.3 Week 3
+const classPulseRoutes = require("./routes/classPulseRoutes"); // ⬅️ Phase 2.3 Week 3
+const scheduleRoutes = require("./routes/scheduleRoutes"); // ⬅️ Phase 2.3 Week 7
+const sensoryRoutes = require("./routes/sensoryRoutes"); // ⬅️ Phase 2.3 Week 7
+const breakRoutes = require("./routes/breakRoutes"); // ⬅️ Phase 2.3 Week 7
+const documentRoutes = require("./routes/documentRoutes"); // ⬅️ Phase 2.3 Week 5
+const {
+  startScheduleReminders,
+} = require("./services/scheduleReminderService"); // ⬅️ Phase 2.3 Week 7
 
 // Phase 2.3 Week 0 models — required here so startup fails fast if any
 // of them have a syntax error, even before their routes/controllers exist.
@@ -32,6 +41,7 @@ require("./models/Document");
 require("./models/ScheduleItem");
 require("./models/SensorySettings");
 require("./models/MotorSettings");
+require("./models/PresenceTap");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -50,6 +60,12 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/announcements", announcementRoutes);
 app.use("/api/sis", sisRoutes);
 app.use("/api/basic-info", basicInfoRoutes);
+app.use("/api/checkins", checkinRoutes);
+app.use("/api/class-pulse", classPulseRoutes);
+app.use("/api/schedule", scheduleRoutes);
+app.use("/api/sensory", sensoryRoutes);
+app.use("/api/breaks", breakRoutes);
+app.use("/api/documents", documentRoutes);
 
 app.get("/", (req, res) => {
   res.json({ message: "IncluEd Backend is running ✅" });
@@ -82,4 +98,5 @@ setIOForSockets(io); // ⬅️ Viewboard
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 IncluEd server + Socket.IO running on port ${PORT}`);
+  startScheduleReminders(); // ⬅️ Week 7: "What's Next" reminders
 });
