@@ -182,6 +182,33 @@ async function addParticipant(sessionId, userId) {
   }
 }
 
+// Get ALL participants who ever joined this session, including ones who
+// later left — used for reports, since someone who left mid-class still
+// attended and should appear in the record.
+async function getAllParticipantsForReport(sessionId) {
+  const [rows] = await pool.query(
+    `SELECT u.id, u.name, u.email, p.joined_at, p.left_at
+     FROM participants p
+     JOIN users u ON p.user_id = u.id
+     WHERE p.session_id = ?
+     ORDER BY p.joined_at ASC`,
+    [sessionId],
+  );
+  return rows;
+}
+
+// Was this user ever in the session (active OR already left)? Used to
+// gate report access — unlike isParticipant(), this doesn't require
+// left_at IS NULL, since a student shouldn't lose access to the report
+// just because they left before class ended.
+async function wasParticipant(sessionId, userId) {
+  const [rows] = await pool.query(
+    "SELECT id FROM participants WHERE session_id = ? AND user_id = ?",
+    [sessionId, userId],
+  );
+  return rows.length > 0;
+}
+
 // Check if user is in session
 async function isParticipant(sessionId, userId) {
   const [rows] = await pool.query(
@@ -301,6 +328,8 @@ module.exports = {
   addParticipant,
   isParticipant,
   getParticipants,
+  getAllParticipantsForReport,
+  wasParticipant,
   leaveSession,
   getRosterForSession,
 };

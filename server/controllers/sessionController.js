@@ -11,9 +11,13 @@ const {
   addParticipant,
   isParticipant,
   getParticipants,
+  getAllParticipantsForReport,
+  wasParticipant,
   leaveSession,
   getRosterForSession,
 } = require("../models/sessionModel");
+const { getTranscriptsBySession } = require("../models/transcriptModel");
+const { generateSessionReport } = require("../utils/generateSessionReport");
 const { getIO } = require("../utils/ioRegistry");
 
 async function createSessionController(req, res) {
@@ -176,6 +180,48 @@ async function getSessionRoster(req, res) {
   }
 }
 
+// GET /api/sessions/:id/report - Download a PDF report of the session
+// (teacher who owns it, or any student who was ever a participant)
+async function downloadSessionReport(req, res) {
+  try {
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    const sessionId = req.params.id;
+
+    const session = await getSessionById(sessionId);
+
+    if (!session) {
+      return res.status(404).json({ message: "Session not found." });
+    }
+
+    if (userRole === "teacher") {
+      if (session.teacher_id !== userId) {
+        return res.status(403).json({ message: "Access denied." });
+      }
+    } else if (userRole === "student") {
+      const wasInSession = await wasParticipant(sessionId, userId);
+      if (!wasInSession) {
+        return res
+          .status(403)
+          .json({ message: "You were not part of this session." });
+      }
+    } else {
+      return res.status(403).json({ message: "Access denied." });
+    }
+
+    const [participants, transcripts] = await Promise.all([
+      getAllParticipantsForReport(sessionId),
+      getTranscriptsBySession(sessionId),
+    ]);
+
+    generateSessionReport(res, { session, participants, transcripts });
+  } catch (err) {
+    console.error("downloadSessionReport error:", err);
+    res.status(500).json({ message: "Server error while generating report." });
+  }
+}
+
+// GET /api/sessions/join/:code - Join a session by code (Student only)
 async function joinSessionByCode(req, res) {
   try {
     const userId = req.user.id;
@@ -191,11 +237,9 @@ async function joinSessionByCode(req, res) {
     const session = await getSessionByCode(code);
 
     if (!session) {
-      return res
-        .status(404)
-        .json({
-          message: "Invalid session code or the classroom has been disabled.",
-        });
+      return res.status(404).json({
+        message: "Invalid session code or the classroom has been disabled.",
+      });
     }
 
     await addParticipant(session.id, userId);
@@ -376,4 +420,5 @@ module.exports = {
   endLiveController,
   endSessionController,
   leaveSessionController,
+  downloadSessionReport,
 };

@@ -23,7 +23,7 @@ import { useTheme } from "../../../context/ThemeContext";
 import { useCaptionSession } from "../../../hooks/useCaptionSession";
 import { useFeatures } from "../../../hooks/useFeatures";
 import { useMicCaptioning } from "../../../hooks/useMicCaptioning";
-import { getSessionDetails } from "../../../utils/api";
+import { downloadSessionReport, getSessionDetails } from "../../../utils/api";
 import { crossAlert } from "../../../utils/crossAlert";
 import { endLiveSession, goLiveSession } from "../../../utils/liveApi";
 import { getSocket } from "../../../utils/socket";
@@ -84,6 +84,7 @@ export default function LiveCaptioningScreen() {
   const [endingLive, setEndingLive] = useState(false);
   const [resumingLive, setResumingLive] = useState(false);
   const [startingLive, setStartingLive] = useState(false);
+  const [downloadingReport, setDownloadingReport] = useState(false);
 
   // Whether a live run is currently open on the server for this classroom.
   // A ref mirrors the state so button handlers always read the latest value.
@@ -256,6 +257,22 @@ export default function LiveCaptioningScreen() {
       });
     } finally {
       setResumingLive(false);
+    }
+  };
+
+  const handleDownloadReport = async () => {
+    if (downloadingReport || !session) return;
+    setDownloadingReport(true);
+    try {
+      await downloadSessionReport(session.id, session.title);
+    } catch (error) {
+      console.error("Error downloading report:", error);
+      crossAlert(
+        "Download failed",
+        "Couldn't download the session report. Please try again.",
+      );
+    } finally {
+      setDownloadingReport(false);
     }
   };
 
@@ -444,6 +461,35 @@ export default function LiveCaptioningScreen() {
             </TouchableOpacity>
           )}
 
+          {/* Download report — available to both teacher and student */}
+          <TouchableOpacity
+            style={[
+              styles.downloadReportButton,
+              {
+                backgroundColor: colors.primary,
+                borderRadius: radius.md,
+                paddingVertical: spacing.md - 2,
+                paddingHorizontal: spacing.xl,
+                marginTop: spacing.lg,
+              },
+            ]}
+            onPress={handleDownloadReport}
+            accessibilityRole="button"
+            accessibilityLabel="Download session report"
+            disabled={downloadingReport}
+          >
+            {downloadingReport ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <Ionicons name="download-outline" size={18} color="#FFFFFF" />
+                <Text style={styles.downloadReportButtonText}>
+                  Download Session Report
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+
           {!isTeacher && !classroomDisabled && (
             <View style={{ width: "100%", marginTop: spacing.lg }}>
               <ClassPulse sessionId={id} />
@@ -452,7 +498,7 @@ export default function LiveCaptioningScreen() {
 
           <TouchableOpacity
             onPress={goBackToClassroom}
-            style={{ marginTop: spacing.md }}
+            style={{ marginTop: spacing.lg }}
             accessibilityRole="button"
             accessibilityLabel="Back to classroom"
           >
@@ -655,4 +701,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   captionScroll: { flex: 1 },
+  downloadReportButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  downloadReportButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+    marginLeft: 8,
+  },
 });
