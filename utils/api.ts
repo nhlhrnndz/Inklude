@@ -3,6 +3,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { Platform } from "react-native";
 import { API_URL } from "../constants/config";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 
 const api = axios.create({
   baseURL: API_URL,
@@ -80,6 +82,59 @@ export async function getSessionRoster(sessionId: number) {
   const res = await api.get(`/api/sessions/${sessionId}/participants`);
   return res.data; // { participants: [{ id, displayName, initials, avatarColor }] }
 }
+
+// 📄 Download a session's PDF report (web: browser download, native: share sheet)
+export const downloadSessionReport = async (
+  sessionId: number,
+  sessionTitle: string,
+) => {
+  const token = await AsyncStorage.getItem("token");
+  const url = `${API_URL}/api/sessions/${sessionId}/report`;
+
+  const safeTitle = sessionTitle.replace(/[^a-z0-9]/gi, "_").toLowerCase();
+  const filename = `session-${sessionId}-${safeTitle}.pdf`;
+
+  if (Platform.OS === "web") {
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to download report.");
+    }
+
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(blobUrl);
+    return;
+  }
+
+  // Native (Expo Go / dev build)
+  const fileUri = `${FileSystem.documentDirectory}${filename}`;
+
+  const downloadResult = await FileSystem.downloadAsync(url, fileUri, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (downloadResult.status !== 200) {
+    throw new Error("Failed to download report.");
+  }
+
+  const canShare = await Sharing.isAvailableAsync();
+  if (canShare) {
+    await Sharing.shareAsync(downloadResult.uri, {
+      mimeType: "application/pdf",
+      dialogTitle: "Session Report",
+    });
+  }
+};
 
 export const joinSessionByCode = async (code: string) => {
   const response = await api.get(`/api/sessions/join/${code.toUpperCase()}`);

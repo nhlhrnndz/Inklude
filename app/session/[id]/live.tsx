@@ -18,7 +18,7 @@ import { useAuth } from "../../../context/AuthContext";
 import { useTheme } from "../../../context/ThemeContext";
 import { useCaptionSession } from "../../../hooks/useCaptionSession";
 import { useMicCaptioning } from "../../../hooks/useMicCaptioning";
-import { getSessionDetails } from "../../../utils/api";
+import { downloadSessionReport, getSessionDetails } from "../../../utils/api";
 import { crossAlert } from "../../../utils/crossAlert";
 import { getSocket } from "../../../utils/socket";
 
@@ -41,6 +41,7 @@ export default function LiveCaptioningScreen() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [viewboardConnected, setViewboardConnected] = useState(false);
+  const [downloadingReport, setDownloadingReport] = useState(false);
 
   const { captions, connected, sessionEnded, sendCaption } = useCaptionSession(
     id,
@@ -95,6 +96,22 @@ export default function LiveCaptioningScreen() {
       window.open(`/viewboard/${id}`, "_blank");
     } else {
       router.push(`/viewboard/${id}` as any);
+    }
+  };
+
+  const handleDownloadReport = async () => {
+    if (downloadingReport || !session) return;
+    setDownloadingReport(true);
+    try {
+      await downloadSessionReport(session.id, session.title);
+    } catch (error) {
+      console.error("Error downloading report:", error);
+      crossAlert(
+        "Download failed",
+        "Couldn't download the session report. Please try again.",
+      );
+    } finally {
+      setDownloadingReport(false);
     }
   };
 
@@ -201,9 +218,38 @@ export default function LiveCaptioningScreen() {
           >
             Class ended
           </Text>
+
+          <TouchableOpacity
+            style={[
+              styles.downloadReportButton,
+              {
+                backgroundColor: colors.primary,
+                borderRadius: radius.md,
+                paddingVertical: spacing.md - 2,
+                paddingHorizontal: spacing.xl,
+                marginTop: spacing.lg,
+              },
+            ]}
+            onPress={handleDownloadReport}
+            accessibilityRole="button"
+            accessibilityLabel="Download session report"
+            disabled={downloadingReport}
+          >
+            {downloadingReport ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <Ionicons name="download-outline" size={18} color="#FFFFFF" />
+                <Text style={styles.downloadReportButtonText}>
+                  Download Session Report
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+
           <TouchableOpacity
             onPress={goBackToClassroom}
-            style={{ marginTop: spacing.md }}
+            style={{ marginTop: spacing.lg }}
             accessibilityRole="button"
             accessibilityLabel="Back to classroom"
           >
@@ -348,4 +394,15 @@ const styles = StyleSheet.create({
   micButtonText: { color: "#fff", fontSize: 14, fontWeight: "bold" },
   viewboardButton: { alignItems: "center", borderWidth: 1 },
   captionScroll: { flex: 1 },
+  downloadReportButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  downloadReportButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+    marginLeft: 8,
+  },
 });
