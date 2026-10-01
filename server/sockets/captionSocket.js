@@ -1,19 +1,19 @@
+//captionSocket.js
 const jwt = require("jsonwebtoken");
 const { saveTranscript } = require("../models/transcriptModel");
 const { getSessionById } = require("../models/sessionModel");
-const { recordTap } = require("../models/PresenceTap");
 
-// Phase 2.3 Week 1: rate-limit "I'm here" taps per (session, user) so one
-// student can't spam presence pings. Keyed in-memory — resets on server
-// restart, which is fine for a lightweight, non-critical signal like this.
-const PRESENCE_RATE_LIMIT_MS = 30000;
-const lastPresenceTapAt = new Map(); // `${sessionId}:${userId}` -> timestamp
+// Student → teacher "ask" signals (Please repeat, Please slow down, ...)
+const SIGNAL_MAX_LEN = 100;
+const SIGNAL_NAME_MAX_LEN = 40;
+// Slightly shorter than the client cooldown so the client is the stricter one.
+const SIGNAL_COOLDOWN_MS = 8000;
 
 function initCaptionSocket(io) {
   io.on("connection", (socket) => {
     console.log(`🔌 Socket connected: ${socket.id}`);
 
-    // Client joins a specific classroom session room
+    // Client joins a specific session room
     socket.on("join-session", ({ sessionId, userId, role }) => {
       const room = `session-${sessionId}`;
       socket.join(room);
@@ -23,9 +23,8 @@ function initCaptionSocket(io) {
       console.log(`✅ User ${userId} (${role}) joined room ${room}`);
     });
 
-    // Classroom Viewboard joins the same room as a silent, listen-only
-    // viewer. Verified server-side: a valid JWT belonging to the
-    // teacher who owns this session — never trusted from the client.
+    // Classroom Viewboard: silent, listen-only viewer. Verified server-side:
+    // a valid JWT belonging to the teacher who owns this session.
     socket.on("join-viewboard", async ({ sessionId, token }) => {
       if (!sessionId || !token) {
         socket.emit("viewboard-denied", {
@@ -78,43 +77,6 @@ function initCaptionSocket(io) {
       }
     });
 
-    // Phase 2.3 Week 1: "I'm here" presence tap. Lightweight, no chat —
-    // a momentary broadcast to the room so classmates see a pulse near
-    // that student's avatar. Phase 2.3 Week 3: the tap is also saved so
-    // the teacher's post-session summary can tell who stayed quiet.
-    socket.on("presence-here", ({ sessionId, userId, initials }) => {
-      if (!sessionId || !userId) return;
-
-      // Viewboard is listen-only and has no avatar in the roster.
-      if (socket.data.role === "viewboard") return;
-
-      const key = `${sessionId}:${userId}`;
-      const now = Date.now();
-      const lastTap = lastPresenceTapAt.get(key) || 0;
-
-      if (now - lastTap < PRESENCE_RATE_LIMIT_MS) {
-        // Silently ignore spam taps rather than erroring — the button
-        // on the client is disabled during cooldown anyway.
-        return;
-      }
-      lastPresenceTapAt.set(key, now);
-
-      // Persist for quiet-student detection (students only)
-      if (socket.data.role === "student") {
-        recordTap(sessionId, userId).catch((err) =>
-          console.error("❌ Failed to save presence tap:", err.message),
-        );
-      }
-
-      const room = `session-${sessionId}`;
-      io.to(room).emit("presence-update", {
-        userId,
-        initials: initials || "?",
-        timestamp: now,
-      });
-      console.log(`👋 Presence ping: user ${userId} in ${room}`);
-    });
-
     // Client leaves a session room
     socket.on("leave-session", ({ sessionId }) => {
       const room = `session-${sessionId}`;
@@ -129,20 +91,16 @@ function initCaptionSocket(io) {
 
     // Teacher's transcribed caption gets broadcast to the room AND saved to DB
     socket.on("send-caption", async ({ sessionId, text, timestamp }) => {
-      // Viewboard sockets are listen-only and should never reach this,
-      // but guard against it anyway.
       if (socket.data.role === "viewboard") return;
 
       const room = `session-${sessionId}`;
 
-      // Broadcast immediately — don't make students wait on the DB write
       io.to(room).emit("new-caption", {
         text,
         timestamp: timestamp || Date.now(),
       });
       console.log(`📝 Caption broadcast to ${room}: "${text}"`);
 
-      // Save to DB in the background
       try {
         const speakerId = socket.data.userId;
         if (speakerId) {
@@ -151,6 +109,64 @@ function initCaptionSocket(io) {
       } catch (err) {
         console.error("❌ Failed to save transcript:", err.message);
       }
+    });
+
+    // A student quietly asks the teacher for something ("Please repeat").
+    // Delivered ONLY to the teacher's own socket(s) — never to the room — so
+    // it can never appear on the Viewboard or on other students' screens.
+    // Not saved anywhere: it is a passing signal, not a record.
+    socket.on("student-signal", (payload, ack) => {
+      const reply = typeof ack === "function" ? ack : () => {};
+
+      if (socket.data.role !== "student" || !socket.data.sessionId) {
+        return reply({ ok: false, reason: "not-allowed" });
+      }
+
+      const text = String(payload?.text ?? "")
+        .trim()
+        .slice(0, SIGNAL_MAX_LEN);
+      if (!text) return reply({ ok: false, reason: "empty" });
+
+      const now = Date.now();
+      if (
+        socket.data.lastSignalAt &&
+        now - socket.data.lastSignalAt < SIGNAL_COOLDOWN_MS
+      ) {
+        return reply({ ok: false, reason: "cooldown" });
+      }
+
+      const room = `session-${socket.data.sessionId}`;
+      const roomSockets = io.sockets.adapter.rooms.get(room);
+      const teacherSocketIds = [];
+
+      if (roomSockets) {
+        for (const socketId of roomSockets) {
+          const s = io.sockets.sockets.get(socketId);
+          if (s?.data.role === "teacher") teacherSocketIds.push(socketId);
+        }
+      }
+
+      if (teacherSocketIds.length === 0) {
+        return reply({ ok: false, reason: "no-teacher" });
+      }
+
+      const name =
+        String(payload?.name ?? "")
+          .trim()
+          .slice(0, SIGNAL_NAME_MAX_LEN) || "A student";
+
+      socket.data.lastSignalAt = now;
+
+      teacherSocketIds.forEach((socketId) => {
+        io.to(socketId).emit("student-signal", {
+          id: `${socket.id}-${now}`,
+          text,
+          name,
+        });
+      });
+
+      console.log(`🙋 Signal in ${room} from ${name}: "${text}"`);
+      reply({ ok: true });
     });
 
     socket.on("disconnect", () => {

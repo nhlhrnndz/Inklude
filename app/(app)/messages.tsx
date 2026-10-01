@@ -2,29 +2,31 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Switch,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 
 import { useTheme } from "../../context/ThemeContext";
+import { useLiveRefresh } from "../../hooks/useLiveRefresh";
 import {
-    getMyMessages,
-    MessageCategory,
-    MessageItem,
-    MessageThreadInfo,
-    sendMyMessage,
+  getMyMessages,
+  MessageCategory,
+  MessageItem,
+  MessageThreadInfo,
+  sendMyMessage,
 } from "../../utils/api";
-import { getSocket } from "../../utils/socket";
 
 const CATEGORIES: { label: string; value: MessageCategory }[] = [
   { label: "Help", value: "help" },
@@ -38,9 +40,32 @@ const STATUS_LABEL: Record<string, string> = {
   resolved: "Resolved",
 };
 
+// A cheap fingerprint of what's on screen, so background refreshes only
+// re-render when something actually changed.
+function buildSignature(
+  thread: MessageThreadInfo | null,
+  messages: MessageItem[],
+) {
+  const last = messages[messages.length - 1];
+
+  return [
+    thread?.id ?? 0,
+    thread?.status ?? "",
+    thread?.updatedAt ?? "",
+    messages.length,
+    last?.id ?? 0,
+  ].join("|");
+}
+
 export default function MessagesScreen() {
   const { colors, typography, spacing, radius } = useTheme();
   const scrollRef = useRef<ScrollView>(null);
+
+  const nearBottomRef = useRef(true);
+  const hasLoadedRef = useRef(false);
+  const signatureRef = useRef("");
+  const lastCountRef = useRef(0);
+  const lastMutationRef = useRef(0);
 
   const [thread, setThread] = useState<MessageThreadInfo | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
@@ -50,57 +75,73 @@ export default function MessagesScreen() {
 
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
 
-  const loadThread = useCallback(async () => {
+  // Quiet refresh: no spinner, no toast (except if the very first load
+  // fails), and no state updates unless something changed.
+  const syncThread = useCallback(async () => {
+    const startedAt = Date.now();
+
     try {
       const res = await getMyMessages();
-      setThread(res.thread);
-      setMessages(res.messages);
 
-      if (res.thread) {
-        setCategory(res.thread.category);
-        setUrgent(res.thread.urgent);
+      // If the student sent something while this request was in flight,
+      // the response may be stale — the next refresh will catch up.
+      if (lastMutationRef.current > startedAt) return;
+
+      if (!hasLoadedRef.current) {
+        hasLoadedRef.current = true;
+
+        if (res.thread) {
+          setCategory(res.thread.category);
+          setUrgent(res.thread.urgent);
+        }
+      }
+
+      const signature = buildSignature(res.thread, res.messages);
+
+      if (signature !== signatureRef.current) {
+        signatureRef.current = signature;
+        setThread(res.thread);
+        setMessages(res.messages);
       }
     } catch (err: any) {
-      Toast.show({
-        type: "error",
-        text1: "Failed to load messages",
-        text2: err.response?.data?.message ?? "Please try again.",
-      });
+      if (!hasLoadedRef.current) {
+        Toast.show({
+          type: "error",
+          text1: "Failed to load messages",
+          text2: err.response?.data?.message ?? "Please try again.",
+        });
+      }
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, []);
 
+  // Refreshes on focus, on new-message notifications, on reconnect, when
+  // the app returns to the foreground, and on a light timer while open.
+  useLiveRefresh(syncThread);
+
+  // Keep the newest message in view — but never yank the screen away from
+  // someone who scrolled up to read older messages.
   useEffect(() => {
-    loadThread();
-  }, [loadThread]);
+    if (messages.length === 0) return;
 
-  // Live-update when guidance replies, instead of waiting for the
-  // student to send another message before the reply shows up.
-  useEffect(() => {
-    const socket = getSocket();
+    const last = messages[messages.length - 1];
+    const grew = messages.length > lastCountRef.current;
+    lastCountRef.current = messages.length;
 
-    const handleNew = (payload: { sourceType: string | null }) => {
-      if (payload.sourceType === "message_thread") {
-        loadThread();
-      }
-    };
-
-    socket.on("notification:new", handleNew);
-
-    return () => {
-      socket.off("notification:new", handleNew);
-    };
-  }, [loadThread]);
-
-  useEffect(() => {
-    if (messages.length > 0) {
+    if (grew && (nearBottomRef.current || last.senderRole === "student")) {
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     }
-  }, [messages.length]);
+  }, [messages]);
+
+  const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+    const distanceFromBottom =
+      contentSize.height - (contentOffset.y + layoutMeasurement.height);
+
+    nearBottomRef.current = distanceFromBottom < 120;
+  };
 
   const handleSend = async () => {
     if (!body.trim()) {
@@ -114,6 +155,10 @@ export default function MessagesScreen() {
         category,
         urgent,
       });
+
+      lastMutationRef.current = Date.now();
+      signatureRef.current = buildSignature(res.thread, res.messages);
+
       setThread(res.thread);
       setMessages(res.messages);
       setBody("");
@@ -217,6 +262,8 @@ export default function MessagesScreen() {
       >
         <ScrollView
           ref={scrollRef}
+          onScroll={handleScroll}
+          scrollEventThrottle={100}
           contentContainerStyle={{
             paddingHorizontal: spacing.lg,
             paddingBottom: spacing.lg,

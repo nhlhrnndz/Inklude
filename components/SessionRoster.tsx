@@ -1,23 +1,16 @@
 // components/SessionRoster.tsx
 //
-// Horizontal scroll of avatar circles showing who's in the classroom
-// session — replaces the plain "X joined" count. The current user's
-// avatar is outlined so they can find themselves in the list. Tapping
-// your own avatar sends a lightweight "I'm here" presence ping that
-// briefly pulses your avatar for everyone else.
+// Horizontal scroll of avatar circles showing who's in the session.
+// Phase 4 Week 3: presence now comes from JOINING the session (the
+// server announces it), so the old "I'm here" tap is retired. Names are
+// role-aware from the API: classmates see display names, teachers and
+// guidance see real names.
 //
-// Phase 2.3 Week 7: teachers/guidance also see a subtle pause badge next
-// to students who tapped "I need a break". Classmates never see this.
+// Teachers/guidance also see a pause badge next to students on a break.
 
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import Toast from "react-native-toast-message";
 
 import { useAuth } from "../context/AuthContext";
@@ -38,7 +31,6 @@ interface SessionRosterProps {
   currentUserId?: number;
 }
 
-const PRESENCE_COOLDOWN_MS = 30000;
 const PULSE_DURATION_MS = 3000;
 
 export default function SessionRoster({
@@ -53,22 +45,32 @@ export default function SessionRoster({
   const [participants, setParticipants] = useState<RosterParticipant[]>([]);
   const [loading, setLoading] = useState(true);
   const [pulsingIds, setPulsingIds] = useState<Set<number>>(new Set());
-  const [presenceCooldown, setPresenceCooldown] = useState(false);
   const [onBreakIds, setOnBreakIds] = useState<Set<number>>(new Set());
 
+  const participantsRef = useRef<RosterParticipant[]>([]);
   const pulseTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(
     new Map(),
   );
+
+  const applyRoster = (list: RosterParticipant[]) => {
+    participantsRef.current = list;
+    setParticipants(list);
+  };
+
+  const fetchRoster = async (): Promise<RosterParticipant[]> => {
+    const data = await getSessionRoster(Number(sessionId));
+    const list: RosterParticipant[] = data.participants || [];
+    applyRoster(list);
+    return list;
+  };
 
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
       try {
-        const data = await getSessionRoster(Number(sessionId));
-        if (!cancelled) {
-          setParticipants(data.participants || []);
-        }
+        const list = await getSessionRoster(Number(sessionId));
+        if (!cancelled) applyRoster(list.participants || []);
       } catch (err) {
         console.error("Error loading session roster:", err);
       } finally {
@@ -114,18 +116,30 @@ export default function SessionRoster({
     };
   }, [sessionId, canSeeBreaks]);
 
+  // Someone entered the session: refresh the roster if we haven't seen
+  // them yet, pulse their avatar and show a short "is here" toast.
   useEffect(() => {
     const socket = getSocket();
 
-    function handlePresenceUpdate({ userId }: { userId: number }) {
+    async function handlePresenceUpdate({ userId }: { userId: number }) {
+      if (userId === currentUserId) return;
+
+      let person = participantsRef.current.find((p) => p.id === userId);
+      if (!person) {
+        try {
+          const list = await fetchRoster();
+          person = list.find((p) => p.id === userId);
+        } catch {
+          // keep going with a generic name
+        }
+      }
+
       setPulsingIds((prev) => {
         const next = new Set(prev);
         next.add(userId);
         return next;
       });
 
-      // Clear any existing timer for this user, then set a fresh one so
-      // repeated pings don't cut the pulse short.
       const existing = pulseTimers.current.get(userId);
       if (existing) clearTimeout(existing);
 
@@ -140,7 +154,6 @@ export default function SessionRoster({
 
       pulseTimers.current.set(userId, timer);
 
-      const person = participants.find((p) => p.id === userId);
       Toast.show({
         type: "info",
         text1: `${person?.displayName ?? "A classmate"} is here`,
@@ -154,27 +167,11 @@ export default function SessionRoster({
       pulseTimers.current.forEach((t) => clearTimeout(t));
       pulseTimers.current.clear();
     };
-    // participants is read inside the handler for the toast name lookup;
-    // re-subscribing on every roster change is cheap and keeps names fresh.
-  }, [participants]);
-
-  const handleImHere = () => {
-    if (presenceCooldown || !currentUserId) return;
-
-    const me = participants.find((p) => p.id === currentUserId);
-    const socket = getSocket();
-    socket.emit("presence-here", {
-      sessionId: Number(sessionId),
-      userId: currentUserId,
-      initials: me?.initials || "?",
-    });
-
-    setPresenceCooldown(true);
-    setTimeout(() => setPresenceCooldown(false), PRESENCE_COOLDOWN_MS);
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, currentUserId]);
 
   if (loading) {
-    return null; // roster is a lightweight enhancement, not worth a spinner
+    return null;
   }
 
   if (participants.length === 0) {
@@ -187,7 +184,7 @@ export default function SessionRoster({
             color: colors.textSecondary,
           }}
         >
-          No one else has joined yet.
+          No one has joined yet.
         </Text>
       </View>
     );
@@ -208,11 +205,16 @@ export default function SessionRoster({
           const isPulsing = pulsingIds.has(p.id);
           const isOnBreak = canSeeBreaks && onBreakIds.has(p.id);
 
-          const avatar = (
+          return (
             <View
+              key={p.id}
               style={styles.avatarWrap}
               accessibilityLabel={
-                isOnBreak ? `${p.displayName}, on a break` : undefined
+                isOnBreak
+                  ? `${p.displayName}, on a break`
+                  : isMe
+                    ? "You"
+                    : p.displayName
               }
             >
               <View
@@ -266,25 +268,6 @@ export default function SessionRoster({
               </Text>
             </View>
           );
-
-          if (!isMe) {
-            return <View key={p.id}>{avatar}</View>;
-          }
-
-          return (
-            <TouchableOpacity
-              key={p.id}
-              onPress={handleImHere}
-              disabled={presenceCooldown}
-              accessibilityRole="button"
-              accessibilityLabel="I'm here"
-              accessibilityHint="Lets classmates know you're present in this session"
-              accessibilityState={{ disabled: presenceCooldown }}
-              style={{ opacity: presenceCooldown ? 0.5 : 1 }}
-            >
-              {avatar}
-            </TouchableOpacity>
-          );
         })}
       </ScrollView>
     </View>
@@ -292,20 +275,14 @@ export default function SessionRoster({
 }
 
 const styles = StyleSheet.create({
-  avatarWrap: {
-    alignItems: "center",
-  },
+  avatarWrap: { alignItems: "center" },
   avatarCircle: {
     width: 44,
     height: 44,
     justifyContent: "center",
     alignItems: "center",
   },
-  avatarInitials: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 15,
-  },
+  avatarInitials: { color: "#FFFFFF", fontWeight: "700", fontSize: 15 },
   pulseDot: {
     position: "absolute",
     top: -2,

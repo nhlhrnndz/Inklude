@@ -1,3 +1,4 @@
+//server\models\sessionModel.js
 const pool = require("../config/db");
 
 // Generate a unique 6-character session code
@@ -10,13 +11,14 @@ function generateSessionCode() {
   return code;
 }
 
-// Create a new session
-async function createSession(teacherId, title, description = "") {
-  const code = generateSessionCode();
+// Create a new session (one meeting of a class).
+// opts: { classId, scheduledStart, scheduledEnd }
+async function createSession(teacherId, title, description = "", opts = {}) {
+  const { classId = null, scheduledStart = null, scheduledEnd = null } = opts;
 
   let unique = false;
   let attempts = 0;
-  let finalCode = code;
+  let finalCode = generateSessionCode();
 
   while (!unique && attempts < 5) {
     const [existing] = await pool.query(
@@ -36,27 +38,37 @@ async function createSession(teacherId, title, description = "") {
   }
 
   const [result] = await pool.query(
-    `INSERT INTO sessions (teacher_id, session_code, title, description, status)
-     VALUES (?, ?, ?, ?, 'active')`,
-    [teacherId, finalCode, title, description],
+    `INSERT INTO sessions
+       (teacher_id, class_id, session_code, title, description, status, scheduled_start, scheduled_end)
+     VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`,
+    [
+      teacherId,
+      classId,
+      finalCode,
+      title,
+      description,
+      scheduledStart,
+      scheduledEnd,
+    ],
   );
 
   return getSessionById(result.insertId);
 }
 
-// Get session by ID
+// Get session by ID (includes the parent class title when there is one)
 async function getSessionById(sessionId) {
   const [rows] = await pool.query(
-    `SELECT s.*, u.name as teacher_name 
+    `SELECT s.*, u.name as teacher_name, c.title as class_title
      FROM sessions s 
      JOIN users u ON s.teacher_id = u.id 
+     LEFT JOIN classes c ON c.id = s.class_id
      WHERE s.id = ?`,
     [sessionId],
   );
   return rows[0] || null;
 }
 
-// Get session by code
+// Get session by code (legacy, no longer used for joining)
 async function getSessionByCode(code) {
   const [rows] = await pool.query(
     `SELECT s.*, u.name as teacher_name 
@@ -81,7 +93,7 @@ async function getTeacherSessions(teacherId) {
   return rows;
 }
 
-// Get all sessions a student has ever joined (active or ended, past or present)
+// Get all sessions a student has ever joined
 async function getJoinedSessions(studentId) {
   const [rows] = await pool.query(
     `SELECT DISTINCT s.*, u.name as teacher_name,
@@ -96,7 +108,7 @@ async function getJoinedSessions(studentId) {
   return rows;
 }
 
-// Disable a classroom permanently
+// Disable a session permanently
 async function endSession(sessionId, teacherId) {
   const [result] = await pool.query(
     `UPDATE sessions 
@@ -107,8 +119,7 @@ async function endSession(sessionId, teacherId) {
   return result.affectedRows > 0;
 }
 
-// Start a live captioning run — creates a fresh "live_runs" row, so each
-// run gets its own quiet-student list, check-ins, and class pulse answers.
+// Start a live captioning run
 async function goLive(sessionId, teacherId) {
   const session = await getSessionById(sessionId);
   if (
@@ -133,8 +144,7 @@ async function goLive(sessionId, teacherId) {
   return runId;
 }
 
-// End the current live run — the classroom stays open/reusable, but this
-// run is now closed and its pulse/check-in/presence data is locked in.
+// End the current live run
 async function endLive(sessionId, teacherId) {
   const session = await getSessionById(sessionId);
   if (
@@ -182,9 +192,6 @@ async function addParticipant(sessionId, userId) {
   }
 }
 
-// Get ALL participants who ever joined this session, including ones who
-// later left — used for reports, since someone who left mid-class still
-// attended and should appear in the record.
 async function getAllParticipantsForReport(sessionId) {
   const [rows] = await pool.query(
     `SELECT u.id, u.name, u.email, p.joined_at, p.left_at
@@ -197,10 +204,6 @@ async function getAllParticipantsForReport(sessionId) {
   return rows;
 }
 
-// Was this user ever in the session (active OR already left)? Used to
-// gate report access — unlike isParticipant(), this doesn't require
-// left_at IS NULL, since a student shouldn't lose access to the report
-// just because they left before class ended.
 async function wasParticipant(sessionId, userId) {
   const [rows] = await pool.query(
     "SELECT id FROM participants WHERE session_id = ? AND user_id = ?",
@@ -209,7 +212,6 @@ async function wasParticipant(sessionId, userId) {
   return rows.length > 0;
 }
 
-// Check if user is in session
 async function isParticipant(sessionId, userId) {
   const [rows] = await pool.query(
     "SELECT id FROM participants WHERE session_id = ? AND user_id = ? AND left_at IS NULL",
@@ -218,7 +220,6 @@ async function isParticipant(sessionId, userId) {
   return rows.length > 0;
 }
 
-// Get session participants (active ones only)
 async function getParticipants(sessionId) {
   const [rows] = await pool.query(
     `SELECT u.id, u.name, u.email, u.display_username, p.joined_at
@@ -231,7 +232,6 @@ async function getParticipants(sessionId) {
   return rows;
 }
 
-// Leave a session (soft delete)
 async function leaveSession(sessionId, userId) {
   const [result] = await pool.query(
     `UPDATE participants 
@@ -242,7 +242,7 @@ async function leaveSession(sessionId, userId) {
   return result.affectedRows > 0;
 }
 
-// --- Phase 2.3 Week 1: Session Roster helpers ---
+// --- Roster / display-name helpers (single resolver, reused by classModel) ---
 
 const AVATAR_COLORS = [
   "#F94144",
@@ -280,6 +280,8 @@ function avatarColorForId(userId) {
 
 const IDENTITY_VISIBLE_ROLES = new Set(["teacher", "guidance", "admin"]);
 
+// Teachers/guidance/admin see the real name. Everyone else sees the
+// student's chosen display username, falling back to "First L.".
 function resolveDisplayInfo(participant, requestingRole) {
   if (IDENTITY_VISIBLE_ROLES.has(requestingRole)) {
     return {
@@ -311,6 +313,7 @@ async function getRosterForSession(sessionId, requestingRole) {
       displayName,
       initials,
       avatarColor: avatarColorForId(p.id),
+      joinedAt: p.joined_at,
       isHere: false,
     };
   });
@@ -332,4 +335,6 @@ module.exports = {
   wasParticipant,
   leaveSession,
   getRosterForSession,
+  resolveDisplayInfo,
+  avatarColorForId,
 };

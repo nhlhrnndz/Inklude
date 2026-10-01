@@ -1,14 +1,80 @@
+const crypto = require("crypto");
 const db = require("../config/db");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
+// Constant-time string compare so invite codes can't be guessed by timing.
+// Both sides are trimmed and uppercased so stray spaces or case don't matter.
+function safeEqual(a, b) {
+  const bufA = Buffer.from(
+    String(a || "")
+      .trim()
+      .toUpperCase(),
+  );
+  const bufB = Buffer.from(
+    String(b || "")
+      .trim()
+      .toUpperCase(),
+  );
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+// Teacher / Guidance accounts can only be created with the invite code
+// stored in server/.env. "admin" can never be self-registered.
+function getInviteCodeFor(role) {
+  if (role === "teacher") return process.env.TEACHER_INVITE_CODE || "";
+  if (role === "guidance") return process.env.GUIDANCE_INVITE_CODE || "";
+  return "";
+}
+
 // REGISTER
 const register = async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password, role, inviteCode } = req.body;
 
   try {
-    const [existing] = await db.query("SELECT * FROM users WHERE email = ?", [
-      email,
+    if (!name || !name.trim()) {
+      return res.status(400).json({ message: "Name is required." });
+    }
+    if (!email || !email.trim()) {
+      return res.status(400).json({ message: "Email is required." });
+    }
+    if (!password || password.length < 8) {
+      return res
+        .status(400)
+        .json({ message: "Password must be at least 8 characters." });
+    }
+
+    if (role === "admin") {
+      return res
+        .status(403)
+        .json({ message: "This role cannot be self-registered." });
+    }
+
+    // Anything that is not an explicit teacher/guidance request is a student.
+    const requestedRole =
+      role === "teacher" || role === "guidance" ? role : "student";
+
+    if (requestedRole !== "student") {
+      const expected = getInviteCodeFor(requestedRole);
+
+      if (!expected) {
+        return res.status(403).json({
+          message:
+            "Invite codes are not configured on the server. Check server/.env and restart.",
+        });
+      }
+      if (!safeEqual(inviteCode, expected)) {
+        return res.status(403).json({
+          message: "A valid invite code is required for this role.",
+        });
+      }
+    }
+
+    const cleanEmail = email.trim();
+
+    const [existing] = await db.query("SELECT id FROM users WHERE email = ?", [
+      cleanEmail,
     ]);
     if (existing.length > 0) {
       return res.status(400).json({ message: "Email already registered" });
@@ -18,7 +84,7 @@ const register = async (req, res) => {
 
     const [result] = await db.query(
       "INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)",
-      [name, email, hashedPassword, role],
+      [name.trim(), cleanEmail, hashedPassword, requestedRole],
     );
 
     res.status(201).json({

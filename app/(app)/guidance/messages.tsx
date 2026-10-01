@@ -1,27 +1,27 @@
 // app/(app)/guidance/messages.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    FlatList,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 
 import { useTheme } from "../../../context/ThemeContext";
+import { useLiveRefresh } from "../../../hooks/useLiveRefresh";
 import {
-    getGuidanceInbox,
-    MessageCategory,
-    MessageThreadStatus,
-    MessageThreadSummary,
+  getGuidanceInbox,
+  MessageCategory,
+  MessageThreadStatus,
+  MessageThreadSummary,
 } from "../../../utils/api";
-import { getSocket } from "../../../utils/socket";
 
 const CATEGORY_FILTERS: { label: string; value: MessageCategory | "all" }[] = [
   { label: "All", value: "all" },
@@ -38,12 +38,38 @@ const STATUS_FILTERS: { label: string; value: MessageThreadStatus | "all" }[] =
     { label: "Resolved", value: "resolved" },
   ];
 
+type InboxFilters = {
+  category: MessageCategory | "all";
+  status: MessageThreadStatus | "all";
+  urgentOnly: boolean;
+  search: string;
+};
+
+// A cheap fingerprint of the list, so background refreshes only
+// re-render when something actually changed (new message, unread count,
+// status, etc.).
+function buildSignature(threads: MessageThreadSummary[]) {
+  return threads
+    .map((t) =>
+      [
+        t.id,
+        t.status,
+        t.category,
+        t.urgent ? 1 : 0,
+        t.unreadCount,
+        t.lastMessageAt,
+      ].join(":"),
+    )
+    .join("|");
+}
+
 export default function GuidanceMessagesScreen() {
   const router = useRouter();
   const { colors, typography, spacing, radius } = useTheme();
 
   const [threads, setThreads] = useState<MessageThreadSummary[]>([]);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [category, setCategory] = useState<MessageCategory | "all">("all");
   const [status, setStatus] = useState<MessageThreadStatus | "all">("all");
   const [urgentOnly, setUrgentOnly] = useState(false);
@@ -52,50 +78,99 @@ export default function GuidanceMessagesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
 
-  const loadThreads = useCallback(async () => {
-    setError(false);
+  // Always holds the filters currently on screen, so a slow response for
+  // OLD filters can never overwrite the list for the NEW ones.
+  const filtersRef = useRef<InboxFilters>({
+    category,
+    status,
+    urgentOnly,
+    search: debouncedSearch,
+  });
+  filtersRef.current = {
+    category,
+    status,
+    urgentOnly,
+    search: debouncedSearch,
+  };
+
+  const signatureRef = useRef("");
+  const hasLoadedRef = useRef(false);
+  const failureShownRef = useRef(false);
+  const filtersReadyRef = useRef(false);
+
+  const fetchThreads = useCallback(async (manual = false) => {
+    const filters = filtersRef.current;
+    const key = JSON.stringify(filters);
+    const isCurrent = () => key === JSON.stringify(filtersRef.current);
+
     try {
       const res = await getGuidanceInbox({
-        category: category === "all" ? undefined : category,
-        status: status === "all" ? undefined : status,
-        urgent: urgentOnly ? true : undefined,
-        search: search.trim() || undefined,
+        category: filters.category === "all" ? undefined : filters.category,
+        status: filters.status === "all" ? undefined : filters.status,
+        urgent: filters.urgentOnly ? true : undefined,
+        search: filters.search.trim() || undefined,
       });
-      setThreads(res.threads);
-    } catch (err: any) {
-      setError(true);
-      Toast.show({
-        type: "error",
-        text1: "Failed to load messages",
-        text2: err.response?.data?.message ?? "Please try again.",
-      });
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [category, status, urgentOnly, search]);
 
-  useEffect(() => {
-    setLoading(true);
-    loadThreads();
-  }, [loadThreads]);
+      if (!isCurrent()) return;
 
-  // Live-update the inbox (new messages, unread counts) as students send them
-  useEffect(() => {
-    const socket = getSocket();
+      hasLoadedRef.current = true;
+      failureShownRef.current = false;
+      setError(false);
 
-    const handleNew = (payload: { sourceType: string | null }) => {
-      if (payload.sourceType === "message_thread") {
-        loadThreads();
+      const signature = buildSignature(res.threads);
+
+      if (signature !== signatureRef.current) {
+        signatureRef.current = signature;
+        setThreads(res.threads);
       }
-    };
+    } catch (err: any) {
+      if (!isCurrent()) return;
 
-    socket.on("notification:new", handleNew);
+      setError(true);
 
-    return () => {
-      socket.off("notification:new", handleNew);
-    };
-  }, [loadThreads]);
+      // Background refreshes stay silent. Only tell the counselor when
+      // they asked for it, or once if the very first load fails.
+      if (manual || (!hasLoadedRef.current && !failureShownRef.current)) {
+        failureShownRef.current = true;
+
+        Toast.show({
+          type: "error",
+          text1: "Failed to load messages",
+          text2: err.response?.data?.message ?? "Please try again.",
+        });
+      }
+    } finally {
+      if (isCurrent()) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    }
+  }, []);
+
+  // Debounce the search box so we don't hit the server on every keystroke.
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 350);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Filters changed: show the normal loading state and reload. (Skipped
+  // on first mount because the live refresh below already loads then.)
+  useEffect(() => {
+    if (!filtersReadyRef.current) {
+      filtersReadyRef.current = true;
+      return;
+    }
+
+    setLoading(true);
+    signatureRef.current = "";
+    fetchThreads();
+  }, [category, status, urgentOnly, debouncedSearch, fetchThreads]);
+
+  // Quietly keeps the inbox current: on focus (so unread badges clear
+  // when you return from a thread), on any new student message, on
+  // reconnect, when the app returns to the foreground, and on a light
+  // timer while this screen is open.
+  useLiveRefresh(() => fetchThreads(false));
 
   const statusColors = (s: MessageThreadStatus) => {
     if (s === "resolved")
@@ -343,7 +418,7 @@ export default function GuidanceMessagesScreen() {
           placeholderTextColor={colors.placeholder}
           value={search}
           onChangeText={setSearch}
-          onSubmitEditing={loadThreads}
+          onSubmitEditing={() => setDebouncedSearch(search)}
           returnKeyType="search"
           accessibilityLabel="Search students"
         />
@@ -485,7 +560,7 @@ export default function GuidanceMessagesScreen() {
           refreshing={refreshing}
           onRefresh={() => {
             setRefreshing(true);
-            loadThreads();
+            fetchThreads(true);
           }}
           ListEmptyComponent={
             <View style={{ alignItems: "center", marginTop: 60 }}>

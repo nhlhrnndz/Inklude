@@ -36,15 +36,20 @@ export default function RegisterScreen() {
       ? normalizedRole
       : "student";
 
+  // Faculty and Guidance accounts need an invite code (checked by the server).
+  const needsInviteCode = role === "teacher" || role === "guidance";
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
 
   const [nameError, setNameError] = useState("");
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [confirmPasswordError, setConfirmPasswordError] = useState("");
+  const [inviteCodeError, setInviteCodeError] = useState("");
 
   const [loading, setLoading] = useState(false);
 
@@ -53,6 +58,7 @@ export default function RegisterScreen() {
     setEmailError("");
     setPasswordError("");
     setConfirmPasswordError("");
+    setInviteCodeError("");
 
     let isValid = true;
 
@@ -88,6 +94,11 @@ export default function RegisterScreen() {
       isValid = false;
     }
 
+    if (needsInviteCode && !inviteCode.trim()) {
+      setInviteCodeError("Please enter the invite code you were given.");
+      isValid = false;
+    }
+
     if (!isValid) {
       Toast.show({
         type: "error",
@@ -101,7 +112,13 @@ export default function RegisterScreen() {
     try {
       setLoading(true);
 
-      await register(name.trim(), email.trim(), password, role);
+      await register(
+        name.trim(),
+        email.trim(),
+        password,
+        role,
+        needsInviteCode ? inviteCode.trim() : undefined,
+      );
 
       Toast.show({
         type: "success",
@@ -122,6 +139,11 @@ export default function RegisterScreen() {
         err?.response?.data?.message ||
         err?.response?.data?.error ||
         "We couldn't create your account. Please try again.";
+
+      // Wrong / missing invite code: show it on the field itself too.
+      if (err?.response?.status === 403 && needsInviteCode) {
+        setInviteCodeError(message);
+      }
 
       Toast.show({
         type: "error",
@@ -192,10 +214,32 @@ export default function RegisterScreen() {
           setConfirmPassword(text);
           if (confirmPasswordError) setConfirmPasswordError("");
         }}
-        returnKeyType="done"
-        onSubmitEditing={handleRegister}
+        returnKeyType={needsInviteCode ? "next" : "done"}
+        onSubmitEditing={needsInviteCode ? undefined : handleRegister}
         error={confirmPasswordError}
       />
+
+      {needsInviteCode && (
+        <AuthInput
+          label="Invite Code"
+          icon="key-outline"
+          placeholder={
+            role === "guidance"
+              ? "Enter the full code, e.g. GUIDANCE-2026-XXXXXXXX"
+              : "Enter the full code, e.g. FACULTY-2026-XXXXXXXX"
+          }
+          value={inviteCode}
+          onChangeText={(text) => {
+            setInviteCode(text);
+            if (inviteCodeError) setInviteCodeError("");
+          }}
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="done"
+          onSubmitEditing={handleRegister}
+          error={inviteCodeError}
+        />
+      )}
 
       <PrimaryButton
         title="Create Account"

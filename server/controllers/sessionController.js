@@ -1,8 +1,6 @@
-//sessionController.js
+// sessionController.js
 const {
-  createSession,
   getSessionById,
-  getSessionByCode,
   getTeacherSessions,
   getJoinedSessions,
   endSession,
@@ -15,32 +13,50 @@ const {
   wasParticipant,
   leaveSession,
   getRosterForSession,
+  resolveDisplayInfo,
+  createSession,
 } = require("../models/sessionModel");
+const { getClassById, isClassMember } = require("../models/classModel");
+const { recordTap } = require("../models/PresenceTap");
 const { getTranscriptsBySession } = require("../models/transcriptModel");
 const { generateSessionReport } = require("../utils/generateSessionReport");
 const { getIO } = require("../utils/ioRegistry");
 
+// A student can open a session if they belong to its class
+// (or, for any session without a class, if they're a participant).
+async function studentCanAccess(session, userId) {
+  if (session.class_id) return isClassMember(session.class_id, userId);
+  return isParticipant(session.id, userId);
+}
+
+// POST /api/sessions  { classId, title? }  (teacher)
 async function createSessionController(req, res) {
   try {
     const userId = req.user.id;
-    const userRole = req.user.role;
 
-    if (userRole !== "teacher") {
+    if (req.user.role !== "teacher") {
       return res
         .status(403)
         .json({ message: "Only teachers can create sessions." });
     }
 
-    const { title, description } = req.body;
+    const { classId, title, description } = req.body;
+    if (!classId) {
+      return res
+        .status(400)
+        .json({ message: "Sessions are now created inside a class." });
+    }
 
-    if (!title || title.trim().length === 0) {
-      return res.status(400).json({ message: "Session title is required." });
+    const cls = await getClassById(classId);
+    if (!cls || cls.teacher_id !== userId) {
+      return res.status(403).json({ message: "Access denied." });
     }
 
     const session = await createSession(
       userId,
-      title.trim(),
-      description || "",
+      (title || "").trim() || "Session",
+      description || cls.description || "",
+      { classId: cls.id },
     );
 
     res.status(201).json({
@@ -113,15 +129,26 @@ async function getSessionByIdController(req, res) {
     }
 
     if (userRole === "student") {
-      const isUserParticipant = await isParticipant(sessionId, userId);
-      if (!isUserParticipant) {
+      if (!(await studentCanAccess(session, userId))) {
         return res
           .status(403)
-          .json({ message: "You are not a participant in this session." });
+          .json({ message: "You are not a member of this class." });
       }
     }
 
-    const participants = await getParticipants(sessionId);
+    let participants;
+    if (userRole === "student") {
+      // Students never receive classmates' real names or emails.
+      const roster = await getRosterForSession(sessionId, "student");
+      participants = roster.map((r) => ({
+        id: r.id,
+        name: r.displayName,
+        email: "",
+        joined_at: r.joinedAt,
+      }));
+    } else {
+      participants = await getParticipants(sessionId);
+    }
 
     res.json({
       session: {
@@ -135,6 +162,10 @@ async function getSessionByIdController(req, res) {
         currentLiveRunId: session.current_live_run_id,
         createdAt: session.created_at,
         endedAt: session.ended_at,
+        classId: session.class_id,
+        classTitle: session.class_title,
+        scheduledStart: session.scheduled_start,
+        scheduledEnd: session.scheduled_end,
         participants,
       },
     });
@@ -161,11 +192,10 @@ async function getSessionRoster(req, res) {
         return res.status(403).json({ message: "Access denied." });
       }
     } else if (userRole === "student") {
-      const isUserParticipant = await isParticipant(sessionId, userId);
-      if (!isUserParticipant) {
+      if (!(await studentCanAccess(session, userId))) {
         return res
           .status(403)
-          .json({ message: "You are not a participant in this session." });
+          .json({ message: "You are not a member of this class." });
       }
     } else if (userRole !== "guidance" && userRole !== "admin") {
       return res.status(403).json({ message: "Access denied." });
@@ -180,8 +210,7 @@ async function getSessionRoster(req, res) {
   }
 }
 
-// GET /api/sessions/:id/report - Download a PDF report of the session
-// (teacher who owns it, or any student who was ever a participant)
+// GET /api/sessions/:id/report
 async function downloadSessionReport(req, res) {
   try {
     const userId = req.user.id;
@@ -221,46 +250,58 @@ async function downloadSessionReport(req, res) {
   }
 }
 
-// GET /api/sessions/join/:code - Join a session by code (Student only)
-async function joinSessionByCode(req, res) {
+// POST /api/sessions/:id/enter — a student walks into a session.
+// Joining marks them present (replaces the old "I'm here" button).
+async function enterSessionController(req, res) {
   try {
     const userId = req.user.id;
-    const userRole = req.user.role;
-    const code = req.params.code.toUpperCase();
 
-    if (userRole !== "student") {
+    if (req.user.role !== "student") {
       return res
         .status(403)
         .json({ message: "Only students can join sessions." });
     }
 
-    const session = await getSessionByCode(code);
+    const sessionId = req.params.id;
+    const session = await getSessionById(sessionId);
 
     if (!session) {
-      return res.status(404).json({
-        message: "Invalid session code or the classroom has been disabled.",
+      return res.status(404).json({ message: "Session not found." });
+    }
+    if (!(await studentCanAccess(session, userId))) {
+      return res
+        .status(403)
+        .json({ message: "You are not a member of this class." });
+    }
+    if (session.status !== "active") {
+      return res.status(400).json({ message: "This session has been closed." });
+    }
+
+    await addParticipant(sessionId, userId);
+
+    // Count as "present" for the current live run (keeps the teacher's
+    // quiet-student summary working until Week 5 reworks it).
+    if (session.is_live) {
+      recordTap(sessionId, userId).catch((err) =>
+        console.error("❌ Failed to record presence:", err.message),
+      );
+    }
+
+    const io = getIO();
+    if (io) {
+      const present = await getParticipants(sessionId);
+      const me = present.find((p) => p.id === userId);
+      const { initials } = resolveDisplayInfo(me || {}, "student");
+      io.to(`session-${sessionId}`).emit("presence-update", {
+        userId,
+        initials,
+        timestamp: Date.now(),
       });
     }
 
-    await addParticipant(session.id, userId);
-
-    const participants = await getParticipants(session.id);
-
-    res.json({
-      message: "Successfully joined session.",
-      session: {
-        id: session.id,
-        code: session.session_code,
-        title: session.title,
-        description: session.description,
-        teacherName: session.teacher_name,
-        status: session.status,
-        isLive: !!session.is_live,
-        participants,
-      },
-    });
+    res.json({ message: "Joined session." });
   } catch (err) {
-    console.error("joinSessionByCode error:", err);
+    console.error("enterSessionController error:", err);
     res.status(500).json({ message: "Server error while joining session." });
   }
 }
@@ -279,7 +320,15 @@ async function goLiveController(req, res) {
     if (!runId) {
       return res
         .status(400)
-        .json({ message: "This classroom is not available to go live in." });
+        .json({ message: "This session is not available to go live in." });
+    }
+
+    // Everyone already in the room when live starts counts as present.
+    try {
+      const present = await getParticipants(sessionId);
+      await Promise.all(present.map((p) => recordTap(sessionId, p.id)));
+    } catch (e) {
+      console.error("❌ Failed to record presence at go-live:", e.message);
     }
 
     const io = getIO();
@@ -349,7 +398,7 @@ async function endSessionController(req, res) {
     if (session.status === "ended") {
       return res
         .status(400)
-        .json({ message: "This classroom is already disabled." });
+        .json({ message: "This session is already closed." });
     }
 
     if (session.is_live) {
@@ -368,12 +417,12 @@ async function endSessionController(req, res) {
       });
     }
 
-    res.json({ message: "Classroom disabled successfully." });
+    res.json({ message: "Session closed successfully." });
   } catch (err) {
     console.error("endSessionController error:", err);
     res
       .status(500)
-      .json({ message: "Server error while disabling the classroom." });
+      .json({ message: "Server error while closing the session." });
   }
 }
 
@@ -415,7 +464,7 @@ module.exports = {
   getMySessions,
   getSessionByIdController,
   getSessionRoster,
-  joinSessionByCode,
+  enterSessionController,
   goLiveController,
   endLiveController,
   endSessionController,

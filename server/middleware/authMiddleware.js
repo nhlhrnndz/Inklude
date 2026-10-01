@@ -20,4 +20,16 @@ const verifyToken = (req, res, next) => {
   }
 };
 
-module.exports = { verifyToken };
+// Use AFTER verifyToken. Example: requireRole("guidance")
+const requireRole =
+  (...allowedRoles) =>
+  (req, res, next) => {
+    if (!req.user || !allowedRoles.includes(req.user.role)) {
+      return res
+        .status(403)
+        .json({ message: "You do not have permission to access this." });
+    }
+    next();
+  };
+
+module.exports = { verifyToken, requireRole };

@@ -1,10 +1,10 @@
 // utils/api.ts
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
-import { Platform } from "react-native";
-import { API_URL } from "../constants/config";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
+import { Platform } from "react-native";
+import { API_URL } from "../constants/config";
 
 const api = axios.create({
   baseURL: API_URL,
@@ -508,5 +508,91 @@ export const updateThreadStatus = async (
   const response = await api.patch(`/api/messages/${threadId}/status`, {
     status,
   });
+  return response.data;
+};
+
+// =========================
+// Classes (Phase 4 Week 3)
+// =========================
+
+export interface ClassSummary {
+  id: number;
+  code: string;
+  title: string;
+  description: string;
+  status: "active" | "archived";
+  createdAt: string;
+  teacherName?: string;
+  memberCount: number;
+  sessionCount: number;
+  isLive: boolean;
+  accommodationCount: number;
+  isOwner?: boolean;
+}
+
+export interface ClassSession {
+  id: number;
+  code: string;
+  title: string;
+  status: "active" | "ended";
+  isLive: boolean;
+  scheduledStart: string | null;
+  scheduledEnd: string | null;
+  createdAt: string;
+  endedAt: string | null;
+  participantCount: number;
+}
+
+export interface ClassMember {
+  id: number;
+  displayName: string;
+  initials: string;
+  avatarColor: string;
+  joinedAt: string;
+}
+
+export const createClass = async (title: string, description?: string) => {
+  const response = await api.post("/api/classes", { title, description });
+  return response.data as { message: string; class: ClassSummary };
+};
+
+export const getMyClasses = async () => {
+  const response = await api.get("/api/classes");
+  return response.data as { classes: ClassSummary[] };
+};
+
+export const joinClassByCode = async (code: string) => {
+  const response = await api.post("/api/classes/join", {
+    code: code.toUpperCase(),
+  });
+  return response.data as { message: string; class: ClassSummary };
+};
+
+export const getClassDetails = async (classId: number) => {
+  const response = await api.get(`/api/classes/${classId}`);
+  return response.data as { class: ClassSummary; sessions: ClassSession[] };
+};
+
+export const getClassMembers = async (classId: number) => {
+  const response = await api.get(`/api/classes/${classId}/members`);
+  return response.data as { members: ClassMember[] };
+};
+
+export const createClassSession = async (
+  classId: number,
+  payload: { title?: string; scheduledStart?: string; scheduledEnd?: string },
+) => {
+  const response = await api.post(`/api/classes/${classId}/sessions`, payload);
+  return response.data as { message: string; session: ClassSession };
+};
+
+export const leaveClass = async (classId: number) => {
+  const response = await api.post(`/api/classes/${classId}/leave`);
+  return response.data;
+};
+
+// Student walks into a session → marked present
+export const enterSession = async (sessionId: number) => {
+  const response = await api.post(`/api/sessions/${sessionId}/enter`);
   return response.data;
 };

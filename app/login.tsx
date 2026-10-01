@@ -14,6 +14,10 @@ import ScreenContainer from "../components/common/ScreenContainer";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 
+import {
+  flushPendingSupportNeeds,
+  getMyAccessibility,
+} from "../utils/accessibilityApi";
 import { getMyBasicInfo, getMyProfile } from "../utils/api";
 import { validateEmail, validatePassword } from "../utils/validators/auth";
 
@@ -25,7 +29,7 @@ const ROLE_LABEL: Record<string, string> = {
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, refreshProfile } = useAuth();
   const { colors, typography, spacing, radius } = useTheme();
   const { role } = useLocalSearchParams<{ role: string }>();
 
@@ -38,6 +42,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
   const roleLabel = ROLE_LABEL[role as string] ?? "Student";
+  const isStaffRole = role === "teacher" || role === "guidance";
 
   const handleLogin = async () => {
     setEmailError("");
@@ -84,10 +89,43 @@ export default function LoginScreen() {
         return;
       }
 
-      // Student onboarding chain:
-      // 1) Preferences (accessibility) must exist
-      // 2) Basic Information must exist (mandatory, no skip)
-      // 3) Otherwise -> dashboard
+      // ---------- Student onboarding chain ----------
+      // Support Needs -> Accessibility Preferences -> Display Name
+      // -> Basic Information -> SIS -> Dashboard
+
+      // 0) Apply the support needs chosen before registration (if any).
+      try {
+        const applied = await flushPendingSupportNeeds();
+        if (applied) await refreshProfile();
+      } catch (flushErr) {
+        console.warn("Could not apply pending support needs:", flushErr);
+      }
+
+      // 1) Not onboarded yet?
+      //    (Accounts that existed before Phase 4 are flagged onboarded in
+      //    the database and skip these steps.)
+      try {
+        const accessibility = await getMyAccessibility();
+
+        if (!accessibility.isOnboarded) {
+          if (accessibility.needs.length === 0) {
+            router.replace({
+              pathname: "/support-needs" as any,
+              params: { loggedIn: "1" },
+            });
+          } else {
+            router.replace({
+              pathname: "/accessibility",
+              params: { onboarding: "1" },
+            });
+          }
+          return;
+        }
+      } catch (accErr) {
+        console.warn("Could not check onboarding status:", accErr);
+      }
+
+      // 2) Old-profile check (kept so existing accounts still work)
       try {
         await getMyProfile();
       } catch (profileErr: any) {
@@ -102,6 +140,7 @@ export default function LoginScreen() {
         return;
       }
 
+      // 3) Basic Information must exist (mandatory, no skip)
       try {
         await getMyBasicInfo();
         router.replace("/student");
@@ -123,6 +162,16 @@ export default function LoginScreen() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateAccount = () => {
+    if (isStaffRole) {
+      // Faculty / Guidance register with an invite code.
+      router.push({ pathname: "/register", params: { role } });
+    } else {
+      // Students choose their support needs first, then create the account.
+      router.push("/support-needs" as any);
     }
   };
 
@@ -224,12 +273,7 @@ export default function LoginScreen() {
       <AuthFooter
         question="Don't have an account?"
         action="Create Account"
-        onPress={() =>
-          router.push({
-            pathname: "/register",
-            params: { role },
-          })
-        }
+        onPress={handleCreateAccount}
       />
     </ScreenContainer>
   );

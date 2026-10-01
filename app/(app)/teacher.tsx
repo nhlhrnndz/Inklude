@@ -1,6 +1,7 @@
+//teacher.tsx — Teacher dashboard: My Classes
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   RefreshControl,
@@ -12,68 +13,65 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import ClassCard from "../../components/ClassCard";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
-import { getMySessions } from "../../utils/api";
-
-interface Session {
-  id: number;
-  code: string;
-  title: string;
-  description: string;
-  status: "active" | "ended";
-  createdAt: string;
-  endedAt: string | null;
-  participantCount: number;
-}
+import { ClassSummary, getMyClasses } from "../../utils/api";
 
 export default function TeacherDashboard() {
   const router = useRouter();
   const { user } = useAuth();
   const { colors, typography, spacing, radius } = useTheme();
 
-  const [sessions, setSessions] = useState<Session[]>([]);
+  const [classes, setClasses] = useState<ClassSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
 
-  useEffect(() => {
-    loadSessions();
-  }, []);
-
-  const loadSessions = async () => {
+  const load = useCallback(async () => {
     setError(false);
     try {
-      const data = await getMySessions();
-      setSessions(data.sessions || []);
+      const data = await getMyClasses();
+      setClasses(data.classes || []);
     } catch (err) {
-      console.error("Error loading sessions:", err);
+      console.error("Error loading classes:", err);
       setError(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
-  const handleRefresh = () => {
-    setRefreshing(true);
-    loadSessions();
-  };
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
-  const activeSessions = sessions.filter((s) => s.status === "active");
-  const endedSessions = sessions.filter((s) => s.status === "ended");
-  const hasNoSessions =
-    !loading && !error && activeSessions.length === 0 && endedSessions.length === 0;
+  const totalStudents = classes.reduce((sum, c) => sum + c.memberCount, 0);
+  const liveNow = classes.filter((c) => c.isLive).length;
+  const hasNoClasses = !loading && !error && classes.length === 0;
+
+  const actionCardBase = {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+  };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: colors.background }]}
+    >
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={{ padding: spacing.lg }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={handleRefresh}
+            onRefresh={() => {
+              setRefreshing(true);
+              load();
+            }}
             tintColor={colors.primary}
             colors={[colors.primary]}
           />
@@ -107,20 +105,21 @@ export default function TeacherDashboard() {
           Welcome, {user?.name || "Teacher"}
         </Text>
 
-        <View style={[styles.actionGrid, { gap: spacing.md, marginBottom: spacing.xl }]}>
+        <View
+          style={[
+            styles.actionGrid,
+            { gap: spacing.md, marginBottom: spacing.xl },
+          ]}
+        >
           <TouchableOpacity
             style={[
               styles.actionCard,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                borderRadius: radius.lg,
-                padding: spacing.lg,
-              },
+              actionCardBase,
+              { borderColor: colors.border },
             ]}
             onPress={() => router.push("/create-session")}
             accessibilityRole="button"
-            accessibilityLabel="Create Session. Start a new class session"
+            accessibilityLabel="Schedule Class. Create a new class"
           >
             <Ionicons
               name="add-circle-outline"
@@ -136,7 +135,7 @@ export default function TeacherDashboard() {
                 color: colors.text,
               }}
             >
-              Create Session
+              Schedule Class
             </Text>
             <Text
               style={{
@@ -146,26 +145,22 @@ export default function TeacherDashboard() {
                 marginTop: 4,
               }}
             >
-              Start a new class session
+              Create a new class
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[
               styles.actionCard,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.primaryLight,
-                borderRadius: radius.lg,
-                padding: spacing.lg,
-              },
+              actionCardBase,
+              { borderColor: colors.primaryLight },
             ]}
-            onPress={() => router.push("/my-sessions")}
+            onPress={() => router.push("/my-classes")}
             accessibilityRole="button"
-            accessibilityLabel="View Sessions. Manage your sessions"
+            accessibilityLabel="My Classes. Manage your classes"
           >
             <Ionicons
-              name="list-outline"
+              name="albums-outline"
               size={28}
               color={colors.primary}
               style={{ marginBottom: spacing.sm }}
@@ -178,7 +173,7 @@ export default function TeacherDashboard() {
                 color: colors.text,
               }}
             >
-              View Sessions
+              My Classes
             </Text>
             <Text
               style={{
@@ -188,7 +183,7 @@ export default function TeacherDashboard() {
                 marginTop: 4,
               }}
             >
-              Manage your sessions
+              Manage your classes
             </Text>
           </TouchableOpacity>
         </View>
@@ -198,7 +193,7 @@ export default function TeacherDashboard() {
             size="large"
             color={colors.primary}
             style={{ marginTop: spacing.xxl }}
-            accessibilityLabel="Loading sessions"
+            accessibilityLabel="Loading classes"
           />
         )}
 
@@ -211,11 +206,14 @@ export default function TeacherDashboard() {
                 borderColor: colors.border,
                 borderRadius: radius.lg,
                 padding: spacing.lg,
-                marginTop: spacing.md,
               },
             ]}
           >
-            <Ionicons name="cloud-offline-outline" size={32} color={colors.textSecondary} />
+            <Ionicons
+              name="cloud-offline-outline"
+              size={32}
+              color={colors.textSecondary}
+            />
             <Text
               style={{
                 fontFamily: typography.body.fontFamily,
@@ -225,22 +223,19 @@ export default function TeacherDashboard() {
                 marginTop: spacing.sm,
               }}
             >
-              We couldn't load your sessions.
+              We couldn't load your classes.
             </Text>
             <TouchableOpacity
-              style={[
-                styles.retryButton,
-                {
-                  backgroundColor: colors.primary,
-                  borderRadius: radius.md,
-                  paddingVertical: spacing.sm,
-                  paddingHorizontal: spacing.lg,
-                  marginTop: spacing.md,
-                },
-              ]}
-              onPress={loadSessions}
+              onPress={load}
               accessibilityRole="button"
-              accessibilityLabel="Retry loading sessions"
+              accessibilityLabel="Retry loading classes"
+              style={{
+                backgroundColor: colors.primary,
+                borderRadius: radius.md,
+                paddingVertical: spacing.sm,
+                paddingHorizontal: spacing.lg,
+                marginTop: spacing.md,
+              }}
             >
               <Text
                 style={{
@@ -255,7 +250,7 @@ export default function TeacherDashboard() {
           </View>
         )}
 
-        {hasNoSessions && (
+        {hasNoClasses && (
           <View
             style={[
               styles.stateBox,
@@ -264,11 +259,14 @@ export default function TeacherDashboard() {
                 borderColor: colors.border,
                 borderRadius: radius.lg,
                 padding: spacing.lg,
-                marginTop: spacing.md,
               },
             ]}
           >
-            <Ionicons name="albums-outline" size={32} color={colors.textSecondary} />
+            <Ionicons
+              name="albums-outline"
+              size={32}
+              color={colors.textSecondary}
+            />
             <Text
               style={{
                 fontFamily: typography.body.fontFamily,
@@ -278,7 +276,7 @@ export default function TeacherDashboard() {
                 marginTop: spacing.sm,
               }}
             >
-              No sessions yet.
+              No classes yet.
             </Text>
             <Text
               style={{
@@ -289,13 +287,25 @@ export default function TeacherDashboard() {
                 marginTop: 4,
               }}
             >
-              Create your first class session to get started.
+              Schedule your first class to get started.
             </Text>
           </View>
         )}
 
-        {!loading && !error && activeSessions.length > 0 && (
-          <View style={{ marginBottom: spacing.xl }}>
+        {!loading && !error && classes.length > 0 && (
+          <View>
+            <Text
+              style={{
+                fontFamily: typography.caption.fontFamily,
+                fontSize: typography.caption.fontSize,
+                color: colors.textSecondary,
+                marginBottom: spacing.sm,
+              }}
+            >
+              {classes.length} class{classes.length === 1 ? "" : "es"} ·{" "}
+              {totalStudents} student{totalStudents === 1 ? "" : "s"}
+              {liveNow > 0 ? ` · ${liveNow} live now` : ""}
+            </Text>
             <Text
               style={{
                 fontFamily: typography.title.fontFamily,
@@ -306,153 +316,15 @@ export default function TeacherDashboard() {
               }}
               accessibilityRole="header"
             >
-              Active Sessions
+              My Classes
             </Text>
-            {activeSessions.map((session) => (
-              <TouchableOpacity
-                key={session.id}
-                style={[
-                  styles.sessionCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    borderRadius: radius.md,
-                    padding: spacing.md,
-                    marginBottom: spacing.sm,
-                  },
-                ]}
-                onPress={() => router.push(`/session/${session.id}`)}
-                accessibilityRole="button"
-                accessibilityLabel={`${session.title}, code ${session.code}, live, ${session.participantCount} participants`}
-              >
-                <View style={styles.sessionHeader}>
-                  <Text
-                    style={{
-                      fontFamily: typography.caption.fontFamily,
-                      color: colors.primary,
-                      fontSize: 14,
-                      fontWeight: "700",
-                    }}
-                  >
-                    #{session.code}
-                  </Text>
-                  <View
-                    style={[
-                      styles.badge,
-                      { backgroundColor: colors.success, borderRadius: radius.sm },
-                    ]}
-                  >
-                    <Text style={styles.badgeText}>LIVE</Text>
-                  </View>
-                </View>
-                <Text
-                  style={{
-                    fontFamily: typography.body.fontFamily,
-                    color: colors.text,
-                    fontSize: 16,
-                    fontWeight: "600",
-                    marginTop: 4,
-                    marginBottom: 4,
-                  }}
-                >
-                  {session.title}
-                </Text>
-                <View style={styles.metaRow}>
-                  <Ionicons name="people-outline" size={14} color={colors.textSecondary} />
-                  <Text
-                    style={{
-                      fontFamily: typography.caption.fontFamily,
-                      color: colors.textSecondary,
-                      fontSize: typography.caption.fontSize,
-                      marginLeft: 4,
-                    }}
-                  >
-                    {session.participantCount} participants
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
-        {!loading && !error && endedSessions.length > 0 && (
-          <View style={{ marginBottom: spacing.xl }}>
-            <Text
-              style={{
-                fontFamily: typography.title.fontFamily,
-                fontSize: 18,
-                fontWeight: "700",
-                color: colors.text,
-                marginBottom: spacing.md,
-              }}
-              accessibilityRole="header"
-            >
-              Past Sessions
-            </Text>
-            {endedSessions.slice(0, 3).map((session) => (
-              <TouchableOpacity
-                key={session.id}
-                style={[
-                  styles.sessionCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    borderRadius: radius.md,
-                    padding: spacing.md,
-                    marginBottom: spacing.sm,
-                    opacity: 0.7,
-                  },
-                ]}
-                onPress={() => router.push(`/session/${session.id}`)}
-                accessibilityRole="button"
-                accessibilityLabel={`${session.title}, code ${session.code}, ended, ${session.participantCount} participants`}
-              >
-                <View style={styles.sessionHeader}>
-                  <Text
-                    style={{
-                      fontFamily: typography.caption.fontFamily,
-                      color: colors.primary,
-                      fontSize: 14,
-                      fontWeight: "700",
-                    }}
-                  >
-                    #{session.code}
-                  </Text>
-                  <View
-                    style={[
-                      styles.badge,
-                      { backgroundColor: colors.disabled, borderRadius: radius.sm },
-                    ]}
-                  >
-                    <Text style={styles.badgeText}>ENDED</Text>
-                  </View>
-                </View>
-                <Text
-                  style={{
-                    fontFamily: typography.body.fontFamily,
-                    color: colors.text,
-                    fontSize: 16,
-                    fontWeight: "600",
-                    marginTop: 4,
-                    marginBottom: 4,
-                  }}
-                >
-                  {session.title}
-                </Text>
-                <View style={styles.metaRow}>
-                  <Ionicons name="people-outline" size={14} color={colors.textSecondary} />
-                  <Text
-                    style={{
-                      fontFamily: typography.caption.fontFamily,
-                      color: colors.textSecondary,
-                      fontSize: typography.caption.fontSize,
-                      marginLeft: 4,
-                    }}
-                  >
-                    {session.participantCount} participants
-                  </Text>
-                </View>
-              </TouchableOpacity>
+            {classes.map((c) => (
+              <ClassCard
+                key={c.id}
+                cls={c}
+                showAccommodations
+                onPress={() => router.push(`/class/${c.id}` as any)}
+              />
             ))}
           </View>
         )}
@@ -462,45 +334,9 @@ export default function TeacherDashboard() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
-  scroll: {
-    flex: 1,
-  },
-  actionGrid: {
-    flexDirection: "row",
-  },
-  actionCard: {
-    flex: 1,
-    borderWidth: 1,
-  },
-  stateBox: {
-    alignItems: "center",
-    borderWidth: 1,
-  },
-  retryButton: {
-    alignItems: "center",
-  },
-  sessionCard: {
-    borderWidth: 1,
-  },
-  sessionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  badgeText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "bold",
-  },
+  safeArea: { flex: 1 },
+  scroll: { flex: 1 },
+  actionGrid: { flexDirection: "row" },
+  actionCard: { flex: 1, borderWidth: 1 },
+  stateBox: { alignItems: "center", borderWidth: 1 },
 });

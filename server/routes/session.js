@@ -1,3 +1,4 @@
+// server/routes/session.js
 const express = require("express");
 const router = express.Router();
 const { verifyToken } = require("../middleware/authMiddleware");
@@ -6,7 +7,7 @@ const {
   getMySessions,
   getSessionByIdController,
   getSessionRoster,
-  joinSessionByCode,
+  enterSessionController,
   goLiveController,
   endLiveController,
   endSessionController,
@@ -25,7 +26,7 @@ router.post("/:id/end-live", verifyToken, endLiveController);
 router.delete("/:id", verifyToken, endSessionController);
 
 // Student routes
-router.get("/join/:code", verifyToken, joinSessionByCode);
+router.post("/:id/enter", verifyToken, enterSessionController);
 router.post("/:id/leave", verifyToken, leaveSessionController);
 
 module.exports = router;

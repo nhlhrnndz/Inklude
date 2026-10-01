@@ -1,3 +1,4 @@
+//components\navigation\Sidebar.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import {
@@ -48,12 +49,12 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
     },
     {
       key: "mySessions",
-      label: "My Classrooms",
+      label: "My Classes",
       icon: "albums-outline",
     },
     {
       key: "joinSession",
-      label: "Join Session",
+      label: "Join Class",
       icon: "enter-outline",
     },
     {
@@ -91,10 +92,10 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { key: "dashboard", label: "Dashboard", icon: "home-outline" },
     {
       key: "createSession",
-      label: "Create Classroom",
+      label: "Schedule Class",
       icon: "add-circle-outline",
     },
-    { key: "mySessions", label: "My Classrooms", icon: "albums-outline" },
+    { key: "mySessions", label: "My Classes", icon: "albums-outline" },
     {
       key: "notifications",
       label: "Notifications",
@@ -107,6 +108,7 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
   guidance: [
     { key: "dashboard", label: "Dashboard", icon: "home-outline" },
     { key: "students", label: "Students", icon: "people-outline" },
+    { key: "belonging", label: "Belonging", icon: "heart-outline" },
     { key: "messages", label: "Messages", icon: "chatbubble-ellipses-outline" },
     { key: "sessions", label: "Sessions", icon: "albums-outline" },
     { key: "reports", label: "Reports", icon: "document-text-outline" },

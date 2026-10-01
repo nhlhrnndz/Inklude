@@ -3,27 +3,30 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 
 import { useTheme } from "../../../../context/ThemeContext";
+import { useLiveRefresh } from "../../../../hooks/useLiveRefresh";
 import {
-    getGuidanceThread,
-    MessageItem,
-    MessageThreadInfo,
-    MessageThreadStatus,
-    replyToThread,
-    updateThreadStatus,
+  getGuidanceThread,
+  MessageItem,
+  MessageThreadInfo,
+  MessageThreadStatus,
+  replyToThread,
+  updateThreadStatus,
 } from "../../../../utils/api";
 
 const STATUS_OPTIONS: { label: string; value: MessageThreadStatus }[] = [
@@ -32,11 +35,36 @@ const STATUS_OPTIONS: { label: string; value: MessageThreadStatus }[] = [
   { label: "Resolved", value: "resolved" },
 ];
 
+// A cheap fingerprint of what's on screen, so background refreshes only
+// re-render when something actually changed.
+function buildSignature(
+  thread: MessageThreadInfo | null,
+  messages: MessageItem[],
+) {
+  const last = messages[messages.length - 1];
+
+  return [
+    thread?.id ?? 0,
+    thread?.status ?? "",
+    thread?.category ?? "",
+    thread?.urgent ? 1 : 0,
+    thread?.updatedAt ?? "",
+    messages.length,
+    last?.id ?? 0,
+  ].join("|");
+}
+
 export default function GuidanceThreadDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { colors, typography, spacing, radius } = useTheme();
   const scrollRef = useRef<ScrollView>(null);
+
+  const nearBottomRef = useRef(true);
+  const hasLoadedRef = useRef(false);
+  const signatureRef = useRef("");
+  const lastCountRef = useRef(0);
+  const lastMutationRef = useRef(0);
 
   const [thread, setThread] = useState<MessageThreadInfo | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
@@ -48,33 +76,67 @@ export default function GuidanceThreadDetailScreen() {
 
   const threadId = Number(id);
 
-  const loadThread = useCallback(async () => {
+  // Quiet refresh: no spinner, no toast (except if the very first load
+  // fails), and no state updates unless something changed.
+  const syncThread = useCallback(async () => {
+    if (!threadId) return;
+
+    const startedAt = Date.now();
+
     try {
       const res = await getGuidanceThread(threadId);
-      setThread(res.thread);
-      setMessages(res.messages);
+
+      // If guidance replied or changed the status while this request was
+      // in flight, the response may be stale — the next refresh catches up.
+      if (lastMutationRef.current > startedAt) return;
+
+      hasLoadedRef.current = true;
+
+      const signature = buildSignature(res.thread, res.messages);
+
+      if (signature !== signatureRef.current) {
+        signatureRef.current = signature;
+        setThread(res.thread);
+        setMessages(res.messages);
+      }
     } catch (err: any) {
-      Toast.show({
-        type: "error",
-        text1: "Failed to load conversation",
-        text2: err.response?.data?.message ?? "Please try again.",
-      });
+      if (!hasLoadedRef.current) {
+        Toast.show({
+          type: "error",
+          text1: "Failed to load conversation",
+          text2: err.response?.data?.message ?? "Please try again.",
+        });
+      }
     } finally {
       setLoading(false);
     }
   }, [threadId]);
 
-  useEffect(() => {
-    if (threadId) {
-      loadThread();
-    }
-  }, [threadId, loadThread]);
+  // Only reacts to notifications about THIS thread, plus reconnects,
+  // foreground, and a light timer while the screen is open.
+  useLiveRefresh(syncThread, { sourceId: threadId });
 
+  // Keep the newest message in view — but never yank the screen away from
+  // someone who scrolled up to read older messages.
   useEffect(() => {
-    if (messages.length > 0) {
+    if (messages.length === 0) return;
+
+    const last = messages[messages.length - 1];
+    const grew = messages.length > lastCountRef.current;
+    lastCountRef.current = messages.length;
+
+    if (grew && (nearBottomRef.current || last.senderRole === "guidance")) {
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     }
-  }, [messages.length]);
+  }, [messages]);
+
+  const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+    const distanceFromBottom =
+      contentSize.height - (contentOffset.y + layoutMeasurement.height);
+
+    nearBottomRef.current = distanceFromBottom < 120;
+  };
 
   const handleReply = async () => {
     if (!reply.trim()) return;
@@ -82,6 +144,10 @@ export default function GuidanceThreadDetailScreen() {
     setSending(true);
     try {
       const res = await replyToThread(threadId, reply.trim());
+
+      lastMutationRef.current = Date.now();
+      signatureRef.current = buildSignature(res.thread, res.messages);
+
       setThread(res.thread);
       setMessages(res.messages);
       setReply("");
@@ -102,7 +168,13 @@ export default function GuidanceThreadDetailScreen() {
     setUpdatingStatus(true);
     try {
       await updateThreadStatus(threadId, status);
-      setThread({ ...thread, status });
+
+      lastMutationRef.current = Date.now();
+
+      const nextThread = { ...thread, status };
+      signatureRef.current = buildSignature(nextThread, messages);
+      setThread(nextThread);
+
       Toast.show({
         type: "success",
         text1: `Marked as ${status.replace("_", " ")}`,
@@ -228,6 +300,8 @@ export default function GuidanceThreadDetailScreen() {
       >
         <ScrollView
           ref={scrollRef}
+          onScroll={handleScroll}
+          scrollEventThrottle={100}
           contentContainerStyle={{
             paddingHorizontal: spacing.lg,
             paddingVertical: spacing.md,
