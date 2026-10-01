@@ -1,3 +1,4 @@
+//app\_layout.tsx
 import { useFonts } from "expo-font";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -10,7 +11,16 @@ import { AuthProvider, useAuth } from "../context/AuthContext";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
 
 // All screens reachable without being logged in.
-const PUBLIC_ROUTES = ["index", "role-select", "login", "register"];
+// "support-needs" is public because new students pick their needs BEFORE
+// creating an account (it is also reused after login for accounts that
+// somehow have no saved needs yet).
+const PUBLIC_ROUTES = [
+  "index",
+  "role-select",
+  "login",
+  "register",
+  "support-needs",
+];
 
 // Entry screens only — if a user is already authenticated and lands
 // here (e.g. app reopened with a stored token), we redirect them

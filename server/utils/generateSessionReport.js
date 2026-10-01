@@ -1,3 +1,5 @@
+//generateSessionReport.js
+
 const PDFDocument = require("pdfkit");
 
 function formatDateTime(value) {
@@ -41,7 +43,11 @@ function generateSessionReport(res, { session, participants, transcripts }) {
 
   if (session.description) {
     doc.moveDown(0.2);
-    doc.fontSize(10).font("Helvetica").fillColor("#555").text(session.description);
+    doc
+      .fontSize(10)
+      .font("Helvetica")
+      .fillColor("#555")
+      .text(session.description);
   }
 
   doc.moveDown(0.5);
@@ -71,11 +77,18 @@ function generateSessionReport(res, { session, participants, transcripts }) {
   doc.moveDown(1);
 
   // --- Participants ---
-  doc.fontSize(13).font("Helvetica-Bold").fillColor("#000").text("Participants");
+  doc
+    .fontSize(13)
+    .font("Helvetica-Bold")
+    .fillColor("#000")
+    .text("Participants");
   doc.moveDown(0.5);
 
   if (participants.length === 0) {
-    doc.fontSize(10).font("Helvetica").text("No participants joined this session.");
+    doc
+      .fontSize(10)
+      .font("Helvetica")
+      .text("No participants joined this session.");
   } else {
     participants.forEach((p, index) => {
       doc

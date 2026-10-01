@@ -1,4 +1,4 @@
-//create-session.tsx
+//create-session.tsx — Schedule Class
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -15,10 +15,10 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useTheme } from "../../context/ThemeContext";
-import { createSession } from "../../utils/api";
+import { createClass } from "../../utils/api";
 import { crossAlert } from "../../utils/crossAlert";
 
-export default function CreateSessionScreen() {
+export default function ScheduleClassScreen() {
   const router = useRouter();
   const { colors, typography, spacing, radius } = useTheme();
 
@@ -28,36 +28,55 @@ export default function CreateSessionScreen() {
 
   const handleCreate = async () => {
     if (!title.trim()) {
-      crossAlert("Error", "Please enter a classroom title");
+      crossAlert("Error", "Please enter a class name");
       return;
     }
 
     setLoading(true);
     try {
-      const response = await createSession(title.trim(), description.trim());
+      const response = await createClass(title.trim(), description.trim());
       crossAlert(
-        "Classroom Created!",
-        `Classroom code: ${response.session.code}\nShare this code with your students.\n\nTap OK to view the classroom, or Cancel to return to your dashboard.`,
+        "Class Created!",
+        `Class code: ${response.class.code}\nShare this code with your students so they can join.`,
         [
           {
-            text: "Cancel",
+            text: "Back to Dashboard",
             style: "cancel",
             onPress: () => router.replace("/teacher"),
           },
           {
-            text: "View Classroom",
-            onPress: () => router.push(`/session/${response.session.id}`),
+            text: "Open Class",
+            onPress: () => router.replace(`/class/${response.class.id}` as any),
           },
         ],
       );
     } catch (error: any) {
       crossAlert(
         "Error",
-        error.response?.data?.message || "Failed to create classroom",
+        error.response?.data?.message || "Failed to create class",
       );
     } finally {
       setLoading(false);
     }
+  };
+
+  const labelStyle = {
+    fontFamily: typography.body.fontFamily,
+    fontSize: typography.caption.fontSize,
+    fontWeight: "600" as const,
+    color: colors.text,
+    marginBottom: spacing.sm,
+  };
+
+  const inputStyle = {
+    backgroundColor: colors.surface,
+    color: colors.text,
+    borderRadius: radius.md,
+    borderColor: colors.border,
+    padding: spacing.md - 2,
+    marginBottom: spacing.lg,
+    fontFamily: typography.body.fontFamily,
+    fontSize: typography.body.fontSize,
   };
 
   return (
@@ -104,7 +123,7 @@ export default function CreateSessionScreen() {
             }}
             accessibilityRole="header"
           >
-            Create New Classroom
+            Schedule Class
           </Text>
           <Text
             style={{
@@ -114,74 +133,29 @@ export default function CreateSessionScreen() {
               marginBottom: spacing.xxl,
             }}
           >
-            Create a classroom for your students to join
+            Create a class once, then add sessions for each meeting.
           </Text>
 
-          <Text
-            style={{
-              fontFamily: typography.body.fontFamily,
-              fontSize: typography.caption.fontSize,
-              fontWeight: "600",
-              color: colors.text,
-              marginBottom: spacing.sm,
-            }}
-          >
-            Classroom Title *
-          </Text>
+          <Text style={labelStyle}>Class Name *</Text>
           <TextInput
-            style={[
-              styles.input,
-              {
-                backgroundColor: colors.surface,
-                color: colors.text,
-                borderRadius: radius.md,
-                borderColor: colors.border,
-                padding: spacing.md - 2,
-                marginBottom: spacing.lg,
-                fontFamily: typography.body.fontFamily,
-                fontSize: typography.body.fontSize,
-              },
-            ]}
-            placeholder="e.g. Math Class - Chapter 5"
+            style={[styles.input, inputStyle]}
+            placeholder="e.g. IT 401 - Database Management"
             placeholderTextColor={colors.placeholder}
             value={title}
             onChangeText={setTitle}
-            accessibilityLabel="Classroom title"
+            accessibilityLabel="Class name"
           />
 
-          <Text
-            style={{
-              fontFamily: typography.body.fontFamily,
-              fontSize: typography.caption.fontSize,
-              fontWeight: "600",
-              color: colors.text,
-              marginBottom: spacing.sm,
-            }}
-          >
-            Description (optional)
-          </Text>
+          <Text style={labelStyle}>Description (optional)</Text>
           <TextInput
-            style={[
-              styles.input,
-              styles.textArea,
-              {
-                backgroundColor: colors.surface,
-                color: colors.text,
-                borderRadius: radius.md,
-                borderColor: colors.border,
-                padding: spacing.md - 2,
-                marginBottom: spacing.lg,
-                fontFamily: typography.body.fontFamily,
-                fontSize: typography.body.fontSize,
-              },
-            ]}
-            placeholder="What will you cover in this classroom?"
+            style={[styles.input, styles.textArea, inputStyle]}
+            placeholder="What does this class cover?"
             placeholderTextColor={colors.placeholder}
             value={description}
             onChangeText={setDescription}
             multiline
             numberOfLines={4}
-            accessibilityLabel="Classroom description, optional"
+            accessibilityLabel="Class description, optional"
           />
 
           <TouchableOpacity
@@ -197,9 +171,7 @@ export default function CreateSessionScreen() {
             onPress={handleCreate}
             disabled={loading}
             accessibilityRole="button"
-            accessibilityLabel={
-              loading ? "Creating classroom" : "Create classroom"
-            }
+            accessibilityLabel={loading ? "Creating class" : "Create class"}
             accessibilityState={{ disabled: loading, busy: loading }}
           >
             {loading ? (
@@ -213,7 +185,7 @@ export default function CreateSessionScreen() {
                   color: "#FFFFFF",
                 }}
               >
-                Create Classroom
+                Create Class
               </Text>
             )}
           </TouchableOpacity>
@@ -224,25 +196,14 @@ export default function CreateSessionScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
-  flex: {
-    flex: 1,
-  },
+  safeArea: { flex: 1 },
+  flex: { flex: 1 },
   backButton: {
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",
   },
-  input: {
-    borderWidth: 1,
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: "top",
-  },
-  createButton: {
-    alignItems: "center",
-  },
+  input: { borderWidth: 1 },
+  textArea: { height: 100, textAlignVertical: "top" },
+  createButton: { alignItems: "center" },
 });

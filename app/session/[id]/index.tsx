@@ -21,6 +21,7 @@ import { useAuth } from "../../../context/AuthContext";
 import { useTheme } from "../../../context/ThemeContext";
 import {
   endSession,
+  enterSession,
   getSessionAnnouncements,
   getSessionDetails,
   postAnnouncement,
@@ -156,7 +157,18 @@ export default function ClassroomDetailScreen() {
     goToDashboard();
   };
 
-  const enterLive = () => {
+  const enterLive = async () => {
+    if (!isTeacher) {
+      try {
+        await enterSession(Number(id));
+      } catch (error: any) {
+        crossAlert(
+          "Can't join",
+          error.response?.data?.message || "Could not join this session.",
+        );
+        return;
+      }
+    }
     router.push(`/session/${id}/live` as any);
   };
 

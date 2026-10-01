@@ -5,6 +5,7 @@ import * as Speech from "expo-speech";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
@@ -15,12 +16,18 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 
+import AskTeacherPanel from "../../../components/AskTeacherPanel";
 import BreakButton from "../../../components/BreakButton";
 import ClassPulse from "../../../components/ClassPulse";
 import SessionRoster from "../../../components/SessionRoster";
+import TeacherSignalToast from "../../../components/TeacherSignalToast";
 import { useAuth } from "../../../context/AuthContext";
 import { useTheme } from "../../../context/ThemeContext";
 import { useCaptionSession } from "../../../hooks/useCaptionSession";
+import {
+  useSendSignal,
+  useTeacherSignals,
+} from "../../../hooks/useClassroomSignals";
 import { useFeatures } from "../../../hooks/useFeatures";
 import { useMicCaptioning } from "../../../hooks/useMicCaptioning";
 import { downloadSessionReport, getSessionDetails } from "../../../utils/api";
@@ -64,6 +71,13 @@ export default function LiveCaptioningScreen() {
   const wantsLargeTouchTargets = hasFeature("large_touch_targets");
   const wantsVoicePrompts = hasFeature("voice_navigation_prompts");
 
+  // Phase 4 Week 4 — students who communicate by typing (Non-Verbal) get a
+  // quiet "Ask teacher" panel; the teacher sees their requests as a small
+  // toast and answers out loud.
+  const canAskTeacher = !isTeacher && hasFeature("quick_reply");
+  const studentFirstName =
+    (user?.name || "").trim().split(" ")[0] || "A student";
+
   const captionFontSize = wantsLargeText ? 30 : 22;
   const captionLineHeight = wantsLargeText ? 40 : 30;
   const buttonPaddingVertical = wantsLargeTouchTargets
@@ -101,6 +115,10 @@ export default function LiveCaptioningScreen() {
 
   const { captions, connected, sessionEnded, classroomDisabled, sendCaption } =
     useCaptionSession(id, user?.id, isTeacher ? "teacher" : "student");
+
+  // Teacher: incoming quiet requests. Student: sender.
+  const { signals, dismissAll } = useTeacherSignals(isTeacher);
+  const { send: sendSignal } = useSendSignal();
 
   const {
     isRecording,
@@ -514,7 +532,10 @@ export default function LiveCaptioningScreen() {
           </TouchableOpacity>
         </ScrollView>
       ) : (
-        <>
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
           {isTeacher && (
             <View
               style={{ paddingHorizontal: spacing.lg, marginTop: spacing.sm }}
@@ -670,7 +691,21 @@ export default function LiveCaptioningScreen() {
               ))
             )}
           </ScrollView>
-        </>
+
+          {/* Student: quiet "Ask teacher" panel (collapsed by default) */}
+          {canAskTeacher && (
+            <AskTeacherPanel
+              disabled={!connected}
+              onSend={(text) => sendSignal(text, studentFirstName)}
+            />
+          )}
+
+          {/* Teacher: small, silent toast for student requests. Sent only to
+              the teacher's own socket, so it never shows on the Viewboard. */}
+          {isTeacher && (
+            <TeacherSignalToast signals={signals} onSeen={dismissAll} />
+          )}
+        </KeyboardAvoidingView>
       )}
     </SafeAreaView>
   );
@@ -678,6 +713,7 @@ export default function LiveCaptioningScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
+  flex: { flex: 1 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
   topBar: {
     flexDirection: "row",

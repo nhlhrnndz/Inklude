@@ -1,6 +1,7 @@
 // app/(app)/student.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useState } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -9,177 +10,160 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Toast from "react-native-toast-message";
 
 import WhatsActiveBanner from "../../components/WhatsActiveBanner";
-import { DisabilityType, FeatureKey } from "../../constants/featureMap";
+import { useAccessibility } from "../../context/AccessibilityContext";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
-import { useFeatures } from "../../hooks/useFeatures";
+
+type CardKey =
+  | "classroom"
+  | "quickTalk"
+  | "tts"
+  | "calendar"
+  | "guidance"
+  | "preferences"
+  | "profile";
 
 interface DashboardCard {
-  key: string;
+  key: CardKey;
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   description: string;
-  route: string | null;
-  requiresAny?: FeatureKey[];
-  leadsFor?: DisabilityType[];
+  route: string;
 }
 
-const CARDS: DashboardCard[] = [
-  {
-    key: "profile",
-    icon: "person-circle-outline",
-    title: "My Profile",
-    description: "Manage your accessibility preferences",
-    route: "/profile",
-  },
-  {
-    key: "join",
-    icon: "key-outline",
-    title: "Join Session",
-    description: "Enter a class code to see live captions",
+const CARD_DEFS: Record<CardKey, DashboardCard> = {
+  classroom: {
+    key: "classroom",
+    icon: "school-outline",
+    title: "Classroom",
+    description: "Join a class with its code and follow live captions",
     route: "/join",
-    leadsFor: ["Deaf", "Hard of Hearing"],
   },
-  {
+  quickTalk: {
     key: "quickTalk",
     icon: "chatbubbles-outline",
     title: "Quick Talk",
     description: "Follow a nearby conversation and reply out loud",
     route: "/quick-talk",
-    requiresAny: ["live_captions", "tts_output", "tts_quick_phrases"],
   },
-  {
+  tts: {
     key: "tts",
     icon: "volume-high-outline",
     title: "Text to Speech",
     description: "Speak using typed messages",
     route: "/tts",
-    requiresAny: ["tts_output", "tts_quick_phrases"],
-    leadsFor: ["Non-Verbal"],
   },
-  {
-    key: "documentReader",
-    icon: "document-text-outline",
-    title: "Document Reader",
-    description: "Have handouts read aloud to you",
-    route: "/documents",
-    requiresAny: ["document_reader"],
-    leadsFor: ["Blind / Low Vision"],
-  },
-  {
-    key: "readingTools",
-    icon: "book-outline",
-    title: "Reading Tools",
-    description: "Dyslexia-friendly reading support",
-    route: null,
-    requiresAny: ["dyslexia_font", "line_focus", "text_highlighting"],
-    leadsFor: ["Dyslexia"],
-  },
-  {
-    key: "focusTimer",
-    icon: "timer-outline",
-    title: "Focus Timer",
-    description: "Work in short, focused blocks",
-    route: null,
-    requiresAny: ["focus_timer"],
-    leadsFor: ["ADHD"],
-  },
-  {
-    key: "voiceNav",
-    icon: "mic-outline",
-    title: "Voice Navigation",
-    description: "Move around the app by speaking",
-    route: null,
-    requiresAny: ["voice_command_navigation"],
-    leadsFor: ["Physical / Motor"],
-  },
-  {
-    key: "visualSchedule",
+  calendar: {
+    key: "calendar",
     icon: "calendar-outline",
-    title: "Visual Schedule",
-    description: "See your day as clear, predictable cards",
+    title: "My Schedule",
+    description: "See your classes and what is next",
     route: "/schedule",
-    requiresAny: ["visual_schedule"],
-    leadsFor: ["Autism"],
   },
-];
+  guidance: {
+    key: "guidance",
+    icon: "heart-outline",
+    title: "Guidance",
+    description: "Message the Guidance Office",
+    route: "/messages",
+  },
+  preferences: {
+    key: "preferences",
+    icon: "options-outline",
+    title: "Accessibility Preferences",
+    description: "Change text size, contrast, captions and more",
+    route: "/accessibility",
+  },
+  profile: {
+    key: "profile",
+    icon: "person-circle-outline",
+    title: "My Profile",
+    description: "Your account and information",
+    route: "/profile",
+  },
+};
 
-const NO_RANK = 999;
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
 
 export default function StudentDashboard() {
   const router = useRouter();
   const { user } = useAuth();
-  const { colors, typography, spacing, radius } = useTheme();
-  const { hasFeature, disabilityTypes } = useFeatures();
+  const { colors, typography, spacing, radius, a11y } = useTheme();
+  const { needs, preferences, displayUsername } = useAccessibility();
 
-  const showAll = disabilityTypes.length === 0;
+  const [showMore, setShowMore] = useState(false);
 
-  const visibleCards = CARDS.filter((card) => {
-    if (showAll) return card.route !== null;
-    if (!card.requiresAny) return true;
-    return card.requiresAny.some((f) => hasFeature(f));
-  });
+  const needsHearing =
+    needs.includes("Deaf") || needs.includes("Hard of Hearing");
+  const nonVerbal = needs.includes("Non-Verbal");
+  const wantsCaptions = needsHearing || !!preferences.live_captions;
+  const wantsTTS = !!preferences.text_to_speech || nonVerbal;
+  const needsVisualHelp =
+    needs.includes("Low Vision") || needs.includes("Color Blindness");
 
-  const rankOf = (card: DashboardCard) => {
-    if (!card.leadsFor) return NO_RANK;
-    const idx = disabilityTypes.findIndex((t) =>
-      card.leadsFor!.includes(t as DisabilityType),
-    );
-    return idx === -1 ? NO_RANK : idx;
-  };
+  // Which tools are available to this student at all.
+  const available: CardKey[] = ["classroom"];
+  if (wantsCaptions || nonVerbal || wantsTTS) available.push("quickTalk");
+  if (wantsTTS) available.push("tts");
+  available.push("calendar", "guidance", "preferences", "profile");
 
-  const sortedCards = [...visibleCards].sort((a, b) => rankOf(a) - rankOf(b));
+  // Recommended (max 2), driven by needs and enabled preferences.
+  const recommendedKeys: CardKey[] = [];
+  if (wantsCaptions) recommendedKeys.push("classroom");
+  if (wantsCaptions || nonVerbal) recommendedKeys.push("quickTalk");
+  // Deaf + Non-Verbal already gets Classroom + Quick Talk; TTS is optional.
+  if (wantsTTS && !(needsHearing && nonVerbal)) recommendedKeys.push("tts");
+  if (needsVisualHelp) recommendedKeys.push("preferences");
+  if (recommendedKeys.length === 0) recommendedKeys.push("classroom");
 
-  const recommended = sortedCards
-    .filter((c) => rankOf(c) < NO_RANK && c.route !== null)
-    .slice(0, 2);
-  const recommendedKeys = new Set(recommended.map((c) => c.key));
-  const otherCards = sortedCards.filter((c) => !recommendedKeys.has(c.key));
+  const recommended = recommendedKeys
+    .filter((k, i) => recommendedKeys.indexOf(k) === i && available.includes(k))
+    .slice(0, 2)
+    .map((k) => CARD_DEFS[k]);
 
-  const openCard = (card: DashboardCard) => {
-    if (card.route === null) {
-      Toast.show({
-        type: "info",
-        text1: "Coming Soon",
-        text2: `${card.title} will be available in a future update.`,
-      });
-      return;
-    }
-    router.push(card.route as any);
-  };
+  const recommendedSet = new Set(recommended.map((c) => c.key));
+  const moreTools = available
+    .filter((k) => !recommendedSet.has(k))
+    .map((k) => CARD_DEFS[k]);
 
-  const renderCard = (card: DashboardCard, highlighted = false) => {
-    const comingSoon = card.route === null;
-    return (
-      <TouchableOpacity
-        key={card.key}
-        style={[
-          styles.card,
-          {
-            backgroundColor: colors.surface,
-            borderColor: highlighted ? colors.primary : colors.border,
-            borderWidth: highlighted ? 2 : 1,
-            borderRadius: radius.lg,
-            padding: spacing.lg,
-            opacity: comingSoon ? 0.75 : 1,
-          },
-        ]}
-        onPress={() => openCard(card)}
-        activeOpacity={0.85}
-        accessibilityRole="button"
-        accessibilityLabel={`${card.title}. ${card.description}${
-          comingSoon ? ". Coming soon." : ""
-        }`}
-      >
-        <Ionicons
-          name={card.icon}
-          size={28}
-          color={colors.primary}
-          style={{ marginBottom: spacing.sm }}
-        />
+  const firstName = (user?.name || "").trim().split(" ")[0];
+  const greetingName = displayUsername || firstName || "Student";
+
+  const cardMinHeight = a11y.largerButtons ? 96 : 72;
+
+  const renderCard = (card: DashboardCard, highlighted = false) => (
+    <TouchableOpacity
+      key={card.key}
+      style={[
+        styles.card,
+        {
+          backgroundColor: colors.surface,
+          borderColor: highlighted ? colors.primary : colors.border,
+          borderWidth: highlighted ? 2 : 1,
+          borderRadius: radius.lg,
+          padding: spacing.md,
+          minHeight: cardMinHeight,
+        },
+      ]}
+      onPress={() => router.push(card.route as any)}
+      activeOpacity={0.85}
+      accessibilityRole="button"
+      accessibilityLabel={`${card.title}. ${card.description}`}
+    >
+      <Ionicons
+        name={card.icon}
+        size={a11y.largerButtons ? 34 : 28}
+        color={colors.primary}
+        style={{ marginRight: spacing.md }}
+      />
+      <View style={{ flex: 1 }}>
         <Text
           style={{
             fontFamily: typography.title.fontFamily,
@@ -195,27 +179,30 @@ export default function StudentDashboard() {
             fontFamily: typography.caption.fontFamily,
             fontSize: typography.caption.fontSize,
             color: colors.textSecondary,
-            marginTop: 4,
+            marginTop: 2,
           }}
         >
           {card.description}
         </Text>
-        {comingSoon && (
-          <Text
-            style={{
-              fontFamily: typography.caption.fontFamily,
-              fontSize: typography.caption.fontSize,
-              fontWeight: "600",
-              color: colors.textSecondary,
-              marginTop: 6,
-            }}
-          >
-            Coming soon
-          </Text>
-        )}
-      </TouchableOpacity>
-    );
-  };
+      </View>
+      <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+    </TouchableOpacity>
+  );
+
+  const sectionTitle = (text: string) => (
+    <Text
+      style={{
+        fontFamily: typography.title.fontFamily,
+        fontSize: 16,
+        fontWeight: "600",
+        color: colors.text,
+        marginBottom: spacing.sm,
+      }}
+      accessibilityRole="header"
+    >
+      {text}
+    </Text>
+  );
 
   return (
     <SafeAreaView
@@ -225,18 +212,18 @@ export default function StudentDashboard() {
         contentContainerStyle={[styles.scrollContent, { padding: spacing.lg }]}
         showsVerticalScrollIndicator={false}
       >
+        {/* Greeting */}
         <Text
           style={{
             fontFamily: typography.h2.fontFamily,
             fontSize: typography.h2.fontSize,
             lineHeight: typography.h2.lineHeight,
             fontWeight: typography.h2.fontWeight,
-            color: colors.primary,
-            textAlign: "center",
+            color: colors.text,
           }}
           accessibilityRole="header"
         >
-          IncluEd
+          {getGreeting()}, {greetingName}
         </Text>
 
         <Text
@@ -244,54 +231,150 @@ export default function StudentDashboard() {
             fontFamily: typography.body.fontFamily,
             fontSize: typography.body.fontSize,
             color: colors.textSecondary,
-            textAlign: "center",
             marginTop: 4,
-            marginBottom: spacing.xl,
+            marginBottom: spacing.lg,
           }}
         >
-          Welcome, {user?.name || "Student"}
+          Here is what you can do today.
         </Text>
 
+        {/* What's active (shows once, during onboarding) */}
         <WhatsActiveBanner />
 
-        {recommended.length > 0 && (
-          <>
+        {/* Today */}
+        {sectionTitle("Today")}
+        <TouchableOpacity
+          style={[
+            styles.card,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              borderWidth: 1,
+              borderRadius: radius.lg,
+              padding: spacing.md,
+              minHeight: cardMinHeight,
+              marginBottom: spacing.xl,
+            },
+          ]}
+          onPress={() => router.push("/schedule" as any)}
+          accessibilityRole="button"
+          accessibilityLabel="Today's schedule. Open your schedule to see today's classes."
+        >
+          <Ionicons
+            name="time-outline"
+            size={a11y.largerButtons ? 34 : 28}
+            color={colors.primary}
+            style={{ marginRight: spacing.md }}
+          />
+          <View style={{ flex: 1 }}>
             <Text
               style={{
                 fontFamily: typography.title.fontFamily,
-                fontSize: 16,
-                fontWeight: "600",
+                fontSize: typography.title.fontSize,
+                fontWeight: "700",
                 color: colors.text,
-                marginBottom: spacing.sm,
               }}
-              accessibilityRole="header"
             >
-              Recommended for you
+              Today's schedule
             </Text>
+            <Text
+              style={{
+                fontFamily: typography.caption.fontFamily,
+                fontSize: typography.caption.fontSize,
+                color: colors.textSecondary,
+                marginTop: 2,
+              }}
+            >
+              Open your schedule to see today's classes.
+            </Text>
+          </View>
+          <Ionicons
+            name="chevron-forward"
+            size={20}
+            color={colors.textSecondary}
+          />
+        </TouchableOpacity>
+
+        {/* Recommended */}
+        {recommended.length > 0 && (
+          <>
+            {sectionTitle("Recommended for you")}
             <View style={{ gap: spacing.md, marginBottom: spacing.xl }}>
               {recommended.map((c) => renderCard(c, true))}
             </View>
           </>
         )}
 
-        {otherCards.length > 0 && (
+        {/* More tools (collapsed when reduced clutter is on) */}
+        {moreTools.length > 0 && (
           <>
-            {recommended.length > 0 && (
+            {sectionTitle("More tools")}
+            {a11y.reducedClutter && !showMore ? (
+              <TouchableOpacity
+                onPress={() => setShowMore(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Show more tools"
+                style={[
+                  styles.card,
+                  {
+                    borderColor: colors.border,
+                    borderWidth: 1,
+                    borderRadius: radius.lg,
+                    padding: spacing.md,
+                    minHeight: cardMinHeight,
+                    marginBottom: spacing.xl,
+                    backgroundColor: colors.surface,
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    flex: 1,
+                    fontFamily: typography.body.fontFamily,
+                    fontSize: typography.body.fontSize,
+                    fontWeight: "600",
+                    color: colors.primary,
+                  }}
+                >
+                  Show more tools ({moreTools.length})
+                </Text>
+                <Ionicons
+                  name="chevron-down"
+                  size={20}
+                  color={colors.primary}
+                />
+              </TouchableOpacity>
+            ) : (
+              <View style={{ gap: spacing.md, marginBottom: spacing.xl }}>
+                {moreTools.map((c) => renderCard(c))}
+              </View>
+            )}
+          </>
+        )}
+
+        {/* Upcoming (hidden when reduced clutter is on) */}
+        {!a11y.reducedClutter && (
+          <>
+            {sectionTitle("Upcoming")}
+            <View
+              style={{
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: radius.lg,
+                backgroundColor: colors.surface,
+                padding: spacing.md,
+              }}
+            >
               <Text
                 style={{
-                  fontFamily: typography.title.fontFamily,
-                  fontSize: 16,
-                  fontWeight: "600",
-                  color: colors.text,
-                  marginBottom: spacing.sm,
+                  fontFamily: typography.body.fontFamily,
+                  fontSize: typography.body.fontSize,
+                  color: colors.textSecondary,
                 }}
-                accessibilityRole="header"
               >
-                More tools
+                Assignments, Guidance appointments and campus events will show
+                up here soon.
               </Text>
-            )}
-            <View style={{ gap: spacing.md }}>
-              {otherCards.map((c) => renderCard(c))}
             </View>
           </>
         )}
@@ -306,6 +389,10 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+    paddingBottom: 48,
   },
-  card: {},
+  card: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
 });

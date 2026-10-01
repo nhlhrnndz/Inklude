@@ -1,4 +1,4 @@
-//AuthContext.tsx
+//context\AuthContext.tsx
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import api, { clearCachedToken, setCachedToken } from "../utils/api";
@@ -27,6 +27,7 @@ type AuthContextType = {
     email: string,
     password: string,
     role: string,
+    inviteCode?: string,
   ) => Promise<void>;
   logout: () => void;
   updateUser: (updatedUser: User) => Promise<void>;
@@ -106,17 +107,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     loadStoredAuth();
   }, []);
 
+  // Teacher/Guidance registration needs an invite code (checked by the
+  // server). Students leave inviteCode undefined.
   const register = async (
     name: string,
     email: string,
     password: string,
     role: string,
+    inviteCode?: string,
   ) => {
     const res = await api.post("/api/auth/register", {
       name,
       email,
       password,
       role,
+      inviteCode,
     });
     return res.data;
   };

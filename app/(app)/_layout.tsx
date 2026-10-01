@@ -6,6 +6,7 @@ import Toast from "react-native-toast-message";
 import Sidebar, { UserRole } from "../../components/navigation/Sidebar";
 import NotificationBell from "../../components/notifications/NotificationBell";
 import SensorySync from "../../components/SensorySync";
+import { AccessibilityProvider } from "../../context/AccessibilityContext";
 import { useAuth } from "../../context/AuthContext";
 import { NotificationProvider } from "../../context/NotificationContext";
 import { useTheme } from "../../context/ThemeContext";
@@ -19,7 +20,7 @@ type SidebarDrawerContentProps = {
 const ROUTES_BY_ROLE: Record<UserRole, RouteMap> = {
   student: {
     dashboard: "/student",
-    mySessions: "/my-sessions",
+    mySessions: "/my-classes",
     joinSession: "/join",
     notifications: "/notifications",
     guidance: "/messages",
@@ -32,7 +33,7 @@ const ROUTES_BY_ROLE: Record<UserRole, RouteMap> = {
   teacher: {
     dashboard: "/teacher",
     createSession: "/create-session",
-    mySessions: "/my-sessions",
+    mySessions: "/my-classes",
     announcements: "/announcements",
     notifications: "/notifications",
     students: null,
@@ -43,6 +44,7 @@ const ROUTES_BY_ROLE: Record<UserRole, RouteMap> = {
   guidance: {
     dashboard: "/guidance-dashboard",
     students: "/guidance/students",
+    belonging: "/belonging",
     messages: "/guidance/messages",
     sessions: null,
     reports: null,
@@ -115,32 +117,34 @@ export default function AppDrawerLayout() {
   const { colors } = useTheme();
 
   return (
-    <NotificationProvider>
-      <SensorySync />
-      <Drawer
-        drawerContent={(props) => <SidebarDrawerContent {...props} />}
-        screenOptions={{
-          headerStyle: {
-            backgroundColor: colors.background,
-          },
-          headerShadowVisible: false,
-          headerTintColor: colors.primary,
-          headerTitle: () => null,
-          headerRight: () => <NotificationBell />,
-          drawerType: "front",
-          drawerStyle: {
-            width: 300,
-          },
-          overlayColor: "rgba(0,0,0,0.4)",
-        }}
-      >
-        <Drawer.Screen
-          name="notifications"
-          options={{
-            headerRight: () => null,
+    <AccessibilityProvider>
+      <NotificationProvider>
+        <SensorySync />
+        <Drawer
+          drawerContent={(props) => <SidebarDrawerContent {...props} />}
+          screenOptions={{
+            headerStyle: {
+              backgroundColor: colors.background,
+            },
+            headerShadowVisible: false,
+            headerTintColor: colors.primary,
+            headerTitle: () => null,
+            headerRight: () => <NotificationBell />,
+            drawerType: "front",
+            drawerStyle: {
+              width: 300,
+            },
+            overlayColor: "rgba(0,0,0,0.4)",
           }}
-        />
-      </Drawer>
-    </NotificationProvider>
+        >
+          <Drawer.Screen
+            name="notifications"
+            options={{
+              headerRight: () => null,
+            }}
+          />
+        </Drawer>
+      </NotificationProvider>
+    </AccessibilityProvider>
   );
 }

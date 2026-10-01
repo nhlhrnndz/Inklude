@@ -1,5 +1,5 @@
 //IncluEd\server\index.js
-require("dotenv").config();
+require("dotenv").config({ path: require("path").join(__dirname, ".env") });
 
 const express = require("express");
 const cors = require("cors");
@@ -11,6 +11,7 @@ const db = require("./config/db");
 const authRoutes = require("./routes/auth");
 const profileRoutes = require("./routes/profile");
 const sessionRoutes = require("./routes/session");
+const classRoutes = require("./routes/classRoutes"); // ⬅️ Phase 4 Week 3
 const transcribeRoutes = require("./routes/transcribe");
 const transcriptRoutes = require("./routes/transcript");
 const guidanceRoutes = require("./routes/guidance");
@@ -19,21 +20,21 @@ const announcementRoutes = require("./routes/announcement");
 const initCaptionSocket = require("./sockets/captionSocket");
 const initNotificationSocket = require("./sockets/notificationSocket");
 const { setIO } = require("./services/notificationService");
-const { setIO: setIOForSockets } = require("./utils/ioRegistry"); // ⬅️ Viewboard: lets sessionController emit session-ended
+const { setIO: setIOForSockets } = require("./utils/ioRegistry");
 const sisRoutes = require("./routes/sis");
 const basicInfoRoutes = require("./routes/basicInfo");
-const checkinRoutes = require("./routes/checkinRoutes"); // ⬅️ Phase 2.3 Week 3
-const classPulseRoutes = require("./routes/classPulseRoutes"); // ⬅️ Phase 2.3 Week 3
-const scheduleRoutes = require("./routes/scheduleRoutes"); // ⬅️ Phase 2.3 Week 7
-const sensoryRoutes = require("./routes/sensoryRoutes"); // ⬅️ Phase 2.3 Week 7
-const breakRoutes = require("./routes/breakRoutes"); // ⬅️ Phase 2.3 Week 7
-const documentRoutes = require("./routes/documentRoutes"); // ⬅️ Phase 2.3 Week 5
+const checkinRoutes = require("./routes/checkinRoutes");
+const classPulseRoutes = require("./routes/classPulseRoutes");
+const scheduleRoutes = require("./routes/scheduleRoutes");
+const sensoryRoutes = require("./routes/sensoryRoutes");
+const breakRoutes = require("./routes/breakRoutes");
+const documentRoutes = require("./routes/documentRoutes");
+const accessibilityProfileRoutes = require("./routes/accessibilityProfile");
 const {
   startScheduleReminders,
-} = require("./services/scheduleReminderService"); // ⬅️ Phase 2.3 Week 7
+} = require("./services/scheduleReminderService");
 
-// Phase 2.3 Week 0 models — required here so startup fails fast if any
-// of them have a syntax error, even before their routes/controllers exist.
+// Models required here so startup fails fast on any syntax error.
 require("./models/PeerShare");
 require("./models/Checkin");
 require("./models/ClassPulse");
@@ -42,6 +43,8 @@ require("./models/ScheduleItem");
 require("./models/SensorySettings");
 require("./models/MotorSettings");
 require("./models/PresenceTap");
+require("./models/accessibilityProfileModel");
+require("./models/classModel"); // ⬅️ Phase 4 Week 3
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -53,6 +56,7 @@ app.use("/api/messages", messageRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/sessions", sessionRoutes);
+app.use("/api/classes", classRoutes); // ⬅️ Phase 4 Week 3
 app.use("/api/transcribe", transcribeRoutes);
 app.use("/api/transcripts", transcriptRoutes);
 app.use("/api/guidance", guidanceRoutes);
@@ -66,6 +70,7 @@ app.use("/api/schedule", scheduleRoutes);
 app.use("/api/sensory", sensoryRoutes);
 app.use("/api/breaks", breakRoutes);
 app.use("/api/documents", documentRoutes);
+app.use("/api/accessibility", accessibilityProfileRoutes);
 
 app.get("/", (req, res) => {
   res.json({ message: "IncluEd Backend is running ✅" });
@@ -94,9 +99,9 @@ const io = new Server(server, {
 initCaptionSocket(io);
 initNotificationSocket(io);
 setIO(io);
-setIOForSockets(io); // ⬅️ Viewboard
+setIOForSockets(io);
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 IncluEd server + Socket.IO running on port ${PORT}`);
-  startScheduleReminders(); // ⬅️ Week 7: "What's Next" reminders
+  startScheduleReminders();
 });

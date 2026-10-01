@@ -1,9 +1,9 @@
+// app/(app)/join.tsx — Join a class by code
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   StyleSheet,
   Text,
   TextInput,
@@ -13,9 +13,10 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useTheme } from "../../context/ThemeContext";
-import { joinSessionByCode } from "../../utils/api";
+import { joinClassByCode } from "../../utils/api";
+import { crossAlert } from "../../utils/crossAlert";
 
-export default function JoinSessionScreen() {
+export default function JoinClassScreen() {
   const router = useRouter();
   const { colors, typography, spacing, radius } = useTheme();
 
@@ -26,76 +27,46 @@ export default function JoinSessionScreen() {
     const trimmedCode = code.trim().toUpperCase();
 
     if (!trimmedCode) {
-      Alert.alert("Error", "Please enter a session code");
+      crossAlert("Error", "Please enter a class code");
       return;
     }
 
     setLoading(true);
-
     try {
-      const response = await joinSessionByCode(trimmedCode);
-
-      Alert.alert("Success!", `Joined "${response.session.title}"`, [
+      const response = await joinClassByCode(trimmedCode);
+      crossAlert("Success!", `Joined "${response.class.title}"`, [
         {
-          text: "View Session",
-          onPress: () => router.push(`/session/${response.session.id}`),
+          text: "Open Class",
+          onPress: () => router.replace(`/class/${response.class.id}` as any),
         },
       ]);
     } catch (error: any) {
-      Alert.alert(
+      crossAlert(
         "Failed to Join",
-        error.response?.data?.message || "Invalid session code",
+        error.response?.data?.message || "Invalid class code",
       );
     } finally {
       setLoading(false);
     }
   };
 
-  /**
-   * Join Session is a top-level Student destination.
-   * Always return directly to the Student Dashboard instead
-   * of following the previous navigation history.
-   */
   const handleBack = () => {
     router.replace("/student");
   };
 
   return (
     <SafeAreaView
-      style={[
-        styles.safeArea,
-        {
-          backgroundColor: colors.background,
-        },
-      ]}
+      style={[styles.safeArea, { backgroundColor: colors.background }]}
     >
-      <View
-        style={[
-          styles.container,
-          {
-            padding: spacing.lg,
-          },
-        ]}
-      >
+      <View style={[styles.container, { padding: spacing.lg }]}>
         <TouchableOpacity
-          style={[
-            styles.backButton,
-            {
-              marginBottom: spacing.lg,
-            },
-          ]}
+          style={[styles.backButton, { marginBottom: spacing.lg }]}
           onPress={handleBack}
           accessibilityRole="button"
           accessibilityLabel="Back to Student Dashboard"
-          accessibilityHint="Returns to the Student Dashboard"
           hitSlop={8}
         >
-          <Ionicons
-            name="arrow-back"
-            size={20}
-            color={colors.primary}
-          />
-
+          <Ionicons name="arrow-back" size={20} color={colors.primary} />
           <Text
             style={{
               fontFamily: typography.body.fontFamily,
@@ -119,7 +90,7 @@ export default function JoinSessionScreen() {
           }}
           accessibilityRole="header"
         >
-          Join Session
+          Join Class
         </Text>
 
         <Text
@@ -130,7 +101,7 @@ export default function JoinSessionScreen() {
             marginBottom: spacing.xxl,
           }}
         >
-          Enter your teacher's 6-character session code
+          Enter the 6-character class code from your teacher
         </Text>
 
         <TextInput
@@ -153,7 +124,7 @@ export default function JoinSessionScreen() {
           autoCapitalize="characters"
           maxLength={6}
           textAlign="center"
-          accessibilityLabel="Session code"
+          accessibilityLabel="Class code"
           accessibilityHint="Enter the 6-character code from your teacher"
         />
 
@@ -161,9 +132,7 @@ export default function JoinSessionScreen() {
           style={[
             styles.joinButton,
             {
-              backgroundColor: loading
-                ? colors.disabled
-                : colors.primary,
+              backgroundColor: loading ? colors.disabled : colors.primary,
               borderRadius: radius.md,
               padding: spacing.md,
             },
@@ -171,13 +140,8 @@ export default function JoinSessionScreen() {
           onPress={handleJoin}
           disabled={loading}
           accessibilityRole="button"
-          accessibilityLabel={
-            loading ? "Joining session" : "Join session"
-          }
-          accessibilityState={{
-            disabled: loading,
-            busy: loading,
-          }}
+          accessibilityLabel={loading ? "Joining class" : "Join class"}
+          accessibilityState={{ disabled: loading, busy: loading }}
         >
           {loading ? (
             <ActivityIndicator color="#FFFFFF" />
@@ -190,7 +154,7 @@ export default function JoinSessionScreen() {
                 color: "#FFFFFF",
               }}
             >
-              Join Session
+              Join Class
             </Text>
           )}
         </TouchableOpacity>
@@ -200,12 +164,8 @@ export default function JoinSessionScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-  },
+  safeArea: { flex: 1 },
+  container: { flex: 1 },
   backButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -217,7 +177,5 @@ const styles = StyleSheet.create({
     letterSpacing: 8,
     borderWidth: 2,
   },
-  joinButton: {
-    alignItems: "center",
-  },
+  joinButton: { alignItems: "center" },
 });

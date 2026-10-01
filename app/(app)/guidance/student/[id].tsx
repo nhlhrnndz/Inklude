@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 
+import BelongingSection from "../../../../components/BelongingSection";
 import { useAuth } from "../../../../context/AuthContext";
 import { useTheme } from "../../../../context/ThemeContext";
 import {
@@ -483,6 +484,9 @@ export default function StudentDetailScreen() {
             )}
           </View>
         </View>
+
+        {/* Belonging + Reach Out (Phase 2.3 Week 8) */}
+        <BelongingSection studentId={student.id} studentName={student.name} />
 
         {/* SIS Status */}
         <View style={{ marginBottom: spacing.lg }}>

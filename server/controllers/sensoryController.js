@@ -1,80 +1,72 @@
+// server/controllers/sensoryController.js
 const {
   getSensorySettings,
   upsertSensorySettings,
 } = require("../models/SensorySettings");
 
-// "Sensory-friendly mode" is one master switch in the app; it maps to all
-// four columns. It counts as ON when muted_colors is set.
-function toDto(row) {
+const DEFAULT_SETTINGS = {
+  mutedColors: false,
+  noAnimations: false,
+  noSounds: false,
+  simplifiedIcons: false,
+  whatsNextReminders: true,
+};
+
+// Convert a DB row (snake_case, 0/1) into the camelCase object the app uses.
+function formatSettings(row) {
+  if (!row) return { ...DEFAULT_SETTINGS };
   return {
-    sensoryMode: !!row?.muted_colors,
-    whatsNextReminders: row ? !!row.whats_next_reminders : true,
-    settings: {
-      mutedColors: !!row?.muted_colors,
-      noAnimations: !!row?.no_animations,
-      noSounds: !!row?.no_sounds,
-      simplifiedIcons: !!row?.simplified_icons,
-    },
+    mutedColors: !!row.muted_colors,
+    noAnimations: !!row.no_animations,
+    noSounds: !!row.no_sounds,
+    simplifiedIcons: !!row.simplified_icons,
+    whatsNextReminders: !!row.whats_next_reminders,
   };
 }
 
+// GET /api/sensory
 async function getMySensory(req, res) {
   try {
     const row = await getSensorySettings(req.user.id);
-    res.json(toDto(row));
+    const settings = formatSettings(row);
+    res.json({ ...settings, settings });
   } catch (err) {
     console.error("getMySensory error:", err);
-    res.status(500).json({ message: "Server error while loading settings." });
+    res
+      .status(500)
+      .json({ message: "Server error while fetching sensory settings." });
   }
 }
 
+// PUT /api/sensory
 async function updateMySensory(req, res) {
   try {
-    if (req.user.role !== "student") {
-      return res
-        .status(403)
-        .json({ message: "Only students can change these settings." });
-    }
+    const body = req.body || {};
 
-    const { sensoryMode, whatsNextReminders } = req.body || {};
-
-    if (sensoryMode !== undefined && typeof sensoryMode !== "boolean") {
-      return res
-        .status(400)
-        .json({ message: "sensoryMode must be true/false." });
-    }
-    if (
-      whatsNextReminders !== undefined &&
-      typeof whatsNextReminders !== "boolean"
-    ) {
-      return res
-        .status(400)
-        .json({ message: "whatsNextReminders must be true/false." });
-    }
-
-    const current = await getSensorySettings(req.user.id);
-
-    const nextMode =
-      sensoryMode !== undefined ? sensoryMode : !!current?.muted_colors;
-    const nextReminders =
-      whatsNextReminders !== undefined
-        ? whatsNextReminders
-        : current
-          ? !!current.whats_next_reminders
-          : true;
+    // Keep the current value for anything the client didn't send.
+    const current = formatSettings(await getSensorySettings(req.user.id));
+    const pick = (key) =>
+      typeof body[key] === "boolean" ? body[key] : current[key];
 
     const row = await upsertSensorySettings(req.user.id, {
-      mutedColors: nextMode,
-      noAnimations: nextMode,
-      noSounds: nextMode,
-      simplifiedIcons: nextMode,
-      whatsNextReminders: nextReminders,
+      mutedColors: pick("mutedColors"),
+      noAnimations: pick("noAnimations"),
+      noSounds: pick("noSounds"),
+      simplifiedIcons: pick("simplifiedIcons"),
+      whatsNextReminders: pick("whatsNextReminders"),
     });
 
-    res.json(toDto(row));
+    const settings = formatSettings(row);
+    res.json({
+      message: "Sensory settings saved.",
+      ...settings,
+      settings,
+    });
   } catch (err) {
     console.error("updateMySensory error:", err);
-    res.status(500).json({ message: "Server error while saving settings." });
+    res
+      .status(500)
+      .json({ message: "Server error while saving sensory settings." });
   }
 }
 
