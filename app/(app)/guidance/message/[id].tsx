@@ -24,16 +24,8 @@ import {
   getGuidanceThread,
   MessageItem,
   MessageThreadInfo,
-  MessageThreadStatus,
   replyToThread,
-  updateThreadStatus,
 } from "../../../../utils/api";
-
-const STATUS_OPTIONS: { label: string; value: MessageThreadStatus }[] = [
-  { label: "Open", value: "open" },
-  { label: "In Progress", value: "in_progress" },
-  { label: "Resolved", value: "resolved" },
-];
 
 // A cheap fingerprint of what's on screen, so background refreshes only
 // re-render when something actually changed.
@@ -45,9 +37,6 @@ function buildSignature(
 
   return [
     thread?.id ?? 0,
-    thread?.status ?? "",
-    thread?.category ?? "",
-    thread?.urgent ? 1 : 0,
     thread?.updatedAt ?? "",
     messages.length,
     last?.id ?? 0,
@@ -72,7 +61,6 @@ export default function GuidanceThreadDetailScreen() {
 
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [updatingStatus, setUpdatingStatus] = useState(false);
 
   const threadId = Number(id);
 
@@ -86,8 +74,8 @@ export default function GuidanceThreadDetailScreen() {
     try {
       const res = await getGuidanceThread(threadId);
 
-      // If guidance replied or changed the status while this request was
-      // in flight, the response may be stale — the next refresh catches up.
+      // If guidance replied while this request was in flight, the
+      // response may be stale. The next refresh catches up.
       if (lastMutationRef.current > startedAt) return;
 
       hasLoadedRef.current = true;
@@ -116,7 +104,7 @@ export default function GuidanceThreadDetailScreen() {
   // foreground, and a light timer while the screen is open.
   useLiveRefresh(syncThread, { sourceId: threadId });
 
-  // Keep the newest message in view — but never yank the screen away from
+  // Keep the newest message in view, but never yank the screen away from
   // someone who scrolled up to read older messages.
   useEffect(() => {
     if (messages.length === 0) return;
@@ -159,34 +147,6 @@ export default function GuidanceThreadDetailScreen() {
       });
     } finally {
       setSending(false);
-    }
-  };
-
-  const handleStatusChange = async (status: MessageThreadStatus) => {
-    if (!thread || thread.status === status) return;
-
-    setUpdatingStatus(true);
-    try {
-      await updateThreadStatus(threadId, status);
-
-      lastMutationRef.current = Date.now();
-
-      const nextThread = { ...thread, status };
-      signatureRef.current = buildSignature(nextThread, messages);
-      setThread(nextThread);
-
-      Toast.show({
-        type: "success",
-        text1: `Marked as ${status.replace("_", " ")}`,
-      });
-    } catch (err: any) {
-      Toast.show({
-        type: "error",
-        text1: "Could not update status",
-        text2: err.response?.data?.message ?? "Please try again.",
-      });
-    } finally {
-      setUpdatingStatus(false);
     }
   };
 
@@ -248,48 +208,9 @@ export default function GuidanceThreadDetailScreen() {
               }}
               numberOfLines={1}
             >
-              {thread.studentEmail} •{" "}
-              {thread.category.charAt(0).toUpperCase() +
-                thread.category.slice(1)}
-              {thread.urgent ? " • Urgent" : ""}
+              {thread.studentEmail}
             </Text>
           </View>
-        </View>
-
-        <View style={{ flexDirection: "row", marginTop: spacing.sm }}>
-          {STATUS_OPTIONS.map((opt) => {
-            const active = thread.status === opt.value;
-            return (
-              <TouchableOpacity
-                key={opt.value}
-                onPress={() => handleStatusChange(opt.value)}
-                disabled={updatingStatus}
-                accessibilityRole="button"
-                accessibilityLabel={`Set status: ${opt.label}`}
-                accessibilityState={{ selected: active }}
-                style={{
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                  borderRadius: radius.xl,
-                  borderWidth: 1,
-                  borderColor: active ? colors.primary : colors.border,
-                  backgroundColor: active ? colors.primary : colors.surface,
-                  marginRight: 8,
-                  opacity: updatingStatus ? 0.6 : 1,
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 12,
-                    fontWeight: "600",
-                    color: active ? "#FFFFFF" : colors.textSecondary,
-                  }}
-                >
-                  {opt.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
         </View>
       </View>
 

@@ -1,38 +1,65 @@
-// app/class/[id].tsx — class detail: sessions + people
+// app/class/[id].tsx — class detail: sessions + people + support + experience
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import ClassExperienceInsights from "../../components/ClassExperienceInsights";
+import ClassPulse from "../../components/ClassPulse";
+import {
+  DateField,
+  TimeField,
+  todayString,
+} from "../../components/DateTimePicker";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
 import {
-    ClassMember,
-    ClassSession,
-    ClassSummary,
-    createClassSession,
-    getClassDetails,
-    getClassMembers,
-    leaveClass,
+  ACCOMMODATION_TYPE_OPTIONS,
+  AccommodationDecision,
+  AccommodationRequest,
+  AccommodationStatus,
+  AccommodationType,
+  ClassMember,
+  ClassSession,
+  ClassSummary,
+  cancelAccommodationRequest,
+  createAccommodationRequest,
+  createClassSession,
+  getClassAccommodationRequests,
+  getClassDetails,
+  getClassMembers,
+  getMyAccommodationRequests,
+  leaveClass,
+  respondToAccommodationRequest,
 } from "../../utils/api";
 import { crossAlert } from "../../utils/crossAlert";
 
-type Tab = "sessions" | "people";
+type Tab = "sessions" | "people" | "support" | "experience";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^\d{2}:\d{2}$/;
+const NOTE_MAX = 300;
+const REASON_MAX = 200;
+
+const STATUS_LABEL: Record<AccommodationStatus, string> = {
+  pending: "PENDING",
+  approved: "APPROVED",
+  declined: "DECLINED",
+  discuss: "LET'S TALK",
+  cancelled: "WITHDRAWN",
+};
 
 function formatSchedule(s: ClassSession) {
   if (!s.scheduledStart) return "Not scheduled";
@@ -54,7 +81,10 @@ function formatSchedule(s: ClassSession) {
 
 export default function ClassDetailScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, tab: tabParam } = useLocalSearchParams<{
+    id: string;
+    tab?: string;
+  }>();
   const { user } = useAuth();
   const { colors, typography, spacing, radius } = useTheme();
 
@@ -65,7 +95,14 @@ export default function ClassDetailScreen() {
   const [members, setMembers] = useState<ClassMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [tab, setTab] = useState<Tab>("sessions");
+  const [tab, setTab] = useState<Tab>(
+    tabParam === "support" ? "support" : "sessions",
+  );
+
+  // A notification can open this screen straight on the support tab.
+  useEffect(() => {
+    if (tabParam === "support") setTab("support");
+  }, [tabParam]);
 
   const [showForm, setShowForm] = useState(false);
   const [sTitle, setSTitle] = useState("");
@@ -73,6 +110,29 @@ export default function ClassDetailScreen() {
   const [sStart, setSStart] = useState("");
   const [sEnd, setSEnd] = useState("");
   const [creating, setCreating] = useState(false);
+
+  // Accommodation requests
+  const [requests, setRequests] = useState<AccommodationRequest[]>([]);
+  const [showRequestForm, setShowRequestForm] = useState(false);
+  const [reqType, setReqType] = useState<AccommodationType | null>(null);
+  const [reqNote, setReqNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [reasons, setReasons] = useState<Record<number, string>>({});
+  const [respondingId, setRespondingId] = useState<number | null>(null);
+
+  const loadRequests = useCallback(async () => {
+    try {
+      if (isTeacher) {
+        const data = await getClassAccommodationRequests(Number(id));
+        setRequests(data.requests || []);
+      } else {
+        const data = await getMyAccommodationRequests(Number(id));
+        setRequests(data.requests || []);
+      }
+    } catch (err) {
+      console.error("Error loading accommodation requests:", err);
+    }
+  }, [id, isTeacher]);
 
   const load = useCallback(async () => {
     try {
@@ -83,6 +143,8 @@ export default function ClassDetailScreen() {
       setCls(details.class);
       setSessions(details.sessions || []);
       setMembers(mem.members || []);
+      // Requests load on their own so a failure here never hides the class.
+      await loadRequests();
     } catch (err) {
       console.error("Error loading class:", err);
       setCls(null);
@@ -90,7 +152,7 @@ export default function ClassDetailScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [id]);
+  }, [id, loadRequests]);
 
   useFocusEffect(
     useCallback(() => {
@@ -103,7 +165,7 @@ export default function ClassDetailScreen() {
       router.back();
       return;
     }
-    router.replace(isTeacher ? "/my-classes" : "/my-classes");
+    router.replace("/my-classes");
   };
 
   const handleCreateSession = async () => {
@@ -112,14 +174,21 @@ export default function ClassDetailScreen() {
     const end = sEnd.trim();
 
     if (date || start || end) {
-      if (
-        !DATE_RE.test(date) ||
-        !TIME_RE.test(start) ||
-        (end && !TIME_RE.test(end))
-      ) {
+      if (!DATE_RE.test(date) || !TIME_RE.test(start)) {
         crossAlert(
           "Check the schedule",
-          "Use date YYYY-MM-DD (e.g. 2026-10-08) and time HH:MM in 24-hour format (e.g. 08:00). Or leave all three empty to add an unscheduled session.",
+          "Pick a date and a start time. Or leave all three empty to add an unscheduled session.",
+        );
+        return;
+      }
+      if (end && !TIME_RE.test(end)) {
+        crossAlert("Check the schedule", "Pick a valid end time.");
+        return;
+      }
+      if (end && end <= start) {
+        crossAlert(
+          "Check the schedule",
+          "The end time must be later than the start time.",
         );
         return;
       }
@@ -168,6 +237,93 @@ export default function ClassDetailScreen() {
         },
       ],
     );
+  };
+
+  // ---- Student: send / withdraw a request ----
+  const handleSubmitRequest = async () => {
+    if (!reqType) {
+      crossAlert("Choose one", "Pick the kind of support you need first.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await createAccommodationRequest(Number(id), {
+        type: reqType,
+        note: reqNote.trim() || undefined,
+      });
+      setReqType(null);
+      setReqNote("");
+      setShowRequestForm(false);
+      await loadRequests();
+      crossAlert("Request sent", "Your teacher has been notified.");
+    } catch (error: any) {
+      crossAlert(
+        "Could not send",
+        error.response?.data?.message || "Please try again.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCancelRequest = (r: AccommodationRequest) => {
+    crossAlert(
+      "Withdraw this request?",
+      `${r.typeLabel} — your teacher will no longer see it as open.`,
+      [
+        { text: "Keep it", style: "cancel" },
+        {
+          text: "Withdraw",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await cancelAccommodationRequest(r.id);
+              await loadRequests();
+            } catch (error: any) {
+              crossAlert(
+                "Error",
+                error.response?.data?.message || "Could not withdraw.",
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  // ---- Teacher: approve / discuss / decline ----
+  const handleRespond = async (
+    r: AccommodationRequest,
+    decision: AccommodationDecision,
+  ) => {
+    const reason = (reasons[r.id] || "").trim();
+    if (decision !== "approved" && !reason) {
+      crossAlert(
+        "Add a short reason",
+        "Write one line so the student understands your answer.",
+      );
+      return;
+    }
+    setRespondingId(r.id);
+    try {
+      await respondToAccommodationRequest(r.id, {
+        decision,
+        reason: reason || undefined,
+      });
+      setReasons((prev) => {
+        const next = { ...prev };
+        delete next[r.id];
+        return next;
+      });
+      await load();
+    } catch (error: any) {
+      crossAlert(
+        "Could not respond",
+        error.response?.data?.message || "Please try again.",
+      );
+    } finally {
+      setRespondingId(null);
+    }
   };
 
   if (loading) {
@@ -247,6 +403,58 @@ export default function ClassDetailScreen() {
       </Text>
     </TouchableOpacity>
   );
+
+  const statusColor = (status: AccommodationStatus) => {
+    switch (status) {
+      case "approved":
+        return colors.success;
+      case "declined":
+        return colors.danger;
+      case "discuss":
+        return colors.primary;
+      default:
+        return colors.disabled;
+    }
+  };
+
+  const statusBadge = (status: AccommodationStatus) => (
+    <View
+      style={{
+        backgroundColor: statusColor(status),
+        borderRadius: radius.sm,
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        marginLeft: 8,
+      }}
+    >
+      <Text style={styles.badgeText}>{STATUS_LABEL[status]}</Text>
+    </View>
+  );
+
+  const isOpen = (s: AccommodationStatus) => s === "pending" || s === "discuss";
+
+  // Teacher: open requests first, then the answered ones.
+  const sortedRequests = [...requests].sort((a, b) => {
+    const ao = isOpen(a.status) ? 0 : 1;
+    const bo = isOpen(b.status) ? 0 : 1;
+    if (ao !== bo) return ao - bo;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+
+  const pendingCount = requests.filter((r) => r.status === "pending").length;
+
+  const supportLabel = isTeacher
+    ? `Requests (${pendingCount})`
+    : `Support${requests.some((r) => isOpen(r.status)) ? " •" : ""}`;
+
+  const requestCardStyle = {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  };
 
   return (
     <SafeAreaView
@@ -380,16 +588,32 @@ export default function ClassDetailScreen() {
             </View>
           </View>
 
-          {/* Tabs */}
-          <View
-            style={[
-              styles.tabBar,
-              { borderColor: colors.border, marginBottom: spacing.md },
-            ]}
+          {/* Class Experience check-in (students). Shows itself only when the
+              server says a before/after check-in is due; otherwise renders
+              nothing. */}
+          {!isTeacher && (
+            <ClassPulse
+              classId={id}
+              containerStyle={{ marginBottom: spacing.lg }}
+            />
+          )}
+
+          {/* Tabs (scroll sideways on narrow screens) */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{
+              flexGrow: 0,
+              borderBottomWidth: 1,
+              borderColor: colors.border,
+              marginBottom: spacing.md,
+            }}
           >
             {tabButton("sessions", `Sessions (${sessions.length})`)}
             {tabButton("people", `People (${members.length})`)}
-          </View>
+            {tabButton("support", supportLabel)}
+            {isTeacher && tabButton("experience", "Experience")}
+          </ScrollView>
 
           {/* Sessions tab */}
           {tab === "sessions" && (
@@ -437,35 +661,40 @@ export default function ClassDetailScreen() {
                         placeholderTextColor={colors.placeholder}
                         accessibilityLabel="Session title"
                       />
-                      <TextInput
-                        style={inputStyle}
+                      <DateField
                         value={sDate}
-                        onChangeText={setSDate}
-                        placeholder="Date YYYY-MM-DD (optional)"
-                        placeholderTextColor={colors.placeholder}
-                        autoCapitalize="none"
-                        accessibilityLabel="Session date"
+                        onChange={setSDate}
+                        label="Session date"
+                        placeholder="Pick a date (optional)"
+                        minDate={todayString()}
                       />
                       <View style={{ flexDirection: "row", gap: 8 }}>
-                        <TextInput
-                          style={[inputStyle, { flex: 1 }]}
+                        <TimeField
+                          style={{ flex: 1 }}
                           value={sStart}
-                          onChangeText={setSStart}
-                          placeholder="Start HH:MM"
-                          placeholderTextColor={colors.placeholder}
-                          autoCapitalize="none"
-                          accessibilityLabel="Start time"
+                          onChange={setSStart}
+                          label="Start time"
+                          placeholder="Start time"
                         />
-                        <TextInput
-                          style={[inputStyle, { flex: 1 }]}
+                        <TimeField
+                          style={{ flex: 1 }}
                           value={sEnd}
-                          onChangeText={setSEnd}
-                          placeholder="End HH:MM"
-                          placeholderTextColor={colors.placeholder}
-                          autoCapitalize="none"
-                          accessibilityLabel="End time"
+                          onChange={setSEnd}
+                          label="End time"
+                          placeholder="End time"
                         />
                       </View>
+                      <Text
+                        style={{
+                          fontFamily: typography.caption.fontFamily,
+                          fontSize: 11,
+                          color: colors.textSecondary,
+                          marginBottom: spacing.sm,
+                        }}
+                      >
+                        Students are asked how they feel at the start time and
+                        again at the end time, so set both.
+                      </Text>
                       <View style={{ flexDirection: "row", gap: 8 }}>
                         <TouchableOpacity
                           onPress={() => setShowForm(false)}
@@ -675,6 +904,477 @@ export default function ClassDetailScreen() {
             </View>
           )}
 
+          {/* Support tab — student: request support. teacher: answer requests */}
+          {tab === "support" && !isTeacher && (
+            <View>
+              <Text
+                style={{
+                  fontFamily: typography.caption.fontFamily,
+                  fontSize: typography.caption.fontSize,
+                  color: colors.textSecondary,
+                  marginBottom: spacing.md,
+                }}
+              >
+                Ask your teacher for support in this class. Only your teacher
+                sees your request. They never see your support needs.
+              </Text>
+
+              {!showRequestForm ? (
+                <TouchableOpacity
+                  onPress={() => setShowRequestForm(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Request support"
+                  style={{
+                    backgroundColor: colors.primary,
+                    borderRadius: radius.md,
+                    padding: spacing.md,
+                    alignItems: "center",
+                    marginBottom: spacing.lg,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: typography.button.fontFamily,
+                      fontSize: typography.button.fontSize,
+                      fontWeight: typography.button.fontWeight,
+                      color: "#FFFFFF",
+                    }}
+                  >
+                    + Request Support
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <View
+                  style={{
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    borderWidth: 1,
+                    borderRadius: radius.md,
+                    padding: spacing.md,
+                    marginBottom: spacing.lg,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: typography.body.fontFamily,
+                      fontSize: typography.body.fontSize,
+                      fontWeight: "700",
+                      color: colors.text,
+                      marginBottom: spacing.sm,
+                    }}
+                  >
+                    What kind of support do you need?
+                  </Text>
+
+                  <View style={styles.chipWrap}>
+                    {ACCOMMODATION_TYPE_OPTIONS.map((opt) => {
+                      const selected = reqType === opt.key;
+                      return (
+                        <TouchableOpacity
+                          key={opt.key}
+                          onPress={() => setReqType(opt.key)}
+                          accessibilityRole="radio"
+                          accessibilityState={{ selected }}
+                          accessibilityLabel={opt.label}
+                          style={{
+                            borderWidth: 1,
+                            borderColor: selected
+                              ? colors.primary
+                              : colors.border,
+                            backgroundColor: selected
+                              ? colors.primary
+                              : colors.secondaryBackground,
+                            borderRadius: radius.round,
+                            paddingVertical: 10,
+                            paddingHorizontal: 14,
+                            marginRight: 8,
+                            marginBottom: 8,
+                            minHeight: 44,
+                            justifyContent: "center",
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontFamily: typography.body.fontFamily,
+                              fontSize: typography.body.fontSize,
+                              fontWeight: "600",
+                              color: selected ? "#FFFFFF" : colors.text,
+                            }}
+                          >
+                            {opt.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  <TextInput
+                    style={[inputStyle, { minHeight: 80 }]}
+                    value={reqNote}
+                    onChangeText={setReqNote}
+                    placeholder="Add a note (optional)"
+                    placeholderTextColor={colors.placeholder}
+                    multiline
+                    maxLength={NOTE_MAX}
+                    textAlignVertical="top"
+                    accessibilityLabel="Note for your teacher"
+                  />
+                  <Text
+                    style={{
+                      alignSelf: "flex-end",
+                      fontSize: 11,
+                      color: colors.textSecondary,
+                      marginBottom: spacing.sm,
+                    }}
+                  >
+                    {reqNote.length}/{NOTE_MAX}
+                  </Text>
+
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setShowRequestForm(false);
+                        setReqType(null);
+                        setReqNote("");
+                      }}
+                      disabled={submitting}
+                      accessibilityRole="button"
+                      style={{
+                        flex: 1,
+                        alignItems: "center",
+                        padding: spacing.sm + 2,
+                        borderRadius: radius.sm,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontFamily: typography.body.fontFamily,
+                          fontWeight: "700",
+                          color: colors.textSecondary,
+                        }}
+                      >
+                        Cancel
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={handleSubmitRequest}
+                      disabled={submitting}
+                      accessibilityRole="button"
+                      accessibilityLabel="Send request"
+                      style={{
+                        flex: 1,
+                        alignItems: "center",
+                        padding: spacing.sm + 2,
+                        borderRadius: radius.sm,
+                        backgroundColor: colors.primary,
+                        opacity: submitting ? 0.6 : 1,
+                      }}
+                    >
+                      {submitting ? (
+                        <ActivityIndicator color="#FFFFFF" />
+                      ) : (
+                        <Text
+                          style={{
+                            fontFamily: typography.body.fontFamily,
+                            fontWeight: "700",
+                            color: "#FFFFFF",
+                          }}
+                        >
+                          Send
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              {requests.length === 0 ? (
+                <Text
+                  style={{
+                    fontFamily: typography.body.fontFamily,
+                    fontSize: typography.body.fontSize,
+                    color: colors.textSecondary,
+                  }}
+                >
+                  You haven't asked for any support in this class yet.
+                </Text>
+              ) : (
+                requests.map((r) => (
+                  <View key={r.id} style={requestCardStyle}>
+                    <View style={styles.sessionHeader}>
+                      <Text
+                        style={{
+                          flex: 1,
+                          fontFamily: typography.body.fontFamily,
+                          fontSize: 16,
+                          fontWeight: "700",
+                          color: colors.text,
+                        }}
+                      >
+                        {r.typeLabel}
+                      </Text>
+                      {statusBadge(r.status)}
+                    </View>
+                    {r.note ? (
+                      <Text
+                        style={{
+                          fontFamily: typography.body.fontFamily,
+                          fontSize: typography.body.fontSize,
+                          color: colors.text,
+                          marginTop: 6,
+                        }}
+                      >
+                        {r.note}
+                      </Text>
+                    ) : null}
+                    <Text
+                      style={{
+                        fontFamily: typography.caption.fontFamily,
+                        fontSize: 11,
+                        color: colors.textSecondary,
+                        marginTop: 4,
+                      }}
+                    >
+                      Sent {new Date(r.createdAt).toLocaleString()}
+                    </Text>
+
+                    {r.teacherResponse ? (
+                      <View
+                        style={{
+                          backgroundColor: colors.secondaryBackground,
+                          borderRadius: radius.sm,
+                          padding: spacing.sm,
+                          marginTop: spacing.sm,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontFamily: typography.caption.fontFamily,
+                            fontSize: 11,
+                            color: colors.textSecondary,
+                            marginBottom: 2,
+                          }}
+                        >
+                          Your teacher said
+                        </Text>
+                        <Text
+                          style={{
+                            fontFamily: typography.body.fontFamily,
+                            fontSize: typography.body.fontSize,
+                            color: colors.text,
+                          }}
+                        >
+                          {r.teacherResponse}
+                        </Text>
+                      </View>
+                    ) : null}
+
+                    {isOpen(r.status) && (
+                      <TouchableOpacity
+                        onPress={() => handleCancelRequest(r)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Withdraw ${r.typeLabel} request`}
+                        style={{
+                          alignSelf: "flex-start",
+                          marginTop: spacing.sm,
+                          minHeight: 44,
+                          justifyContent: "center",
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontFamily: typography.body.fontFamily,
+                            fontWeight: "700",
+                            color: colors.danger,
+                          }}
+                        >
+                          Withdraw request
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))
+              )}
+            </View>
+          )}
+
+          {tab === "support" && isTeacher && (
+            <View>
+              <Text
+                style={{
+                  fontFamily: typography.caption.fontFamily,
+                  fontSize: typography.caption.fontSize,
+                  color: colors.textSecondary,
+                  marginBottom: spacing.md,
+                }}
+              >
+                Students ask for support here. You see the request only, never a
+                student's support needs. Your reply is sent to them as a
+                notification.
+              </Text>
+
+              {sortedRequests.length === 0 ? (
+                <Text
+                  style={{
+                    fontFamily: typography.body.fontFamily,
+                    fontSize: typography.body.fontSize,
+                    color: colors.textSecondary,
+                  }}
+                >
+                  No requests yet.
+                </Text>
+              ) : (
+                sortedRequests.map((r) => {
+                  const open = isOpen(r.status);
+                  const busy = respondingId === r.id;
+                  return (
+                    <View
+                      key={r.id}
+                      style={[
+                        requestCardStyle,
+                        {
+                          opacity: open ? 1 : 0.85,
+                          borderColor: open ? colors.primary : colors.border,
+                        },
+                      ]}
+                    >
+                      <View style={styles.sessionHeader}>
+                        <Text
+                          style={{
+                            flex: 1,
+                            fontFamily: typography.body.fontFamily,
+                            fontSize: 16,
+                            fontWeight: "700",
+                            color: colors.text,
+                          }}
+                        >
+                          {r.typeLabel}
+                        </Text>
+                        {statusBadge(r.status)}
+                      </View>
+                      <Text
+                        style={{
+                          fontFamily: typography.caption.fontFamily,
+                          fontSize: typography.caption.fontSize,
+                          color: colors.textSecondary,
+                          marginTop: 2,
+                        }}
+                      >
+                        {r.studentName} ·{" "}
+                        {new Date(r.createdAt).toLocaleString()}
+                      </Text>
+                      {r.note ? (
+                        <Text
+                          style={{
+                            fontFamily: typography.body.fontFamily,
+                            fontSize: typography.body.fontSize,
+                            color: colors.text,
+                            marginTop: 6,
+                          }}
+                        >
+                          {r.note}
+                        </Text>
+                      ) : null}
+
+                      {r.teacherResponse ? (
+                        <Text
+                          style={{
+                            fontFamily: typography.caption.fontFamily,
+                            fontSize: typography.caption.fontSize,
+                            color: colors.textSecondary,
+                            marginTop: 6,
+                          }}
+                        >
+                          Your reply: {r.teacherResponse}
+                        </Text>
+                      ) : null}
+
+                      {open && (
+                        <View style={{ marginTop: spacing.md }}>
+                          <TextInput
+                            style={inputStyle}
+                            value={reasons[r.id] || ""}
+                            onChangeText={(text) =>
+                              setReasons((prev) => ({ ...prev, [r.id]: text }))
+                            }
+                            placeholder="One-line reason (needed to decline or discuss)"
+                            placeholderTextColor={colors.placeholder}
+                            maxLength={REASON_MAX}
+                            accessibilityLabel="Reason for your answer"
+                          />
+                          <View style={{ flexDirection: "row", gap: 8 }}>
+                            <TouchableOpacity
+                              onPress={() => handleRespond(r, "approved")}
+                              disabled={busy}
+                              accessibilityRole="button"
+                              accessibilityLabel="Approve request"
+                              style={{
+                                flex: 1,
+                                alignItems: "center",
+                                justifyContent: "center",
+                                minHeight: 44,
+                                borderRadius: radius.sm,
+                                backgroundColor: colors.success,
+                                opacity: busy ? 0.6 : 1,
+                              }}
+                            >
+                              <Text style={styles.actionText}>Approve</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() => handleRespond(r, "discuss")}
+                              disabled={busy}
+                              accessibilityRole="button"
+                              accessibilityLabel="Discuss request"
+                              style={{
+                                flex: 1,
+                                alignItems: "center",
+                                justifyContent: "center",
+                                minHeight: 44,
+                                borderRadius: radius.sm,
+                                backgroundColor: colors.primary,
+                                opacity: busy ? 0.6 : 1,
+                              }}
+                            >
+                              <Text style={styles.actionText}>Discuss</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() => handleRespond(r, "declined")}
+                              disabled={busy}
+                              accessibilityRole="button"
+                              accessibilityLabel="Decline request"
+                              style={{
+                                flex: 1,
+                                alignItems: "center",
+                                justifyContent: "center",
+                                minHeight: 44,
+                                borderRadius: radius.sm,
+                                backgroundColor: colors.danger,
+                                opacity: busy ? 0.6 : 1,
+                              }}
+                            >
+                              {busy ? (
+                                <ActivityIndicator color="#FFFFFF" />
+                              ) : (
+                                <Text style={styles.actionText}>Decline</Text>
+                              )}
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          )}
+
+          {/* Experience tab — teacher only: aggregate class experience */}
+          {tab === "experience" && isTeacher && (
+            <ClassExperienceInsights classId={Number(id)} />
+          )}
+
           {!isTeacher && (
             <TouchableOpacity
               onPress={handleLeave}
@@ -718,8 +1418,9 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1,
   },
-  tabBar: { flexDirection: "row", borderBottomWidth: 1 },
-  tabButton: { paddingVertical: 10, paddingHorizontal: 4, marginRight: 20 },
+  tabButton: { paddingVertical: 10, paddingHorizontal: 4, marginRight: 18 },
   sessionHeader: { flexDirection: "row", alignItems: "center" },
   badgeText: { color: "#FFFFFF", fontSize: 10, fontWeight: "bold" },
+  chipWrap: { flexDirection: "row", flexWrap: "wrap" },
+  actionText: { color: "#FFFFFF", fontWeight: "700", fontSize: 14 },
 });

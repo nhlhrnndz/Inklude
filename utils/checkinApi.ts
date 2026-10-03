@@ -76,32 +76,90 @@ export const replyToCheckin = async (
   return response.data;
 };
 
-// ===== Class Pulse =====
+// ===== Class Experience (before / after class check-in) =====
 
-// 1 = 😞, 2 = 😐, 3 = 😀
+// 1 = Difficult, 2 = Okay, 3 = Good
 export type PulseMood = 1 | 2 | 3;
 
-export interface PulseSummary {
-  responded: number;
-  hidden: boolean;
-  counts: { sad: number; okay: number; happy: number } | null;
+export type ExperiencePhase = "before" | "after";
+
+export interface PulseCounts {
+  sad: number; // Difficult
+  okay: number;
+  happy: number; // Good
 }
 
-export const submitClassPulse = async (sessionId: number, mood: PulseMood) => {
-  const response = await api.post("/api/class-pulse", { sessionId, mood });
-  return response.data;
-};
+export interface PulsePhaseSummary {
+  responded: number;
+  hidden: boolean;
+  counts: PulseCounts | null;
+}
 
-export const getMyPulseStatus = async (
+// The session summary screen reads this name.
+export type PulseSummary = PulsePhaseSummary;
+
+export interface SessionExperience {
+  before: PulsePhaseSummary;
+  after: PulsePhaseSummary;
+}
+
+export interface ClassInsights {
+  minResponses: number;
+  overview: SessionExperience;
+  sessions: {
+    id: number;
+    title: string;
+    scheduledStart: string | null;
+    before: PulsePhaseSummary;
+    after: PulsePhaseSummary;
+  }[];
+}
+
+export interface DueExperience {
+  sessionId: number;
+  sessionTitle: string;
+  phase: ExperiencePhase;
+}
+
+// Student: which check-in (if any) is open for this session right now?
+export const getDueExperienceForSession = async (
   sessionId: number,
-): Promise<{ submitted: boolean }> => {
-  const response = await api.get(`/api/class-pulse/${sessionId}/mine`);
+): Promise<{ due: DueExperience | null }> => {
+  const response = await api.get(`/api/class-pulse/session/${sessionId}/due`);
   return response.data;
 };
 
+// Student: which check-in (if any) is open for this class right now?
+export const getDueExperienceForClass = async (
+  classId: number,
+): Promise<{ due: DueExperience | null }> => {
+  const response = await api.get(`/api/class-pulse/class/${classId}/due`);
+  return response.data;
+};
+
+export const submitExperience = async (payload: {
+  sessionId: number;
+  phase: ExperiencePhase;
+  mood: PulseMood;
+}) => {
+  const response = await api.post("/api/class-pulse", payload);
+  return response.data;
+};
+
+// Teacher: one session (summary = the after-class answers)
 export const getPulseSummary = async (
   sessionId: number,
-): Promise<{ summary: PulseSummary }> => {
-  const response = await api.get(`/api/class-pulse/${sessionId}/summary`);
+): Promise<{ summary: PulseSummary; phases: SessionExperience }> => {
+  const response = await api.get(
+    `/api/class-pulse/session/${sessionId}/summary`,
+  );
+  return response.data;
+};
+
+// Teacher: a whole class
+export const getClassInsights = async (
+  classId: number,
+): Promise<ClassInsights> => {
+  const response = await api.get(`/api/class-pulse/class/${classId}/insights`);
   return response.data;
 };

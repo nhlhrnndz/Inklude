@@ -1,3 +1,4 @@
+//server\controllers\scheduleController.js
 const {
   createScheduleItem,
   getTodayForUser,
@@ -44,6 +45,9 @@ function toDto(row) {
     endTime: row.end_time,
     location: row.location,
     teacherName: row.teacher_name,
+    type: row.type,
+    sourceType: row.source_type,
+    sourceId: row.source_id,
   };
 }
 

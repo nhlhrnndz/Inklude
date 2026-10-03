@@ -1,64 +1,125 @@
-// components/ClassPulse.tsx
-import { useEffect, useState } from "react";
+// components/ClassPulse.tsx — Class Experience check-in (before / after class)
+//
+// Pass sessionId (one session) or classId (the whole class). The server
+// decides whether a check-in is due; this component just asks, and shows it.
+import { useFocusEffect } from "expo-router";
+import { useCallback, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  StyleProp,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  ViewStyle,
 } from "react-native";
 import Toast from "react-native-toast-message";
 
 import { useTheme } from "../context/ThemeContext";
 import {
-    getMyPulseStatus,
-    PulseMood,
-    submitClassPulse,
+  DueExperience,
+  ExperiencePhase,
+  PulseMood,
+  getDueExperienceForClass,
+  getDueExperienceForSession,
+  submitExperience,
 } from "../utils/checkinApi";
+
+const POLL_MS = 30000;
 
 const OPTIONS: { mood: PulseMood; emoji: string; label: string }[] = [
   { mood: 3, emoji: "😀", label: "Good" },
   { mood: 2, emoji: "😐", label: "Okay" },
-  { mood: 1, emoji: "😞", label: "Not great" },
+  { mood: 1, emoji: "😟", label: "Difficult" },
 ];
 
-type Props = {
-  sessionId: number | string;
+const TITLES: Record<ExperiencePhase, string> = {
+  before: "How are you feeling about class?",
+  after: "How did class feel?",
 };
 
-type ViewState = "loading" | "ask" | "done" | "skipped" | "hidden";
+const THANKS: Record<ExperiencePhase, string> = {
+  before: "Thanks for sharing how you feel going in.",
+  after: "Thanks for sharing how today felt.",
+};
 
-export default function ClassPulse({ sessionId }: Props) {
+type Props = {
+  sessionId?: number | string;
+  classId?: number | string;
+  containerStyle?: StyleProp<ViewStyle>;
+};
+
+type ViewState = "none" | "ask" | "done";
+
+export default function ClassPulse({
+  sessionId,
+  classId,
+  containerStyle,
+}: Props) {
   const { colors, typography, spacing, radius } = useTheme();
-  const [state, setState] = useState<ViewState>("loading");
+
+  const [prompt, setPrompt] = useState<DueExperience | null>(null);
+  const [view, setView] = useState<ViewState>("none");
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
+  // Remember what was skipped / answered so polling never re-asks it.
+  const skippedRef = useRef<Set<string>>(new Set());
+  const answeredRef = useRef<Set<string>>(new Set());
 
-    (async () => {
-      try {
-        const res = await getMyPulseStatus(Number(sessionId));
-        if (!cancelled) setState(res.submitted ? "done" : "ask");
-      } catch {
-        if (!cancelled) setState("hidden");
+  const check = useCallback(async () => {
+    try {
+      const res =
+        classId != null
+          ? await getDueExperienceForClass(Number(classId))
+          : await getDueExperienceForSession(Number(sessionId));
+
+      const due = res.due;
+      if (due) {
+        const key = `${due.sessionId}:${due.phase}`;
+        if (!skippedRef.current.has(key) && !answeredRef.current.has(key)) {
+          setPrompt(due);
+          setView("ask");
+          return;
+        }
       }
-    })();
 
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionId]);
+      // Nothing new to ask. Keep a thank-you on screen, otherwise hide.
+      setView((v) => (v === "done" ? v : "none"));
+    } catch {
+      // Keep whatever is showing; the next poll will try again.
+    }
+  }, [classId, sessionId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      check();
+      const timer = setInterval(check, POLL_MS);
+      return () => clearInterval(timer);
+    }, [check]),
+  );
 
   const handlePick = async (mood: PulseMood) => {
+    if (!prompt) return;
+    const key = `${prompt.sessionId}:${prompt.phase}`;
+
     setSubmitting(true);
     try {
-      await submitClassPulse(Number(sessionId), mood);
-      setState("done");
+      await submitExperience({
+        sessionId: prompt.sessionId,
+        phase: prompt.phase,
+        mood,
+      });
+      answeredRef.current.add(key);
+      setView("done");
     } catch (err: any) {
-      // 409 = already answered; treat as done
-      if (err.response?.status === 409) {
-        setState("done");
+      const status = err.response?.status;
+      if (status === 409) {
+        // Already answered (for example on another device).
+        answeredRef.current.add(key);
+        setView("done");
+      } else if (status === 400) {
+        // Window closed while the card was open.
+        skippedRef.current.add(key);
+        setView("none");
       } else {
         Toast.show({
           type: "error",
@@ -71,28 +132,27 @@ export default function ClassPulse({ sessionId }: Props) {
     }
   };
 
-  if (state === "loading") {
-    return <ActivityIndicator color={colors.primary} />;
-  }
+  const handleSkip = () => {
+    if (prompt) skippedRef.current.add(`${prompt.sessionId}:${prompt.phase}`);
+    setView("none");
+  };
 
-  if (state === "hidden" || state === "skipped") {
-    return null;
-  }
+  if (view === "none" || !prompt) return null;
 
-  if (state === "done") {
+  const cardStyle = [
+    styles.card,
+    {
+      backgroundColor: colors.surface,
+      borderColor: colors.border,
+      borderRadius: radius.lg,
+      padding: spacing.lg,
+    },
+    containerStyle,
+  ];
+
+  if (view === "done") {
     return (
-      <View
-        style={[
-          styles.card,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-            borderRadius: radius.lg,
-            padding: spacing.lg,
-          },
-        ]}
-        accessibilityLiveRegion="polite"
-      >
+      <View style={cardStyle} accessibilityLiveRegion="polite">
         <Text
           style={{
             fontFamily: typography.body.fontFamily,
@@ -101,24 +161,14 @@ export default function ClassPulse({ sessionId }: Props) {
             textAlign: "center",
           }}
         >
-          Thanks for sharing how today felt.
+          {THANKS[prompt.phase]}
         </Text>
       </View>
     );
   }
 
   return (
-    <View
-      style={[
-        styles.card,
-        {
-          backgroundColor: colors.surface,
-          borderColor: colors.border,
-          borderRadius: radius.lg,
-          padding: spacing.lg,
-        },
-      ]}
-    >
+    <View style={cardStyle}>
       <Text
         style={{
           fontFamily: typography.title.fontFamily,
@@ -129,8 +179,23 @@ export default function ClassPulse({ sessionId }: Props) {
         }}
         accessibilityRole="header"
       >
-        How did today feel?
+        {TITLES[prompt.phase]}
       </Text>
+
+      {prompt.sessionTitle ? (
+        <Text
+          style={{
+            fontFamily: typography.caption.fontFamily,
+            fontSize: typography.caption.fontSize,
+            color: colors.textSecondary,
+            textAlign: "center",
+            marginTop: 2,
+          }}
+          numberOfLines={1}
+        >
+          {prompt.sessionTitle}
+        </Text>
+      ) : null}
 
       <Text
         style={{
@@ -141,7 +206,8 @@ export default function ClassPulse({ sessionId }: Props) {
           marginTop: 4,
         }}
       >
-        Anonymous. Your teacher only sees the class totals.
+        Anonymous. Your teacher only sees class totals, and only when enough
+        students answer.
       </Text>
 
       <View style={[styles.row, { marginTop: spacing.md, gap: 10 }]}>
@@ -151,7 +217,7 @@ export default function ClassPulse({ sessionId }: Props) {
             onPress={() => handlePick(o.mood)}
             disabled={submitting}
             accessibilityRole="button"
-            accessibilityLabel={`${o.label}`}
+            accessibilityLabel={o.label}
             style={[
               styles.option,
               {
@@ -179,10 +245,16 @@ export default function ClassPulse({ sessionId }: Props) {
       </View>
 
       <TouchableOpacity
-        onPress={() => setState("skipped")}
+        onPress={handleSkip}
         accessibilityRole="button"
         accessibilityLabel="Skip"
-        style={{ alignSelf: "center", marginTop: spacing.md, padding: 6 }}
+        style={{
+          alignSelf: "center",
+          marginTop: spacing.md,
+          minHeight: 44,
+          justifyContent: "center",
+          paddingHorizontal: 12,
+        }}
       >
         <Text
           style={{

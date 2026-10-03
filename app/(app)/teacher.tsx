@@ -16,7 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import ClassCard from "../../components/ClassCard";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
-import { ClassSummary, getMyClasses } from "../../utils/api";
+import { ClassSummary, getMyClasses, getMyReferrals } from "../../utils/api";
 
 export default function TeacherDashboard() {
   const router = useRouter();
@@ -27,12 +27,23 @@ export default function TeacherDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
+  const [openReferrals, setOpenReferrals] = useState(0);
 
   const load = useCallback(async () => {
     setError(false);
     try {
       const data = await getMyClasses();
       setClasses(data.classes || []);
+
+      // Referrals are secondary: a failure here must not break the dashboard
+      try {
+        const refs = await getMyReferrals();
+        setOpenReferrals(
+          refs.referrals.filter((r) => r.status !== "responded").length,
+        );
+      } catch {
+        setOpenReferrals(0);
+      }
     } catch (err) {
       console.error("Error loading classes:", err);
       setError(true);
@@ -188,6 +199,58 @@ export default function TeacherDashboard() {
           </TouchableOpacity>
         </View>
 
+        {openReferrals > 0 && (
+          <TouchableOpacity
+            style={[
+              styles.referralBanner,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.warning,
+                borderRadius: radius.lg,
+                padding: spacing.md,
+                marginBottom: spacing.xl,
+              },
+            ]}
+            onPress={() => router.push("/referrals" as any)}
+            accessibilityRole="button"
+            accessibilityLabel={`${openReferrals} Guidance support referral${
+              openReferrals === 1 ? "" : "s"
+            } waiting. Open referrals.`}
+          >
+            <Ionicons name="school-outline" size={24} color={colors.primary} />
+
+            <View style={{ flex: 1, marginLeft: spacing.sm + 2 }}>
+              <Text
+                style={{
+                  fontFamily: typography.body.fontFamily,
+                  fontSize: typography.body.fontSize,
+                  fontWeight: "700",
+                  color: colors.text,
+                }}
+              >
+                {openReferrals} Guidance referral
+                {openReferrals === 1 ? "" : "s"} waiting
+              </Text>
+              <Text
+                style={{
+                  fontFamily: typography.caption.fontFamily,
+                  fontSize: typography.caption.fontSize,
+                  color: colors.textSecondary,
+                  marginTop: 2,
+                }}
+              >
+                Guidance asked you to follow up with a student.
+              </Text>
+            </View>
+
+            <Ionicons
+              name="chevron-forward"
+              size={20}
+              color={colors.textSecondary}
+            />
+          </TouchableOpacity>
+        )}
+
         {loading && (
           <ActivityIndicator
             size="large"
@@ -338,5 +401,10 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   actionGrid: { flexDirection: "row" },
   actionCard: { flex: 1, borderWidth: 1 },
+  referralBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+  },
   stateBox: { alignItems: "center", borderWidth: 1 },
 });

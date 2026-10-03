@@ -5,22 +5,65 @@ const {
   getStudentAttendance,
   getStudentTranscripts,
   getDashboardStats,
+  getAppointmentSummary,
+  getStudentMessageSummary,
 } = require("../models/guidanceModel");
 const {
   getNeedsHelpInfo,
   getNeedsHelpStudentIds,
 } = require("../models/Checkin");
 const { hasLowMoodStreak } = require("../models/ClassPulse");
+const { getAppointmentsForStudent } = require("../models/appointmentModel");
+const { getGuidanceThreads } = require("../models/messageModel");
+const { getAnnouncementsByAuthor } = require("../models/announcementModel");
+const { getAllStudentSIS } = require("../models/sisModel");
+const {
+  toDto: followupToDto,
+  getFollowupsForStudent,
+  getActiveFollowups,
+  countActiveFollowups,
+} = require("../models/followupModel");
+
+function isGuidance(req) {
+  return req.user.role === "guidance" || req.user.role === "admin";
+}
+
+const FORBIDDEN = { message: "Only guidance counselors can view this." };
+
+function preview(text, max = 100) {
+  const clean = String(text || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return clean.length > max ? clean.slice(0, max - 1) + "…" : clean;
+}
+
+// Same shape as the appointment controller's format() so the
+// frontend `Appointment` type works for both.
+function mapAppointment(a) {
+  return {
+    id: a.id,
+    studentId: a.student_id,
+    studentName: a.student_name,
+    studentEmail: a.student_email,
+    guidanceName: a.guidance_name || null,
+    reason: a.reason,
+    note: a.note || "",
+    status: a.status,
+    preferredDate: a.preferred_date,
+    preferredTime: a.preferred_time,
+    confirmedDate: a.confirmed_date || null,
+    confirmedTime: a.confirmed_time || null,
+    guidanceNote: a.guidance_note || "",
+    createdAt: a.created_at,
+    updatedAt: a.updated_at,
+  };
+}
 
 // GET /api/guidance/students?disability=Autism&course=BS%20Information%20Technology&search=juan
 async function getStudentsController(req, res) {
   try {
-    const userRole = req.user.role;
-
-    if (userRole !== "guidance" && userRole !== "admin") {
-      return res
-        .status(403)
-        .json({ message: "Only guidance counselors can view this." });
+    if (!isGuidance(req)) {
+      return res.status(403).json(FORBIDDEN);
     }
 
     const { disability, search, course } = req.query;
@@ -61,15 +104,14 @@ async function getStudentsController(req, res) {
 }
 
 // GET /api/guidance/students/:id
+// Student Support Profile: identity, needs/preferences, SIS lives in its own
+// endpoint, plus appointments, follow-ups and the message thread summary.
 async function getStudentDetailController(req, res) {
   try {
-    const userRole = req.user.role;
     const studentId = req.params.id;
 
-    if (userRole !== "guidance" && userRole !== "admin") {
-      return res
-        .status(403)
-        .json({ message: "Only guidance counselors can view this." });
+    if (!isGuidance(req)) {
+      return res.status(403).json(FORBIDDEN);
     }
 
     const student = await getStudentById(studentId);
@@ -78,10 +120,23 @@ async function getStudentDetailController(req, res) {
       return res.status(404).json({ message: "Student not found." });
     }
 
-    const attendance = await getStudentAttendance(studentId);
-    const transcripts = await getStudentTranscripts(studentId);
-    const needsHelp = await getNeedsHelpInfo(student.id);
-    const lowMood = await hasLowMoodStreak(student.id);
+    const [
+      attendance,
+      transcripts,
+      needsHelp,
+      lowMood,
+      appointmentRows,
+      followupRows,
+      thread,
+    ] = await Promise.all([
+      getStudentAttendance(studentId),
+      getStudentTranscripts(studentId),
+      getNeedsHelpInfo(student.id),
+      hasLowMoodStreak(student.id),
+      getAppointmentsForStudent(student.id),
+      getFollowupsForStudent(student.id),
+      getStudentMessageSummary(student.id),
+    ]);
 
     res.json({
       student: {
@@ -105,6 +160,18 @@ async function getStudentDetailController(req, res) {
         needsHelp,
         lowMood,
       },
+      appointments: appointmentRows.slice(0, 20).map(mapAppointment),
+      followups: followupRows.map(followupToDto),
+      messageThread: thread
+        ? {
+            id: thread.id,
+            totalCount: Number(thread.total_count) || 0,
+            unreadCount: Number(thread.unread_count) || 0,
+            lastMessage: preview(thread.last_message, 140),
+            lastSenderRole: thread.last_sender_role,
+            lastMessageAt: thread.last_message_at,
+          }
+        : null,
       attendance: attendance.map((a) => ({
         sessionId: a.id,
         sessionCode: a.session_code,
@@ -133,12 +200,8 @@ async function getStudentDetailController(req, res) {
 // GET /api/guidance/stats
 async function getStatsController(req, res) {
   try {
-    const userRole = req.user.role;
-
-    if (userRole !== "guidance" && userRole !== "admin") {
-      return res
-        .status(403)
-        .json({ message: "Only guidance counselors can view this." });
+    if (!isGuidance(req)) {
+      return res.status(403).json(FORBIDDEN);
     }
 
     const stats = await getDashboardStats();
@@ -149,8 +212,114 @@ async function getStatsController(req, res) {
   }
 }
 
+// GET /api/guidance/dashboard
+// One call for every card on the redesigned Guidance dashboard.
+async function getDashboardSummaryController(req, res) {
+  try {
+    if (!isGuidance(req)) {
+      return res.status(403).json(FORBIDDEN);
+    }
+
+    const [
+      stats,
+      apptSummary,
+      activeCount,
+      activeItems,
+      threads,
+      announcements,
+      sisRows,
+    ] = await Promise.all([
+      getDashboardStats(),
+      getAppointmentSummary(),
+      countActiveFollowups(),
+      getActiveFollowups(5),
+      getGuidanceThreads(),
+      getAnnouncementsByAuthor(req.user.id),
+      getAllStudentSIS(),
+    ]);
+
+    // Messages: only threads that actually have a message
+    const liveThreads = threads.filter((t) => t.last_message);
+    const unreadTotal = liveThreads.reduce(
+      (sum, t) => sum + Number(t.unread_count || 0),
+      0,
+    );
+
+    // SIS: anything that isn't "completed" counts as incomplete
+    let completed = 0;
+    let inProgress = 0;
+    let notStarted = 0;
+    const incompleteStudentIds = [];
+
+    sisRows.forEach((row) => {
+      if (row.status === "completed") {
+        completed += 1;
+        return;
+      }
+      if (row.status === "in_progress") inProgress += 1;
+      else notStarted += 1;
+      incompleteStudentIds.push(row.user_id);
+    });
+
+    const next = apptSummary.next;
+
+    res.json({
+      totalStudents: stats.totalStudents,
+      appointments: {
+        pendingCount: apptSummary.pendingCount,
+        upcomingCount: apptSummary.upcomingCount,
+        next: next
+          ? {
+              id: next.id,
+              studentId: next.student_id,
+              studentName: next.student_name,
+              reason: next.reason,
+              status: next.status,
+              date: next.confirmed_date,
+              time: next.confirmed_time,
+            }
+          : null,
+      },
+      followups: {
+        activeCount: activeCount,
+        items: activeItems.map(followupToDto),
+      },
+      messages: {
+        unreadTotal,
+        threads: liveThreads.slice(0, 4).map((t) => ({
+          id: t.id,
+          studentId: t.student_id,
+          studentName: t.student_name,
+          lastMessage: preview(t.last_message, 80),
+          lastMessageAt: t.last_message_at,
+          unreadCount: Number(t.unread_count) || 0,
+        })),
+      },
+      announcements: announcements.slice(0, 3).map((a) => ({
+        id: a.id,
+        title: a.title,
+        audience: a.audience,
+        createdAt: a.created_at,
+      })),
+      sis: {
+        total: sisRows.length,
+        completed,
+        inProgress,
+        notStarted,
+        incompleteStudentIds,
+      },
+    });
+  } catch (err) {
+    console.error("getDashboardSummaryController error:", err);
+    res
+      .status(500)
+      .json({ message: "Server error while loading the dashboard." });
+  }
+}
+
 module.exports = {
   getStudentsController,
   getStudentDetailController,
   getStatsController,
+  getDashboardSummaryController,
 };

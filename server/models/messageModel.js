@@ -1,29 +1,26 @@
+//server\models\messageModel.js
 const pool = require("../config/db");
 
-// Find (or create) the single thread for a student. Each student has
-// exactly one thread that's reused across all their conversations
-// with guidance — a resolved thread simply reopens if they message again.
-async function getOrCreateThreadForStudent(studentId, category, urgent) {
+// Each student has exactly one thread with Guidance. The legacy
+// category/urgent/status columns are kept in the table but no longer used.
+async function getOrCreateThreadForStudent(studentId) {
   const [existing] = await pool.query(
     "SELECT * FROM message_threads WHERE student_id = ? LIMIT 1",
     [studentId],
   );
 
-  if (existing.length > 0) {
-    return existing[0];
-  }
+  if (existing.length > 0) return existing[0];
 
   const [result] = await pool.query(
     `INSERT INTO message_threads (student_id, category, urgent, status)
-     VALUES (?, ?, ?, 'open')`,
-    [studentId, category || "help", urgent ? 1 : 0],
+     VALUES (?, 'help', 0, 'open')`,
+    [studentId],
   );
 
   const [rows] = await pool.query(
     "SELECT * FROM message_threads WHERE id = ?",
     [result.insertId],
   );
-
   return rows[0];
 }
 
@@ -44,33 +41,6 @@ async function getThreadById(threadId) {
     [threadId],
   );
   return rows[0] || null;
-}
-
-// Only updates fields that are actually passed in.
-async function updateThreadMeta(threadId, { category, urgent, status } = {}) {
-  const fields = [];
-  const params = [];
-
-  if (category) {
-    fields.push("category = ?");
-    params.push(category);
-  }
-  if (typeof urgent === "boolean") {
-    fields.push("urgent = ?");
-    params.push(urgent ? 1 : 0);
-  }
-  if (status) {
-    fields.push("status = ?");
-    params.push(status);
-  }
-
-  if (fields.length === 0) return;
-
-  params.push(threadId);
-  await pool.query(
-    `UPDATE message_threads SET ${fields.join(", ")} WHERE id = ?`,
-    params,
-  );
 }
 
 async function addMessage(threadId, senderId, senderRole, body) {
@@ -115,13 +85,10 @@ async function markMessagesRead(threadId, readerRole) {
   );
 }
 
-// Guidance inbox: one row per thread with the student's info, latest
-// message preview, and how many of the student's messages are unread.
-async function getGuidanceThreads({ category, urgent, status, search } = {}) {
+async function getGuidanceThreads({ search } = {}) {
   let query = `
     SELECT
-      mt.id, mt.student_id, mt.category, mt.urgent, mt.status,
-      mt.created_at, mt.updated_at,
+      mt.id, mt.student_id, mt.created_at, mt.updated_at,
       u.name AS student_name, u.email AS student_email,
       (SELECT body FROM messages
         WHERE thread_id = mt.id ORDER BY created_at DESC LIMIT 1) AS last_message,
@@ -135,24 +102,12 @@ async function getGuidanceThreads({ category, urgent, status, search } = {}) {
   `;
   const params = [];
 
-  if (category) {
-    query += " AND mt.category = ?";
-    params.push(category);
-  }
-  if (typeof urgent === "boolean") {
-    query += " AND mt.urgent = ?";
-    params.push(urgent ? 1 : 0);
-  }
-  if (status) {
-    query += " AND mt.status = ?";
-    params.push(status);
-  }
   if (search) {
     query += " AND (u.name LIKE ? OR u.email LIKE ?)";
     params.push(`%${search}%`, `%${search}%`);
   }
 
-  query += " ORDER BY mt.urgent DESC, last_message_at DESC";
+  query += " ORDER BY last_message_at DESC";
 
   const [rows] = await pool.query(query, params);
   return rows;
@@ -171,7 +126,6 @@ module.exports = {
   getOrCreateThreadForStudent,
   getThreadByStudentId,
   getThreadById,
-  updateThreadMeta,
   addMessage,
   getMessagesForThread,
   markMessagesRead,

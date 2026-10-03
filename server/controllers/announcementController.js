@@ -1,10 +1,18 @@
 // server/controllers/announcementController.js
 const announcementModel = require("../models/announcementModel");
 const { getSessionById, isParticipant } = require("../models/sessionModel");
+const { isClassMember } = require("../models/classModel");
 const { notifyUsers } = require("../services/notificationService");
 
 const TITLE_MAX = 150;
 const BODY_MAX = 2000;
+
+// Same rule as sessionController: class members can open a session;
+// sessions without a class fall back to "joined the session".
+async function studentCanAccess(session, userId) {
+  if (session.class_id) return isClassMember(session.class_id, userId);
+  return isParticipant(session.id, userId);
+}
 
 function preview(text, max = 140) {
   const clean = text.replace(/\s+/g, " ").trim();
@@ -162,11 +170,10 @@ async function getSessionAnnouncements(req, res) {
     }
 
     if (role === "student") {
-      const joined = await isParticipant(sessionId, userId);
-      if (!joined) {
+      if (!(await studentCanAccess(session, userId))) {
         return res
           .status(403)
-          .json({ message: "You have not joined this classroom." });
+          .json({ message: "You are not a member of this class." });
       }
     }
 

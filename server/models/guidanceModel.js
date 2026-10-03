@@ -115,10 +115,75 @@ async function getDashboardStats() {
   };
 }
 
+// Week 7: numbers for the dashboard's Appointments card.
+// Dates/times are formatted in SQL so they never shift by timezone.
+async function getAppointmentSummary() {
+  const [[counts]] = await pool.query(
+    `SELECT
+       SUM(status = 'pending') AS pending_count,
+       SUM(
+         status IN ('confirmed', 'rescheduled')
+         AND confirmed_date IS NOT NULL
+         AND confirmed_time IS NOT NULL
+         AND TIMESTAMP(confirmed_date, confirmed_time) >= NOW()
+       ) AS upcoming_count
+     FROM guidance_appointments`,
+  );
+
+  const [nextRows] = await pool.query(
+    `SELECT a.id, a.student_id, a.reason, a.status,
+            DATE_FORMAT(a.confirmed_date, '%Y-%m-%d') AS confirmed_date,
+            TIME_FORMAT(a.confirmed_time, '%H:%i') AS confirmed_time,
+            u.name AS student_name
+     FROM guidance_appointments a
+     JOIN users u ON u.id = a.student_id
+     WHERE a.status IN ('confirmed', 'rescheduled')
+       AND a.confirmed_date IS NOT NULL
+       AND a.confirmed_time IS NOT NULL
+       AND TIMESTAMP(a.confirmed_date, a.confirmed_time) >= NOW()
+     ORDER BY TIMESTAMP(a.confirmed_date, a.confirmed_time) ASC
+     LIMIT 1`,
+  );
+
+  return {
+    pendingCount: Number(counts.pending_count) || 0,
+    upcomingCount: Number(counts.upcoming_count) || 0,
+    next: nextRows[0] || null,
+  };
+}
+
+// Week 7: one-line picture of a student's thread with Guidance.
+// Returns null when the student has never messaged.
+async function getStudentMessageSummary(studentId) {
+  const [rows] = await pool.query(
+    `SELECT
+       mt.id,
+       (SELECT COUNT(*) FROM messages WHERE thread_id = mt.id) AS total_count,
+       (SELECT COUNT(*) FROM messages
+         WHERE thread_id = mt.id AND sender_role = 'student' AND read_at IS NULL) AS unread_count,
+       (SELECT body FROM messages
+         WHERE thread_id = mt.id ORDER BY created_at DESC, id DESC LIMIT 1) AS last_message,
+       (SELECT sender_role FROM messages
+         WHERE thread_id = mt.id ORDER BY created_at DESC, id DESC LIMIT 1) AS last_sender_role,
+       (SELECT created_at FROM messages
+         WHERE thread_id = mt.id ORDER BY created_at DESC, id DESC LIMIT 1) AS last_message_at
+     FROM message_threads mt
+     WHERE mt.student_id = ?
+     LIMIT 1`,
+    [studentId],
+  );
+
+  const row = rows[0];
+  if (!row || Number(row.total_count) === 0) return null;
+  return row;
+}
+
 module.exports = {
   getAllStudents,
   getStudentById,
   getStudentAttendance,
   getStudentTranscripts,
   getDashboardStats,
+  getAppointmentSummary,
+  getStudentMessageSummary,
 };

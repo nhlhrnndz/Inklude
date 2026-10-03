@@ -23,11 +23,12 @@ const ROUTES_BY_ROLE: Record<UserRole, RouteMap> = {
     mySessions: "/my-classes",
     joinSession: "/join",
     notifications: "/notifications",
-    guidance: "/messages",
+    guidance: "/guidance-hub",
     profile: "/profile",
     settings: "/settings",
     accessibility: "/accessibility",
     sis: "/sis",
+    appointments: "/guidance/appointments",
   },
 
   teacher: {
@@ -35,6 +36,7 @@ const ROUTES_BY_ROLE: Record<UserRole, RouteMap> = {
     createSession: "/create-session",
     mySessions: "/my-classes",
     announcements: "/announcements",
+    referrals: "/referrals",
     notifications: "/notifications",
     students: null,
     profile: "/profile",
@@ -44,6 +46,7 @@ const ROUTES_BY_ROLE: Record<UserRole, RouteMap> = {
   guidance: {
     dashboard: "/guidance-dashboard",
     students: "/guidance/students",
+    appointments: "/guidance/appointments",
     belonging: "/belonging",
     messages: "/guidance/messages",
     sessions: null,
@@ -61,6 +64,13 @@ function isKnownRole(role: string | undefined): role is UserRole {
 
 function findActiveKey(role: UserRole, pathname: string): string {
   const routes = ROUTES_BY_ROLE[role];
+
+  if (
+    role === "student" &&
+    (pathname === "/messages" || pathname === "/guidance/appointments")
+  ) {
+    return "guidance";
+  }
 
   const match = Object.entries(routes).find(([, path]) => path === pathname);
 

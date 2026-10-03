@@ -8,11 +8,13 @@ import type { ClassSummary } from "../utils/api";
 interface Props {
   cls: ClassSummary;
   onPress: () => void;
-  showAccommodations?: boolean; // teacher dashboard placeholder
+  showAccommodations?: boolean; // teacher: show pending accommodation requests
 }
 
 export default function ClassCard({ cls, onPress, showAccommodations }: Props) {
   const { colors, typography, spacing, radius } = useTheme();
+
+  const pending = cls.accommodationCount;
 
   return (
     <TouchableOpacity
@@ -20,6 +22,10 @@ export default function ClassCard({ cls, onPress, showAccommodations }: Props) {
       accessibilityRole="button"
       accessibilityLabel={`${cls.title}, code ${cls.code}, ${cls.memberCount} students${
         cls.isLive ? ", live now" : ""
+      }${
+        showAccommodations && pending > 0
+          ? `, ${pending} pending accommodation request${pending === 1 ? "" : "s"}`
+          : ""
       }`}
       style={[
         styles.card,
@@ -123,11 +129,18 @@ export default function ClassCard({ cls, onPress, showAccommodations }: Props) {
           <Ionicons
             name="accessibility-outline"
             size={14}
-            color={colors.textSecondary}
+            color={pending > 0 ? colors.primary : colors.textSecondary}
           />
-          <Text style={[styles.metaText, { color: colors.textSecondary }]}>
-            {cls.accommodationCount} accommodation request
-            {cls.accommodationCount === 1 ? "" : "s"}
+          <Text
+            style={[
+              styles.metaText,
+              {
+                color: pending > 0 ? colors.primary : colors.textSecondary,
+                fontWeight: pending > 0 ? "700" : "400",
+              },
+            ]}
+          >
+            {pending} pending request{pending === 1 ? "" : "s"}
           </Text>
         </View>
       )}

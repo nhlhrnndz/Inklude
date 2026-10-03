@@ -3,16 +3,16 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
@@ -20,12 +20,12 @@ import Toast from "react-native-toast-message";
 import { useAuth } from "../../../context/AuthContext";
 import { useTheme } from "../../../context/ThemeContext";
 import {
-    getPulseSummary,
-    getQuietStudents,
-    PulseSummary,
-    QuietStudent,
-    QuietStudentsResponse,
-    sendCheckin,
+  getPulseSummary,
+  getQuietStudents,
+  PulseSummary,
+  QuietStudent,
+  QuietStudentsResponse,
+  sendCheckin,
 } from "../../../utils/checkinApi";
 
 const TEMPLATES = [
@@ -280,7 +280,7 @@ export default function SessionSummaryScreen() {
                 color: colors.textSecondary,
               }}
             >
-              No answers yet. Students see the prompt after the session ends.
+              No answers yet. Students are asked before and after class.
             </Text>
           ) : pulse.hidden || !pulse.counts ? (
             <Text
@@ -291,7 +291,7 @@ export default function SessionSummaryScreen() {
               }}
             >
               {pulse.responded} response{pulse.responded === 1 ? "" : "s"} so
-              far. The breakdown appears once at least 3 students answer, to
+              far. The breakdown appears once at least 5 students answer, to
               keep answers anonymous.
             </Text>
           ) : (
@@ -299,7 +299,7 @@ export default function SessionSummaryScreen() {
               {[
                 { emoji: "😀", label: "Good", n: pulse.counts.happy },
                 { emoji: "😐", label: "Okay", n: pulse.counts.okay },
-                { emoji: "😞", label: "Not great", n: pulse.counts.sad },
+                { emoji: "😞", label: "Difficult", n: pulse.counts.sad },
               ].map((p) => (
                 <View
                   key={p.label}
