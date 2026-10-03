@@ -18,6 +18,7 @@ IncluEd
 │  │  ├─ edit-profile.tsx
 │  │  ├─ explore.tsx
 │  │  ├─ guidance
+│  │  │  ├─ appointments.tsx
 │  │  │  ├─ message
 │  │  │  │  └─ [id].tsx
 │  │  │  ├─ messages.tsx
@@ -25,6 +26,7 @@ IncluEd
 │  │  │  │  └─ [id].tsx
 │  │  │  └─ students.tsx
 │  │  ├─ guidance-dashboard.tsx
+│  │  ├─ guidance-hub.tsx
 │  │  ├─ join.tsx
 │  │  ├─ messages.tsx
 │  │  ├─ my-classes.tsx
@@ -32,6 +34,7 @@ IncluEd
 │  │  ├─ notifications.tsx
 │  │  ├─ profile.tsx
 │  │  ├─ quick-talk.tsx
+│  │  ├─ referrals.tsx
 │  │  ├─ schedule.tsx
 │  │  ├─ settings.tsx
 │  │  ├─ sis.tsx
@@ -75,6 +78,8 @@ IncluEd
 │     └─ splash-icon.png
 ├─ CLAUDE.md
 ├─ components
+│  ├─ appointments
+│  │  └─ SlotPicker.tsx
 │  ├─ AskTeacherPanel.tsx
 │  ├─ auth
 │  │  ├─ AuthFooter.tsx
@@ -85,10 +90,12 @@ IncluEd
 │  ├─ BelongingSection.tsx
 │  ├─ BreakButton.tsx
 │  ├─ ClassCard.tsx
+│  ├─ ClassExperienceInsights.tsx
 │  ├─ ClassPulse.tsx
 │  ├─ common
 │  │  ├─ ScreenContainer.tsx
 │  │  └─ ToastConfig.tsx
+│  ├─ DateTimePicker.tsx
 │  ├─ external-link.tsx
 │  ├─ haptic-tab.tsx
 │  ├─ hello-wave.tsx
@@ -102,6 +109,7 @@ IncluEd
 │  ├─ SensorySync.tsx
 │  ├─ SessionDocuments.tsx
 │  ├─ SessionRoster.tsx
+│  ├─ SupportReferralModal.tsx
 │  ├─ TeacherSignalToast.tsx
 │  ├─ themed-text.tsx
 │  ├─ themed-view.tsx
@@ -138,7 +146,8 @@ IncluEd
 │  ├─ useLiveRefresh.ts
 │  ├─ useMicCaptioning.ts
 │  ├─ useQuickTalkListener.ts
-│  └─ useQuickTalkSpeech.ts
+│  ├─ useQuickTalkSpeech.ts
+│  └─ useWantsLiveCaptions.ts
 ├─ metro.config.js
 ├─ package-lock.json
 ├─ package.json
@@ -150,7 +159,9 @@ IncluEd
 │  │  └─ db.js
 │  ├─ controllers
 │  │  ├─ accessibilityProfileController.js
+│  │  ├─ accommodationController.js
 │  │  ├─ announcementController.js
+│  │  ├─ appointmentController.js
 │  │  ├─ authController.js
 │  │  ├─ basicInfoController.js
 │  │  ├─ belongingController.js
@@ -160,10 +171,12 @@ IncluEd
 │  │  ├─ classController.js
 │  │  ├─ classPulseController.js
 │  │  ├─ documentController.js
+│  │  ├─ followupController.js
 │  │  ├─ guidanceController.js
 │  │  ├─ messageController.js
 │  │  ├─ notificationController.js
 │  │  ├─ profileController.js
+│  │  ├─ referralController.js
 │  │  ├─ scheduleController.js
 │  │  ├─ sensoryController.js
 │  │  ├─ sessionController.js
@@ -175,7 +188,9 @@ IncluEd
 │  │  └─ authMiddleware.js
 │  ├─ models
 │  │  ├─ accessibilityProfileModel.js
+│  │  ├─ accommodationModel.js
 │  │  ├─ announcementModel.js
+│  │  ├─ appointmentModel.js
 │  │  ├─ basicInfoModel.js
 │  │  ├─ belongingModel.js
 │  │  ├─ belongingOverviewModel.js
@@ -184,6 +199,7 @@ IncluEd
 │  │  ├─ classModel.js
 │  │  ├─ ClassPulse.js
 │  │  ├─ Document.js
+│  │  ├─ followupModel.js
 │  │  ├─ guidanceModel.js
 │  │  ├─ messageModel.js
 │  │  ├─ MotorSettings.js
@@ -191,6 +207,7 @@ IncluEd
 │  │  ├─ PeerShare.js
 │  │  ├─ PresenceTap.js
 │  │  ├─ profileModel.js
+│  │  ├─ referralModel.js
 │  │  ├─ ScheduleItem.js
 │  │  ├─ SensorySettings.js
 │  │  ├─ sessionModel.js
@@ -200,7 +217,9 @@ IncluEd
 │  ├─ package.json
 │  ├─ routes
 │  │  ├─ accessibilityProfile.js
+│  │  ├─ accommodationRoutes.js
 │  │  ├─ announcement.js
+│  │  ├─ appointments.js
 │  │  ├─ auth.js
 │  │  ├─ basicInfo.js
 │  │  ├─ breakRoutes.js
@@ -212,6 +231,7 @@ IncluEd
 │  │  ├─ message.js
 │  │  ├─ notification.js
 │  │  ├─ profile.js
+│  │  ├─ referrals.js
 │  │  ├─ scheduleRoutes.js
 │  │  ├─ sensoryRoutes.js
 │  │  ├─ session.js

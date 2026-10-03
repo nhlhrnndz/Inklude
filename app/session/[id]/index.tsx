@@ -19,6 +19,8 @@ import ClassPulse from "../../../components/ClassPulse";
 import SessionDocuments from "../../../components/SessionDocuments";
 import { useAuth } from "../../../context/AuthContext";
 import { useTheme } from "../../../context/ThemeContext";
+import { studentWantsLiveCaptions } from "../../../hooks/useWantsLiveCaptions";
+import { getMyAccessibility } from "../../../utils/accessibilityApi";
 import {
   endSession,
   enterSession,
@@ -87,6 +89,11 @@ export default function ClassroomDetailScreen() {
   const [annBody, setAnnBody] = useState("");
   const [posting, setPosting] = useState(false);
 
+  // Does this student use live captions? null = still loading.
+  // This screen is outside AccessibilityProvider, so it loads the answer
+  // itself. Teachers always see the Go Live button, so they skip this.
+  const [wantsCaptions, setWantsCaptions] = useState<boolean | null>(null);
+
   const loadSession = useCallback(async () => {
     try {
       const data = await getSessionDetails(Number(id));
@@ -114,6 +121,31 @@ export default function ClassroomDetailScreen() {
     loadSession();
     loadAnnouncements();
   }, [loadSession, loadAnnouncements]);
+
+  // Work out whether to offer the live captions "Join Session" button.
+  useEffect(() => {
+    if (!user?.id || isTeacher) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getMyAccessibility();
+        if (!cancelled) {
+          setWantsCaptions(
+            studentWantsLiveCaptions(data.needs, data.preferences),
+          );
+        }
+      } catch {
+        // If we can't tell, show the button rather than lock out a student
+        // who needs captions.
+        if (!cancelled) setWantsCaptions(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, isTeacher]);
 
   // Join the session's socket room just to hear live/disable updates while
   // sitting on this screen, so the banner status and the pulse card react
@@ -286,6 +318,10 @@ export default function ClassroomDetailScreen() {
   const isEnabled = session.status === "active";
   const hasHadALiveRun = !!session.liveEndedAt;
 
+  // Teachers always get Go Live. Students get Join Session only if they use
+  // live captions (and only once we know, so it never flashes).
+  const showLiveEntry = isEnabled && (isTeacher || wantsCaptions === true);
+
   return (
     <SafeAreaView
       style={[styles.safeArea, { backgroundColor: colors.background }]}
@@ -431,8 +467,8 @@ export default function ClassroomDetailScreen() {
             </View>
           </View>
 
-          {/* Go Live / Join entry point */}
-          {isEnabled && (
+          {/* Go Live (teacher) / Join Session (students who use live captions) */}
+          {showLiveEntry && (
             <TouchableOpacity
               style={[
                 styles.liveEntryButton,

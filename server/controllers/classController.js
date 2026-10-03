@@ -13,7 +13,9 @@ const {
   createClassSession,
 } = require("../models/classModel");
 
-function mapClass(c) {
+// includeAccommodations: only the class's teacher gets the pending-request
+// count. Students always get 0.
+function mapClass(c, includeAccommodations = false) {
   return {
     id: c.id,
     code: c.class_code,
@@ -25,8 +27,9 @@ function mapClass(c) {
     memberCount: Number(c.member_count) || 0,
     sessionCount: Number(c.session_count) || 0,
     isLive: Number(c.live_count) > 0,
-    // Placeholder — filled in Week 5 (accommodation requests)
-    accommodationCount: 0,
+    accommodationCount: includeAccommodations
+      ? Number(c.accommodation_count) || 0
+      : 0,
   };
 }
 
@@ -73,7 +76,9 @@ async function createClassController(req, res) {
       title.trim(),
       (description || "").trim(),
     );
-    res.status(201).json({ message: "Class created.", class: mapClass(cls) });
+    res
+      .status(201)
+      .json({ message: "Class created.", class: mapClass(cls, true) });
   } catch (err) {
     console.error("createClass error:", err);
     res.status(500).json({ message: "Server error while creating class." });
@@ -83,13 +88,13 @@ async function createClassController(req, res) {
 async function listMyClasses(req, res) {
   try {
     let rows;
-    if (req.user.role === "teacher")
-      rows = await getTeacherClasses(req.user.id);
+    const isTeacher = req.user.role === "teacher";
+    if (isTeacher) rows = await getTeacherClasses(req.user.id);
     else if (req.user.role === "student")
       rows = await getStudentClasses(req.user.id);
     else return res.status(403).json({ message: "Unauthorized role." });
 
-    res.json({ classes: rows.map(mapClass) });
+    res.json({ classes: rows.map((c) => mapClass(c, isTeacher)) });
   } catch (err) {
     console.error("listMyClasses error:", err);
     res.status(500).json({ message: "Server error while fetching classes." });
@@ -115,7 +120,7 @@ async function joinClassController(req, res) {
     }
 
     await joinClass(cls.id, req.user.id);
-    res.json({ message: "Joined class.", class: mapClass(cls) });
+    res.json({ message: "Joined class.", class: mapClass(cls, false) });
   } catch (err) {
     console.error("joinClass error:", err);
     res.status(500).json({ message: "Server error while joining class." });
@@ -149,9 +154,10 @@ async function getClassController(req, res) {
   try {
     const cls = await loadClassWithAccess(req, res);
     if (!cls) return;
+    const isTeacher = req.user.role === "teacher";
     const sessions = await getClassSessions(cls.id);
     res.json({
-      class: { ...mapClass(cls), isOwner: req.user.role === "teacher" },
+      class: { ...mapClass(cls, isTeacher), isOwner: isTeacher },
       sessions: sessions.map(mapSession),
     });
   } catch (err) {

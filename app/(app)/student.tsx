@@ -15,9 +15,11 @@ import WhatsActiveBanner from "../../components/WhatsActiveBanner";
 import { useAccessibility } from "../../context/AccessibilityContext";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
+import { useWantsLiveCaptions } from "../../hooks/useWantsLiveCaptions";
 
 type CardKey =
-  | "classroom"
+  | "myClasses"
+  | "joinClass"
   | "quickTalk"
   | "tts"
   | "calendar"
@@ -34,11 +36,18 @@ interface DashboardCard {
 }
 
 const CARD_DEFS: Record<CardKey, DashboardCard> = {
-  classroom: {
-    key: "classroom",
-    icon: "school-outline",
-    title: "Classroom",
-    description: "Join a class with its code and follow live captions",
+  myClasses: {
+    key: "myClasses",
+    icon: "albums-outline",
+    title: "My Classes",
+    description: "Open your classes, request support and check in",
+    route: "/my-classes",
+  },
+  joinClass: {
+    key: "joinClass",
+    icon: "enter-outline",
+    title: "Join Class",
+    description: "Enter the class code from your teacher",
     route: "/join",
   },
   quickTalk: {
@@ -66,8 +75,8 @@ const CARD_DEFS: Record<CardKey, DashboardCard> = {
     key: "guidance",
     icon: "heart-outline",
     title: "Guidance",
-    description: "Message the Guidance Office",
-    route: "/messages",
+    description: "Message the Guidance Office or book an appointment",
+    route: "/guidance-hub",
   },
   preferences: {
     key: "preferences",
@@ -103,30 +112,36 @@ export default function StudentDashboard() {
   const needsHearing =
     needs.includes("Deaf") || needs.includes("Hard of Hearing");
   const nonVerbal = needs.includes("Non-Verbal");
-  const wantsCaptions = needsHearing || !!preferences.live_captions;
+  // Deaf / Hard of Hearing, or the live captions toggle in Accessibility
+  // Preferences. Same rule the session screen uses for its Join Session button.
+  const wantsCaptions = useWantsLiveCaptions();
   const wantsTTS = !!preferences.text_to_speech || nonVerbal;
   const needsVisualHelp =
     needs.includes("Low Vision") || needs.includes("Color Blindness");
 
   // Which tools are available to this student at all.
-  const available: CardKey[] = ["classroom"];
+  // Everyone gets My Classes and Join Class (join by code).
+  const available: CardKey[] = ["myClasses", "joinClass"];
   if (wantsCaptions || nonVerbal || wantsTTS) available.push("quickTalk");
   if (wantsTTS) available.push("tts");
   available.push("calendar", "guidance", "preferences", "profile");
 
-  // Recommended (max 2), driven by needs and enabled preferences.
-  const recommendedKeys: CardKey[] = [];
-  if (wantsCaptions) recommendedKeys.push("classroom");
-  if (wantsCaptions || nonVerbal) recommendedKeys.push("quickTalk");
-  // Deaf + Non-Verbal already gets Classroom + Quick Talk; TTS is optional.
-  if (wantsTTS && !(needsHearing && nonVerbal)) recommendedKeys.push("tts");
-  if (needsVisualHelp) recommendedKeys.push("preferences");
-  if (recommendedKeys.length === 0) recommendedKeys.push("classroom");
+  // Recommended: My Classes is always first, then up to 2 picks driven by
+  // needs and enabled preferences.
+  const pickedKeys: CardKey[] = [];
+  if (wantsCaptions || nonVerbal) pickedKeys.push("quickTalk");
+  // Deaf + Non-Verbal already gets Quick Talk; TTS is optional.
+  if (wantsTTS && !(needsHearing && nonVerbal)) pickedKeys.push("tts");
+  if (needsVisualHelp) pickedKeys.push("preferences");
 
-  const recommended = recommendedKeys
-    .filter((k, i) => recommendedKeys.indexOf(k) === i && available.includes(k))
-    .slice(0, 2)
-    .map((k) => CARD_DEFS[k]);
+  const recommendedKeys: CardKey[] = [
+    "myClasses",
+    ...pickedKeys
+      .filter((k, i) => pickedKeys.indexOf(k) === i && available.includes(k))
+      .slice(0, 2),
+  ];
+
+  const recommended = recommendedKeys.map((k) => CARD_DEFS[k]);
 
   const recommendedSet = new Set(recommended.map((c) => c.key));
   const moreTools = available

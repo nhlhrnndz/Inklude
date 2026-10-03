@@ -9,7 +9,6 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -22,35 +21,19 @@ import { useTheme } from "../../context/ThemeContext";
 import { useLiveRefresh } from "../../hooks/useLiveRefresh";
 import {
   getMyMessages,
-  MessageCategory,
   MessageItem,
   MessageThreadInfo,
   sendMyMessage,
 } from "../../utils/api";
 
-const CATEGORIES: { label: string; value: MessageCategory }[] = [
-  { label: "Help", value: "help" },
-  { label: "Complaint", value: "complaint" },
-  { label: "Concern", value: "concern" },
-];
-
-const STATUS_LABEL: Record<string, string> = {
-  open: "Open",
-  in_progress: "Guidance is on it",
-  resolved: "Resolved",
-};
-
-// A cheap fingerprint of what's on screen, so background refreshes only
-// re-render when something actually changed.
+// Cheap fingerprint so background refreshes only re-render on real changes.
 function buildSignature(
   thread: MessageThreadInfo | null,
   messages: MessageItem[],
 ) {
   const last = messages[messages.length - 1];
-
   return [
     thread?.id ?? 0,
-    thread?.status ?? "",
     thread?.updatedAt ?? "",
     messages.length,
     last?.id ?? 0,
@@ -67,41 +50,25 @@ export default function MessagesScreen() {
   const lastCountRef = useRef(0);
   const lastMutationRef = useRef(0);
 
-  const [thread, setThread] = useState<MessageThreadInfo | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
-  const [category, setCategory] = useState<MessageCategory>("help");
-  const [urgent, setUrgent] = useState(false);
   const [body, setBody] = useState("");
-
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
 
-  // Quiet refresh: no spinner, no toast (except if the very first load
-  // fails), and no state updates unless something changed.
   const syncThread = useCallback(async () => {
     const startedAt = Date.now();
 
     try {
       const res = await getMyMessages();
 
-      // If the student sent something while this request was in flight,
-      // the response may be stale — the next refresh will catch up.
+      // A send happened while this request was in flight; skip the stale response.
       if (lastMutationRef.current > startedAt) return;
 
-      if (!hasLoadedRef.current) {
-        hasLoadedRef.current = true;
-
-        if (res.thread) {
-          setCategory(res.thread.category);
-          setUrgent(res.thread.urgent);
-        }
-      }
+      hasLoadedRef.current = true;
 
       const signature = buildSignature(res.thread, res.messages);
-
       if (signature !== signatureRef.current) {
         signatureRef.current = signature;
-        setThread(res.thread);
         setMessages(res.messages);
       }
     } catch (err: any) {
@@ -117,12 +84,8 @@ export default function MessagesScreen() {
     }
   }, []);
 
-  // Refreshes on focus, on new-message notifications, on reconnect, when
-  // the app returns to the foreground, and on a light timer while open.
   useLiveRefresh(syncThread);
 
-  // Keep the newest message in view — but never yank the screen away from
-  // someone who scrolled up to read older messages.
   useEffect(() => {
     if (messages.length === 0) return;
 
@@ -137,29 +100,20 @@ export default function MessagesScreen() {
 
   const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
-    const distanceFromBottom =
-      contentSize.height - (contentOffset.y + layoutMeasurement.height);
-
-    nearBottomRef.current = distanceFromBottom < 120;
+    nearBottomRef.current =
+      contentSize.height - (contentOffset.y + layoutMeasurement.height) < 120;
   };
 
   const handleSend = async () => {
-    if (!body.trim()) {
-      return;
-    }
+    if (!body.trim()) return;
 
     setSending(true);
     try {
-      const res = await sendMyMessage({
-        body: body.trim(),
-        category,
-        urgent,
-      });
+      const res = await sendMyMessage({ body: body.trim() });
 
       lastMutationRef.current = Date.now();
       signatureRef.current = buildSignature(res.thread, res.messages);
 
-      setThread(res.thread);
       setMessages(res.messages);
       setBody("");
     } catch (err: any) {
@@ -171,16 +125,6 @@ export default function MessagesScreen() {
     } finally {
       setSending(false);
     }
-  };
-
-  const statusColors = () => {
-    if (!thread)
-      return { bg: colors.secondaryBackground, text: colors.textSecondary };
-    if (thread.status === "resolved")
-      return { bg: colors.success + "18", text: colors.success };
-    if (thread.status === "in_progress")
-      return { bg: colors.warning + "18", text: colors.warning };
-    return { bg: colors.secondaryBackground, text: colors.textSecondary };
   };
 
   if (loading) {
@@ -198,8 +142,6 @@ export default function MessagesScreen() {
     );
   }
 
-  const sc = statusColors();
-
   return (
     <SafeAreaView
       style={[styles.safeArea, { backgroundColor: colors.background }]}
@@ -210,49 +152,29 @@ export default function MessagesScreen() {
           paddingHorizontal: spacing.lg,
           paddingTop: spacing.sm + 4,
           paddingBottom: spacing.sm,
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
         }}
       >
-        <View>
-          <Text
-            style={{
-              fontFamily: typography.title.fontFamily,
-              fontSize: typography.title.fontSize,
-              fontWeight: "700",
-              color: colors.text,
-            }}
-            accessibilityRole="header"
-          >
-            Guidance
-          </Text>
-          <Text
-            style={{
-              fontFamily: typography.caption.fontFamily,
-              fontSize: typography.caption.fontSize,
-              color: colors.textSecondary,
-              marginTop: 2,
-            }}
-          >
-            Privately reach out to the guidance office.
-          </Text>
-        </View>
-
-        {thread && (
-          <View
-            style={{
-              backgroundColor: sc.bg,
-              borderRadius: radius.sm,
-              paddingHorizontal: 10,
-              paddingVertical: 5,
-            }}
-          >
-            <Text style={{ color: sc.text, fontWeight: "700", fontSize: 12 }}>
-              {STATUS_LABEL[thread.status]}
-            </Text>
-          </View>
-        )}
+        <Text
+          style={{
+            fontFamily: typography.title.fontFamily,
+            fontSize: typography.title.fontSize,
+            fontWeight: "700",
+            color: colors.text,
+          }}
+          accessibilityRole="header"
+        >
+          Guidance
+        </Text>
+        <Text
+          style={{
+            fontFamily: typography.caption.fontFamily,
+            fontSize: typography.caption.fontSize,
+            color: colors.textSecondary,
+            marginTop: 2,
+          }}
+        >
+          Privately message the Guidance Office.
+        </Text>
       </View>
 
       <KeyboardAvoidingView
@@ -288,8 +210,8 @@ export default function MessagesScreen() {
                   maxWidth: 260,
                 }}
               >
-                Send a message below and it will go straight to the guidance
-                office. Only you and guidance can see it.
+                Send a message below and it will go straight to the Guidance
+                Office. Only you and Guidance can see it.
               </Text>
             </View>
           ) : (
@@ -359,7 +281,6 @@ export default function MessagesScreen() {
           )}
         </ScrollView>
 
-        {/* Composer */}
         <View
           style={{
             borderTopWidth: StyleSheet.hairlineWidth,
@@ -368,114 +289,54 @@ export default function MessagesScreen() {
             paddingTop: spacing.sm,
             paddingBottom: spacing.sm + 4,
             backgroundColor: colors.background,
+            flexDirection: "row",
+            alignItems: "flex-end",
           }}
         >
-          <View style={{ flexDirection: "row", marginBottom: spacing.sm }}>
-            {CATEGORIES.map((c) => {
-              const active = category === c.value;
-              return (
-                <TouchableOpacity
-                  key={c.value}
-                  onPress={() => setCategory(c.value)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Category: ${c.label}`}
-                  accessibilityState={{ selected: active }}
-                  style={{
-                    paddingHorizontal: 12,
-                    paddingVertical: 6,
-                    borderRadius: radius.xl,
-                    borderWidth: 1,
-                    borderColor: active ? colors.primary : colors.border,
-                    backgroundColor: active ? colors.primary : colors.surface,
-                    marginRight: 8,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      fontWeight: "600",
-                      color: active ? "#FFFFFF" : colors.textSecondary,
-                    }}
-                  >
-                    {c.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+          <TextInput
+            style={{
+              flex: 1,
+              backgroundColor: colors.secondaryBackground,
+              borderColor: colors.border,
+              borderWidth: 1,
+              borderRadius: radius.md,
+              paddingHorizontal: spacing.md,
+              paddingVertical: spacing.sm + 2,
+              fontFamily: typography.body.fontFamily,
+              fontSize: typography.body.fontSize,
+              color: colors.text,
+              maxHeight: 120,
+              marginRight: spacing.sm,
+            }}
+            placeholder="Write to Guidance..."
+            placeholderTextColor={colors.placeholder}
+            value={body}
+            onChangeText={setBody}
+            multiline
+            accessibilityLabel="Message to Guidance"
+          />
 
-            <View style={{ flex: 1 }} />
-
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <Text
-                style={{
-                  fontSize: 12,
-                  fontWeight: "600",
-                  color: urgent ? colors.danger : colors.textSecondary,
-                  marginRight: 6,
-                }}
-              >
-                Urgent
-              </Text>
-              <Switch
-                value={urgent}
-                onValueChange={setUrgent}
-                trackColor={{
-                  false: colors.disabled,
-                  true: colors.danger + "AA",
-                }}
-                thumbColor={urgent ? colors.danger : colors.surface}
-                accessibilityLabel="Mark as urgent"
-                accessibilityRole="switch"
-              />
-            </View>
-          </View>
-
-          <View style={{ flexDirection: "row", alignItems: "flex-end" }}>
-            <TextInput
-              style={{
-                flex: 1,
-                backgroundColor: colors.secondaryBackground,
-                borderColor: colors.border,
-                borderWidth: 1,
-                borderRadius: radius.md,
-                paddingHorizontal: spacing.md,
-                paddingVertical: spacing.sm + 2,
-                fontFamily: typography.body.fontFamily,
-                fontSize: typography.body.fontSize,
-                color: colors.text,
-                maxHeight: 120,
-                marginRight: spacing.sm,
-              }}
-              placeholder="Write to guidance..."
-              placeholderTextColor={colors.placeholder}
-              value={body}
-              onChangeText={setBody}
-              multiline
-              accessibilityLabel="Message to guidance"
-            />
-
-            <TouchableOpacity
-              onPress={handleSend}
-              disabled={sending || !body.trim()}
-              accessibilityRole="button"
-              accessibilityLabel="Send message"
-              style={{
-                width: 46,
-                height: 46,
-                borderRadius: radius.round,
-                backgroundColor: colors.primary,
-                alignItems: "center",
-                justifyContent: "center",
-                opacity: sending || !body.trim() ? 0.5 : 1,
-              }}
-            >
-              {sending ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <Ionicons name="send" size={18} color="#FFFFFF" />
-              )}
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            onPress={handleSend}
+            disabled={sending || !body.trim()}
+            accessibilityRole="button"
+            accessibilityLabel="Send message"
+            style={{
+              width: 46,
+              height: 46,
+              borderRadius: radius.round,
+              backgroundColor: colors.primary,
+              alignItems: "center",
+              justifyContent: "center",
+              opacity: sending || !body.trim() ? 0.5 : 1,
+            }}
+          >
+            {sending ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Ionicons name="send" size={18} color="#FFFFFF" />
+            )}
+          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -490,12 +351,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 60,
   },
-  bubbleRow: {
-    flexDirection: "row",
-    marginBottom: 10,
-  },
-  bubble: {
-    maxWidth: "80%",
-    borderWidth: 1,
-  },
+  bubbleRow: { flexDirection: "row", marginBottom: 10 },
+  bubble: { maxWidth: "80%", borderWidth: 1 },
 });

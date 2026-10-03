@@ -1,4 +1,4 @@
-//IncluEd\server\index.js
+//IncluEd/server/index.js
 require("dotenv").config({ path: require("path").join(__dirname, ".env") });
 
 const express = require("express");
@@ -12,6 +12,7 @@ const authRoutes = require("./routes/auth");
 const profileRoutes = require("./routes/profile");
 const sessionRoutes = require("./routes/session");
 const classRoutes = require("./routes/classRoutes"); // ⬅️ Phase 4 Week 3
+const accommodationRoutes = require("./routes/accommodationRoutes"); // ⬅️ Phase 4 Week 5A
 const transcribeRoutes = require("./routes/transcribe");
 const transcriptRoutes = require("./routes/transcript");
 const guidanceRoutes = require("./routes/guidance");
@@ -33,6 +34,8 @@ const accessibilityProfileRoutes = require("./routes/accessibilityProfile");
 const {
   startScheduleReminders,
 } = require("./services/scheduleReminderService");
+const appointmentRoutes = require("./routes/appointments"); // Phase 4 Week 6
+const referralRoutes = require("./routes/referrals");
 
 // Models required here so startup fails fast on any syntax error.
 require("./models/PeerShare");
@@ -45,6 +48,8 @@ require("./models/MotorSettings");
 require("./models/PresenceTap");
 require("./models/accessibilityProfileModel");
 require("./models/classModel"); // ⬅️ Phase 4 Week 3
+require("./models/accommodationModel"); // ⬅️ Phase 4 Week 5A
+require("./models/appointmentModel"); // Phase 4 Week 6
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -57,6 +62,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/sessions", sessionRoutes);
 app.use("/api/classes", classRoutes); // ⬅️ Phase 4 Week 3
+app.use("/api/accommodations", accommodationRoutes); // ⬅️ Phase 4 Week 5A
 app.use("/api/transcribe", transcribeRoutes);
 app.use("/api/transcripts", transcriptRoutes);
 app.use("/api/guidance", guidanceRoutes);
@@ -71,6 +77,8 @@ app.use("/api/sensory", sensoryRoutes);
 app.use("/api/breaks", breakRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/accessibility", accessibilityProfileRoutes);
+app.use("/api/appointments", appointmentRoutes); // Phase 4 Week 6
+app.use("/api/referrals", referralRoutes);
 
 app.get("/", (req, res) => {
   res.json({ message: "IncluEd Backend is running ✅" });

@@ -413,9 +413,6 @@ export default api;
 // Student ↔ Guidance Messaging
 // =========================
 
-export type MessageCategory = "help" | "complaint" | "concern";
-export type MessageThreadStatus = "open" | "in_progress" | "resolved";
-
 export interface MessageItem {
   id: number;
   senderId: number;
@@ -431,9 +428,6 @@ export interface MessageThreadInfo {
   studentId: number;
   studentName?: string;
   studentEmail?: string;
-  category: MessageCategory;
-  urgent: boolean;
-  status: MessageThreadStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -448,19 +442,14 @@ export interface MessageThreadSummary {
   studentId: number;
   studentName: string;
   studentEmail: string;
-  category: MessageCategory;
-  urgent: boolean;
-  status: MessageThreadStatus;
   lastMessage: string;
   lastMessageAt: string;
   unreadCount: number;
 }
 
-// Student: send a message to guidance (creates or continues their thread)
+// Student: send a message to guidance
 export const sendMyMessage = async (payload: {
   body: string;
-  category?: MessageCategory;
-  urgent?: boolean;
 }): Promise<MessageThreadDetail> => {
   const response = await api.post("/api/messages/mine", payload);
   return response.data;
@@ -472,11 +461,8 @@ export const getMyMessages = async (): Promise<MessageThreadDetail> => {
   return response.data;
 };
 
-// Guidance: inbox list of threads, with filters
+// Guidance: inbox list of threads
 export const getGuidanceInbox = async (filters?: {
-  category?: MessageCategory;
-  urgent?: boolean;
-  status?: MessageThreadStatus;
   search?: string;
 }): Promise<{ threads: MessageThreadSummary[] }> => {
   const response = await api.get("/api/messages", { params: filters });
@@ -497,17 +483,6 @@ export const replyToThread = async (
   body: string,
 ): Promise<MessageThreadDetail> => {
   const response = await api.post(`/api/messages/${threadId}/reply`, { body });
-  return response.data;
-};
-
-// Guidance: update a thread's status
-export const updateThreadStatus = async (
-  threadId: number,
-  status: MessageThreadStatus,
-): Promise<{ message: string; status: MessageThreadStatus }> => {
-  const response = await api.patch(`/api/messages/${threadId}/status`, {
-    status,
-  });
   return response.data;
 };
 
@@ -595,4 +570,378 @@ export const leaveClass = async (classId: number) => {
 export const enterSession = async (sessionId: number) => {
   const response = await api.post(`/api/sessions/${sessionId}/enter`);
   return response.data;
+};
+
+// =========================
+// Accommodation Requests (Phase 4 Week 5A)
+// =========================
+
+export type AccommodationType =
+  | "front_seating"
+  | "more_time"
+  | "additional_materials"
+  | "extra_help"
+  | "other";
+
+export type AccommodationStatus =
+  | "pending"
+  | "approved"
+  | "declined"
+  | "discuss"
+  | "cancelled";
+
+export type AccommodationDecision = "approved" | "declined" | "discuss";
+
+export const ACCOMMODATION_TYPE_OPTIONS: {
+  key: AccommodationType;
+  label: string;
+}[] = [
+  { key: "front_seating", label: "Front seating" },
+  { key: "more_time", label: "More time" },
+  { key: "additional_materials", label: "Additional materials" },
+  { key: "extra_help", label: "Extra help" },
+  { key: "other", label: "Other" },
+];
+
+export interface AccommodationRequest {
+  id: number;
+  classId: number;
+  type: AccommodationType;
+  typeLabel: string;
+  note: string;
+  status: AccommodationStatus;
+  teacherResponse: string;
+  respondedAt: string | null;
+  createdAt: string;
+  // Teacher view only
+  studentName?: string;
+  studentInitials?: string;
+}
+
+// Student: send a request
+export const createAccommodationRequest = async (
+  classId: number,
+  payload: { type: AccommodationType; note?: string },
+) => {
+  const response = await api.post(
+    `/api/accommodations/classes/${classId}`,
+    payload,
+  );
+  return response.data as { message: string; request: AccommodationRequest };
+};
+
+// Student: my requests in a class
+export const getMyAccommodationRequests = async (classId: number) => {
+  const response = await api.get(`/api/accommodations/classes/${classId}/mine`);
+  return response.data as { requests: AccommodationRequest[] };
+};
+
+// Student: withdraw an open request
+export const cancelAccommodationRequest = async (requestId: number) => {
+  const response = await api.patch(`/api/accommodations/${requestId}/cancel`);
+  return response.data as { message: string };
+};
+
+// Teacher: every request in a class
+export const getClassAccommodationRequests = async (classId: number) => {
+  const response = await api.get(`/api/accommodations/classes/${classId}`);
+  return response.data as { requests: AccommodationRequest[] };
+};
+
+// Teacher: approve / decline / discuss
+export const respondToAccommodationRequest = async (
+  requestId: number,
+  payload: { decision: AccommodationDecision; reason?: string },
+) => {
+  const response = await api.patch(
+    `/api/accommodations/${requestId}/respond`,
+    payload,
+  );
+  return response.data as { message: string; request: AccommodationRequest };
+};
+
+// =========================
+// Guidance Appointments (Phase 4 Week 6)
+// =========================
+
+export type AppointmentReason =
+  | "Academic"
+  | "Social"
+  | "Adjustment"
+  | "Accessibility"
+  | "Personal"
+  | "Other";
+
+export type AppointmentStatus =
+  | "pending"
+  | "confirmed"
+  | "rescheduled"
+  | "declined"
+  | "cancelled"
+  | "completed";
+
+export const APPOINTMENT_REASONS: AppointmentReason[] = [
+  "Academic",
+  "Social",
+  "Adjustment",
+  "Accessibility",
+  "Personal",
+  "Other",
+];
+
+export interface Appointment {
+  id: number;
+  studentId: number;
+  studentName?: string;
+  studentEmail?: string;
+  guidanceName: string | null;
+  reason: AppointmentReason;
+  note: string;
+  status: AppointmentStatus;
+  preferredDate: string; // YYYY-MM-DD
+  preferredTime: string; // HH:MM
+  confirmedDate: string | null;
+  confirmedTime: string | null;
+  guidanceNote: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AppointmentAction = "confirm" | "decline" | "cancel" | "complete";
+
+// Student
+export const requestAppointment = async (payload: {
+  reason: AppointmentReason;
+  note?: string;
+  preferredDate: string;
+  preferredTime: string;
+}) => {
+  const response = await api.post("/api/appointments", payload);
+  return response.data as { message: string; appointment: Appointment };
+};
+
+export const getMyAppointments = async () => {
+  const response = await api.get("/api/appointments/mine");
+  return response.data as { appointments: Appointment[] };
+};
+
+export const cancelMyAppointment = async (id: number) => {
+  const response = await api.patch(`/api/appointments/${id}/cancel`);
+  return response.data as { message: string };
+};
+
+// Guidance
+export const getGuidanceAppointments = async () => {
+  const response = await api.get("/api/appointments");
+  return response.data as { appointments: Appointment[] };
+};
+
+export const respondToAppointment = async (
+  id: number,
+  payload: {
+    action: AppointmentAction;
+    date?: string;
+    time?: string;
+    note?: string;
+  },
+) => {
+  const response = await api.patch(`/api/appointments/${id}/respond`, payload);
+  return response.data as { message: string; appointment: Appointment };
+};
+
+// =========================
+// Guidance Dashboard + Follow-ups (Phase 4 Week 7)
+// =========================
+
+export type FollowupReason =
+  | "Accessibility concern"
+  | "Repeated class difficulty"
+  | "Academic concern"
+  | "Adjustment"
+  | "Personal concern"
+  | "Other";
+
+export const FOLLOWUP_REASONS: FollowupReason[] = [
+  "Accessibility concern",
+  "Repeated class difficulty",
+  "Academic concern",
+  "Adjustment",
+  "Personal concern",
+  "Other",
+];
+
+export interface Followup {
+  id: number;
+  studentId: number;
+  studentName: string;
+  reason: FollowupReason;
+  note: string;
+  status: "active" | "completed";
+  createdAt: string;
+  createdByName: string | null;
+  completedAt: string | null;
+  completedByName: string | null;
+  completionNote: string;
+}
+
+export interface GuidanceDashboardSummary {
+  totalStudents: number;
+  appointments: {
+    pendingCount: number;
+    upcomingCount: number;
+    next: {
+      id: number;
+      studentId: number;
+      studentName: string;
+      reason: AppointmentReason;
+      status: AppointmentStatus;
+      date: string; // YYYY-MM-DD
+      time: string; // HH:MM
+    } | null;
+  };
+  followups: {
+    activeCount: number;
+    items: Followup[];
+  };
+  messages: {
+    unreadTotal: number;
+    threads: {
+      id: number;
+      studentId: number;
+      studentName: string;
+      lastMessage: string;
+      lastMessageAt: string;
+      unreadCount: number;
+    }[];
+  };
+  announcements: {
+    id: number;
+    title: string;
+    audience: string;
+    createdAt: string;
+  }[];
+  sis: {
+    total: number;
+    completed: number;
+    inProgress: number;
+    notStarted: number;
+    incompleteStudentIds: number[];
+  };
+}
+
+export const getGuidanceDashboard = async () => {
+  const response = await api.get("/api/guidance/dashboard");
+  return response.data as GuidanceDashboardSummary;
+};
+
+export const getStudentFollowups = async (studentId: number) => {
+  const response = await api.get(
+    `/api/guidance/students/${studentId}/followups`,
+  );
+  return response.data as { followups: Followup[] };
+};
+
+export const createStudentFollowup = async (
+  studentId: number,
+  payload: { reason: FollowupReason; note?: string },
+) => {
+  const response = await api.post(
+    `/api/guidance/students/${studentId}/followups`,
+    payload,
+  );
+  return response.data as { message: string; followup: Followup };
+};
+
+export const completeFollowup = async (
+  followupId: number,
+  payload?: { note?: string },
+) => {
+  const response = await api.patch(
+    `/api/guidance/followups/${followupId}/complete`,
+    payload ?? {},
+  );
+  return response.data as { message: string; followup: Followup };
+};
+
+// =========================
+// Guidance Support Referrals (Phase 4 Week 7)
+// =========================
+
+export type ReferralConcern =
+  | "Accessibility concern"
+  | "Class participation"
+  | "Academic difficulty"
+  | "Communication support"
+  | "Other";
+
+export const REFERRAL_CONCERNS: ReferralConcern[] = [
+  "Accessibility concern",
+  "Class participation",
+  "Academic difficulty",
+  "Communication support",
+  "Other",
+];
+
+export type ReferralStatus = "sent" | "acknowledged" | "responded";
+
+export interface SupportReferral {
+  id: number;
+  studentId: number;
+  studentName: string;
+  classId: number;
+  classTitle: string;
+  classCode: string;
+  concern: ReferralConcern;
+  note: string;
+  status: ReferralStatus;
+  guidanceName: string | null;
+  teacherName: string | null;
+  createdAt: string;
+  acknowledgedAt: string | null;
+  teacherResponse: string;
+  respondedAt: string | null;
+}
+
+export interface ReferralClass {
+  id: number;
+  title: string;
+  code: string;
+  teacherName: string;
+}
+
+// Guidance
+export const getReferralClassesForStudent = async (studentId: number) => {
+  const response = await api.get(`/api/referrals/student/${studentId}/classes`);
+  return response.data as { classes: ReferralClass[] };
+};
+
+export const getStudentReferrals = async (studentId: number) => {
+  const response = await api.get(`/api/referrals/student/${studentId}`);
+  return response.data as { referrals: SupportReferral[] };
+};
+
+export const sendSupportReferral = async (payload: {
+  studentId: number;
+  classId: number;
+  concern: ReferralConcern;
+  note?: string;
+}) => {
+  const response = await api.post("/api/referrals", payload);
+  return response.data as { message: string; referral: SupportReferral };
+};
+
+// Teacher
+export const getMyReferrals = async () => {
+  const response = await api.get("/api/referrals/mine");
+  return response.data as { referrals: SupportReferral[] };
+};
+
+export const acknowledgeReferral = async (id: number) => {
+  const response = await api.patch(`/api/referrals/${id}/acknowledge`);
+  return response.data as { message: string; referral: SupportReferral };
+};
+
+export const respondToReferral = async (id: number, message: string) => {
+  const response = await api.patch(`/api/referrals/${id}/respond`, { message });
+  return response.data as { message: string; referral: SupportReferral };
 };

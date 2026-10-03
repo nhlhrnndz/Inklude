@@ -1,95 +1,276 @@
 // server/models/ClassPulse.js
+// Class Experience: an anonymous Good / Okay / Difficult check-in that a
+// student answers once BEFORE and once AFTER each class session.
 const pool = require("../config/db");
 const crypto = require("crypto");
 
-// 1 = 😞, 2 = 😐, 3 = 😀
+// Stored values. 1 = Difficult, 2 = Okay, 3 = Good.
 const MOOD = { SAD: 1, OKAY: 2, HAPPY: 3 };
-const MIN_RESPONSES_FOR_BREAKDOWN = 3;
+const PHASES = ["before", "after"];
+const MIN_RESPONSES = 5; // a breakdown stays hidden below this
 const LOW_MOOD_STREAK = 3;
 
-// Hashes a user id with a per-LIVE-RUN salt (not per classroom), so a
-// mood entry can't be traced to a student, and so answering once doesn't
-// lock the student out of ever answering again for that classroom — each
-// time the teacher goes live and ends again, it's a fresh run.
-function hashUserId(liveRunId, userId) {
+function moodKey(mood) {
+  if (mood === MOOD.SAD) return "sad";
+  if (mood === MOOD.OKAY) return "okay";
+  if (mood === MOOD.HAPPY) return "happy";
+  return null;
+}
+
+// One hash per (session, phase, student). It can't be reversed to a user id
+// without the salt, and it is different for every session and phase.
+function hashFor(sessionId, phase, userId) {
   const salt = process.env.CLASS_PULSE_SALT || "inclued-pulse-salt";
   return crypto
     .createHash("sha256")
-    .update(`${salt}:run:${liveRunId}:${userId}`)
+    .update(`${salt}:exp:${Number(sessionId)}:${phase}:${Number(userId)}`)
     .digest("hex");
 }
 
-// Returns the saved row, or null if this student already answered THIS run.
-async function recordMood(sessionId, liveRunId, userId, mood) {
-  const hash = hashUserId(liveRunId, userId);
+// All "is it time yet?" comparisons happen in SQL (NOW()) so they use the same
+// clock and timezone as the scheduled_start / scheduled_end the teacher typed.
+const TIMING_SELECT = `
+  SELECT s.id, s.title, s.class_id, s.teacher_id, s.status, s.is_live,
+         s.scheduled_start, s.scheduled_end, s.live_ended_at,
+         (s.scheduled_start IS NOT NULL
+            AND s.scheduled_start <= NOW()
+            AND s.live_ended_at IS NULL
+            AND ( (s.scheduled_end IS NOT NULL AND s.scheduled_end > NOW())
+               OR (s.scheduled_end IS NULL
+                   AND s.scheduled_start >= NOW() - INTERVAL 3 HOUR) )
+         ) AS before_open,
+         (s.scheduled_end IS NOT NULL
+            AND s.scheduled_end <= NOW()
+            AND s.scheduled_end >= NOW() - INTERVAL 24 HOUR
+         ) AS clock_after_open,
+         (s.live_ended_at IS NOT NULL
+            AND s.live_ended_at >= NOW() - INTERVAL 24 HOUR
+         ) AS live_after_open
+  FROM sessions s
+`;
+
+async function getTiming(sessionId) {
+  const [rows] = await pool.query(`${TIMING_SELECT} WHERE s.id = ?`, [
+    sessionId,
+  ]);
+  return rows[0] || null;
+}
+
+// Recent sessions of a class that could have a check-in open.
+async function getClassTimings(classId) {
+  const [rows] = await pool.query(
+    `${TIMING_SELECT}
+     WHERE s.class_id = ?
+       AND (s.scheduled_start IS NOT NULL OR s.live_ended_at IS NOT NULL)
+     ORDER BY COALESCE(s.live_ended_at, s.scheduled_end, s.scheduled_start) DESC,
+              s.id DESC
+     LIMIT 15`,
+    [classId],
+  );
+  return rows;
+}
+
+// Which of these sessions did this student join (tap Join Session)?
+async function getParticipantSessionIds(sessionIds, userId) {
+  if (sessionIds.length === 0) return new Set();
+  const [rows] = await pool.query(
+    "SELECT DISTINCT session_id FROM participants WHERE user_id = ? AND session_id IN (?)",
+    [userId, sessionIds],
+  );
+  return new Set(rows.map((r) => r.session_id));
+}
+
+// Has this student already answered each phase of each session?
+async function getAnsweredMap(sessionIds, userId) {
+  const map = new Map(
+    sessionIds.map((id) => [id, { before: false, after: false }]),
+  );
+  if (sessionIds.length === 0) return map;
+
+  const lookup = new Map();
+  sessionIds.forEach((id) =>
+    PHASES.forEach((phase) =>
+      lookup.set(hashFor(id, phase, userId), { id, phase }),
+    ),
+  );
+
+  const [rows] = await pool.query(
+    "SELECT user_id_hash FROM class_experience WHERE user_id_hash IN (?)",
+    [[...lookup.keys()]],
+  );
+  rows.forEach((r) => {
+    const hit = lookup.get(r.user_id_hash);
+    if (hit) map.get(hit.id)[hit.phase] = true;
+  });
+  return map;
+}
+
+// Which check-in (if any) is due right now for this student and session?
+//
+// AFTER is due when:
+//   - the student joined the live session and the teacher has ended it
+//     (End Session), OR
+//   - the scheduled end time has passed, unless the student is in the live
+//     session and it is still live (they wait for End Session instead).
+// BEFORE is due from the scheduled start until the class is over.
+// Anyone who already answered a phase is never asked for it again.
+function decidePhase(row, isParticipant, answered) {
+  const live = Number(row.is_live) === 1;
+
+  const afterOpen =
+    (isParticipant && !live && !!Number(row.live_after_open)) ||
+    (!!Number(row.clock_after_open) && (!isParticipant || !live));
+
+  if (afterOpen) return answered.after ? null : "after";
+  if (!!Number(row.before_open)) return answered.before ? null : "before";
+  return null;
+}
+
+// Returns true if saved, false if this student already answered this phase.
+async function recordExperience(sessionId, phase, userId, mood) {
   try {
-    const [result] = await pool.query(
-      "INSERT INTO class_pulse (session_id, live_run_id, user_id_hash, mood) VALUES (?, ?, ?, ?)",
-      [sessionId, liveRunId, hash, mood],
+    await pool.query(
+      "INSERT INTO class_experience (session_id, phase, user_id_hash, mood) VALUES (?, ?, ?, ?)",
+      [sessionId, phase, hashFor(sessionId, phase, userId), mood],
     );
-    const [rows] = await pool.query("SELECT * FROM class_pulse WHERE id = ?", [
-      result.insertId,
-    ]);
-    return rows[0];
+    return true;
   } catch (err) {
-    if (err.code === "ER_DUP_ENTRY") return null;
+    if (err.code === "ER_DUP_ENTRY") return false;
     throw err;
   }
 }
 
-// Only tells a student whether THEY answered this run — never what.
-async function hasSubmitted(liveRunId, userId) {
-  const hash = hashUserId(liveRunId, userId);
-  const [rows] = await pool.query(
-    "SELECT id FROM class_pulse WHERE live_run_id = ? AND user_id_hash = ? LIMIT 1",
-    [liveRunId, hash],
-  );
-  return rows.length > 0;
+function emptyCounts() {
+  return { sad: 0, okay: 0, happy: 0 };
 }
 
-// Aggregate-only summary for one live run.
-async function getLiveRunMoodSummary(liveRunId) {
+function toPhaseSummary(counts) {
+  const responded = counts.sad + counts.okay + counts.happy;
+  const hidden = responded < MIN_RESPONSES;
+  return { responded, hidden, counts: hidden ? null : { ...counts } };
+}
+
+// Aggregate-only summary for one session (both phases).
+async function getSessionExperience(sessionId) {
   const [rows] = await pool.query(
-    `SELECT mood, COUNT(*) AS count
-     FROM class_pulse
-     WHERE live_run_id = ?
-     GROUP BY mood`,
-    [liveRunId],
+    `SELECT phase, mood, COUNT(*) AS n
+     FROM class_experience
+     WHERE session_id = ?
+     GROUP BY phase, mood`,
+    [sessionId],
   );
 
-  const counts = { sad: 0, okay: 0, happy: 0 };
+  const raw = { before: emptyCounts(), after: emptyCounts() };
   rows.forEach((r) => {
-    const n = Number(r.count) || 0;
-    if (r.mood === MOOD.SAD) counts.sad = n;
-    else if (r.mood === MOOD.OKAY) counts.okay = n;
-    else if (r.mood === MOOD.HAPPY) counts.happy = n;
+    const key = moodKey(Number(r.mood));
+    if (key && raw[r.phase]) raw[r.phase][key] = Number(r.n) || 0;
   });
 
-  const responded = counts.sad + counts.okay + counts.happy;
-  const hidden = responded < MIN_RESPONSES_FOR_BREAKDOWN;
-
-  return { responded, hidden, counts: hidden ? null : counts };
+  return {
+    before: toPhaseSummary(raw.before),
+    after: toPhaseSummary(raw.after),
+  };
 }
 
-// True when the student answered 😞 in each of their last N ended live
-// runs, across any classroom they were part of.
+// Aggregate-only insights for a whole class.
+// The overview pools ONLY sessions that individually reach the minimum, so a
+// teacher can never subtract visible sessions from the total to recover a
+// hidden one.
+async function getClassExperience(classId) {
+  const [sessions] = await pool.query(
+    `SELECT id, title, scheduled_start
+     FROM sessions
+     WHERE class_id = ?
+     ORDER BY COALESCE(scheduled_start, created_at) DESC, id DESC
+     LIMIT 30`,
+    [classId],
+  );
+
+  const [rows] = await pool.query(
+    `SELECT e.session_id, e.phase, e.mood, COUNT(*) AS n
+     FROM class_experience e
+     JOIN sessions s ON s.id = e.session_id
+     WHERE s.class_id = ?
+     GROUP BY e.session_id, e.phase, e.mood`,
+    [classId],
+  );
+
+  const raw = new Map();
+  rows.forEach((r) => {
+    if (!raw.has(r.session_id)) {
+      raw.set(r.session_id, { before: emptyCounts(), after: emptyCounts() });
+    }
+    const key = moodKey(Number(r.mood));
+    const bucket = raw.get(r.session_id)[r.phase];
+    if (key && bucket) bucket[key] = Number(r.n) || 0;
+  });
+
+  const pooled = { before: emptyCounts(), after: emptyCounts() };
+  const qualifying = { before: 0, after: 0 };
+  const totals = { before: 0, after: 0 };
+
+  const sessionRows = sessions.map((s) => {
+    const r = raw.get(s.id) || { before: emptyCounts(), after: emptyCounts() };
+    const summaries = {
+      before: toPhaseSummary(r.before),
+      after: toPhaseSummary(r.after),
+    };
+
+    PHASES.forEach((p) => {
+      totals[p] += summaries[p].responded;
+      if (!summaries[p].hidden) {
+        qualifying[p] += 1;
+        pooled[p].sad += summaries[p].counts.sad;
+        pooled[p].okay += summaries[p].counts.okay;
+        pooled[p].happy += summaries[p].counts.happy;
+      }
+    });
+
+    return {
+      id: s.id,
+      title: s.title,
+      scheduledStart: s.scheduled_start,
+      before: summaries.before,
+      after: summaries.after,
+    };
+  });
+
+  const overviewFor = (p) =>
+    qualifying[p] > 0
+      ? {
+          responded: pooled[p].sad + pooled[p].okay + pooled[p].happy,
+          hidden: false,
+          counts: pooled[p],
+        }
+      : { responded: totals[p], hidden: true, counts: null };
+
+  return {
+    minResponses: MIN_RESPONSES,
+    overview: { before: overviewFor("before"), after: overviewFor("after") },
+    sessions: sessionRows,
+  };
+}
+
+// True when the student answered "Difficult" after each of their last N
+// finished sessions. (Kept so existing Guidance code that calls it still works.)
 async function hasLowMoodStreak(userId) {
-  const [runs] = await pool.query(
-    `SELECT lr.id
-     FROM live_runs lr
-     JOIN sessions s ON s.id = lr.session_id
-     JOIN participants p ON p.session_id = s.id AND p.user_id = ?
-     WHERE lr.ended_at IS NOT NULL
-     ORDER BY lr.ended_at DESC, lr.id DESC
+  const [sessions] = await pool.query(
+    `SELECT s.id
+     FROM sessions s
+     JOIN class_members cm
+       ON cm.class_id = s.class_id AND cm.user_id = ? AND cm.left_at IS NULL
+     WHERE COALESCE(s.live_ended_at, s.scheduled_end) IS NOT NULL
+       AND COALESCE(s.live_ended_at, s.scheduled_end) <= NOW()
+     ORDER BY COALESCE(s.live_ended_at, s.scheduled_end) DESC, s.id DESC
      LIMIT ?`,
     [userId, LOW_MOOD_STREAK],
   );
 
-  if (runs.length < LOW_MOOD_STREAK) return false;
+  if (sessions.length < LOW_MOOD_STREAK) return false;
 
-  const hashes = runs.map((r) => hashUserId(r.id, userId));
+  const hashes = sessions.map((s) => hashFor(s.id, "after", userId));
   const [rows] = await pool.query(
-    "SELECT mood FROM class_pulse WHERE user_id_hash IN (?)",
+    "SELECT mood FROM class_experience WHERE user_id_hash IN (?)",
     [hashes],
   );
 
@@ -100,9 +281,15 @@ async function hasLowMoodStreak(userId) {
 
 module.exports = {
   MOOD,
-  hashUserId,
-  recordMood,
-  hasSubmitted,
-  getLiveRunMoodSummary,
+  PHASES,
+  MIN_RESPONSES,
+  getTiming,
+  getClassTimings,
+  getParticipantSessionIds,
+  getAnsweredMap,
+  decidePhase,
+  recordExperience,
+  getSessionExperience,
+  getClassExperience,
   hasLowMoodStreak,
 };

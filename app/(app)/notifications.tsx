@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useAuth } from "../../context/AuthContext";
 import {
   AppNotification,
   useNotifications,
@@ -27,6 +28,8 @@ const TYPE_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   checkin: "heart-outline",
   checkin_reply: "chatbubble-outline",
   checkin_help: "alert-circle-outline",
+  accommodation_request: "accessibility-outline",
+  accommodation_response: "checkmark-done-outline",
 };
 
 function timeAgo(iso: string): string {
@@ -45,8 +48,16 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
+function isAccommodation(item: AppNotification) {
+  return (
+    item.type === "accommodation_request" ||
+    item.type === "accommodation_response"
+  );
+}
+
 export default function NotificationsScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const { colors, typography, spacing, radius } = useTheme();
 
   const {
@@ -100,6 +111,23 @@ export default function NotificationsScreen() {
       router.push("/checkins" as any);
       return;
     }
+
+    // Accommodation requests and answers open the class. The teacher lands on
+    // the Requests tab. Older notifications without a class id open My Classes.
+    if (isAccommodation(item)) {
+      if (!item.isRead) {
+        await markRead(item.id);
+      }
+
+      if (item.sourceType === "class" && item.sourceId) {
+        const suffix = user?.role === "teacher" ? "?tab=support" : "";
+        router.push(`/class/${item.sourceId}${suffix}` as any);
+      } else {
+        router.push("/my-classes" as any);
+      }
+      return;
+    }
+
     setExpandedId((prev) => (prev === item.id ? null : item.id));
 
     if (!item.isRead) {
@@ -113,6 +141,13 @@ export default function NotificationsScreen() {
 
     const isSISReminder =
       item.sourceType === "sis" || item.type === "sis_reminder";
+    const accommodation = isAccommodation(item);
+
+    const actionLabel = isSISReminder
+      ? "Open SIS"
+      : accommodation
+        ? "Open class"
+        : null;
 
     return (
       <Pressable
@@ -124,9 +159,11 @@ export default function NotificationsScreen() {
         accessibilityHint={
           isSISReminder
             ? "Opens your Student Information Sheet"
-            : item.body
-              ? "Double tap to expand or collapse"
-              : undefined
+            : accommodation
+              ? "Opens the class"
+              : item.body
+                ? "Double tap to expand or collapse"
+                : undefined
         }
         style={({ pressed }) => [
           styles.card,
@@ -204,7 +241,7 @@ export default function NotificationsScreen() {
               {timeAgo(item.createdAt)}
             </Text>
 
-            {isSISReminder && (
+            {actionLabel && (
               <View
                 style={[
                   styles.actionHint,
@@ -231,7 +268,7 @@ export default function NotificationsScreen() {
                     marginLeft: 4,
                   }}
                 >
-                  Open SIS
+                  {actionLabel}
                 </Text>
               </View>
             )}

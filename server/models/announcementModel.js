@@ -49,10 +49,26 @@ async function getAnnouncementsBySession(sessionId) {
   return rows;
 }
 
-// Recipients for a teacher announcement: every student who has joined this session.
-// If you later rework sessions into Google Classroom-style enrollment,
-// this is the ONLY function that needs to change.
+// Recipients for a teacher announcement.
+// If the session belongs to a class: every current member of that class.
+// Otherwise (old sessions with no class): students who joined the session.
 async function getSessionStudentIds(sessionId) {
+  const [[session]] = await pool.query(
+    "SELECT class_id FROM sessions WHERE id = ?",
+    [sessionId],
+  );
+
+  if (session && session.class_id) {
+    const [rows] = await pool.query(
+      `SELECT DISTINCT cm.user_id AS id
+       FROM class_members cm
+       JOIN users u ON u.id = cm.user_id
+       WHERE cm.class_id = ? AND cm.left_at IS NULL AND u.role = 'student'`,
+      [session.class_id],
+    );
+    return rows.map((r) => r.id);
+  }
+
   const [rows] = await pool.query(
     `SELECT DISTINCT p.user_id AS id
      FROM participants p

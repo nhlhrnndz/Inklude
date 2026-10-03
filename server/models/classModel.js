@@ -21,7 +21,9 @@ const CLASS_SELECT = `
        WHERE cm.class_id = c.id AND cm.left_at IS NULL) AS member_count,
     (SELECT COUNT(*) FROM sessions s WHERE s.class_id = c.id) AS session_count,
     (SELECT COUNT(*) FROM sessions s
-       WHERE s.class_id = c.id AND s.is_live = 1 AND s.status = 'active') AS live_count
+       WHERE s.class_id = c.id AND s.is_live = 1 AND s.status = 'active') AS live_count,
+    (SELECT COUNT(*) FROM accommodation_requests ar
+       WHERE ar.class_id = c.id AND ar.status = 'pending') AS accommodation_count
   FROM classes c
   JOIN users u ON u.id = c.teacher_id
 `;

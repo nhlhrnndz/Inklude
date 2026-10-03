@@ -1,12 +1,25 @@
+//server\models\ScheduleItem.js
 const pool = require("../config/db");
 
 async function createScheduleItem(
   userId,
-  { title, subject, startTime, endTime, location, teacherName },
+  {
+    title,
+    subject,
+    startTime,
+    endTime,
+    location,
+    teacherName,
+    type = "class",
+    sourceType = null,
+    sourceId = null,
+  },
 ) {
   const [result] = await pool.query(
-    `INSERT INTO schedule_items (user_id, title, subject, start_time, end_time, location, teacher_name)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO schedule_items
+       (user_id, title, subject, start_time, end_time, location, teacher_name,
+        type, source_type, source_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       userId,
       title,
@@ -15,6 +28,9 @@ async function createScheduleItem(
       endTime,
       location || null,
       teacherName || null,
+      type,
+      sourceType,
+      sourceId,
     ],
   );
   const [rows] = await pool.query("SELECT * FROM schedule_items WHERE id = ?", [
@@ -45,12 +61,23 @@ async function getWeekForUser(userId) {
   return rows;
 }
 
+// Student-initiated delete. Items created by another module
+// (appointments, later events) are managed by that module, not removed here.
 async function deleteScheduleItem(id, userId) {
   const [result] = await pool.query(
-    "DELETE FROM schedule_items WHERE id = ? AND user_id = ?",
+    "DELETE FROM schedule_items WHERE id = ? AND user_id = ? AND source_type IS NULL",
     [id, userId],
   );
   return result.affectedRows > 0;
+}
+
+// System delete: remove the calendar item(s) that belong to a source record.
+async function deleteBySource(sourceType, sourceId) {
+  const [result] = await pool.query(
+    "DELETE FROM schedule_items WHERE source_type = ? AND source_id = ?",
+    [sourceType, sourceId],
+  );
+  return result.affectedRows;
 }
 
 module.exports = {
@@ -58,4 +85,5 @@ module.exports = {
   getTodayForUser,
   getWeekForUser,
   deleteScheduleItem,
+  deleteBySource,
 };

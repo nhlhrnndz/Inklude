@@ -1,4 +1,4 @@
-//components\navigation\Sidebar.tsx
+// components/navigation/Sidebar.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import {
@@ -22,6 +22,10 @@ import { useTheme } from "../../context/ThemeContext";
  * itself — it reports a logical route key via onNavigate, so the
  * actual Drawer navigator (Phase 7) can resolve real Expo Router paths
  * without this component needing to know them.
+ *
+ * Which items are visible can be trimmed by the parent through
+ * `hiddenKeys` (for example, hiding "joinSession" for students who do not
+ * use live captions). The Sidebar itself stays free of that logic.
  *
  * Exception: Logout. Logging out needs to clear the navigation stack
  * (not just swap the current screen), so any screens visited during
@@ -97,6 +101,11 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
     },
     { key: "mySessions", label: "My Classes", icon: "albums-outline" },
     {
+      key: "referrals",
+      label: "Guidance Referrals",
+      icon: "school-outline",
+    },
+    {
       key: "notifications",
       label: "Notifications",
       icon: "notifications-outline",
@@ -108,6 +117,7 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
   guidance: [
     { key: "dashboard", label: "Dashboard", icon: "home-outline" },
     { key: "students", label: "Students", icon: "people-outline" },
+    { key: "appointments", label: "Appointments", icon: "calendar-outline" },
     { key: "belonging", label: "Belonging", icon: "heart-outline" },
     { key: "messages", label: "Messages", icon: "chatbubble-ellipses-outline" },
     { key: "sessions", label: "Sessions", icon: "albums-outline" },
@@ -142,6 +152,8 @@ interface SidebarProps {
   onHelp?: () => void;
   /** Whether the user is currently online (defaults to true) */
   isOnline?: boolean;
+  /** Logical keys of nav items to hide (e.g. ["joinSession"]) */
+  hiddenKeys?: string[];
 }
 
 export default function Sidebar({
@@ -149,6 +161,7 @@ export default function Sidebar({
   onNavigate,
   onHelp,
   isOnline = true,
+  hiddenKeys = [],
 }: SidebarProps) {
   const { colors, typography, spacing, radius, isDark, toggleTheme } =
     useTheme();
@@ -156,7 +169,9 @@ export default function Sidebar({
   const router = useRouter();
 
   const role: UserRole = isKnownRole(user?.role) ? user.role : "student";
-  const navItems = NAV_ITEMS[role];
+  const navItems = NAV_ITEMS[role].filter(
+    (item) => !hiddenKeys.includes(item.key),
+  );
   const displayName = user?.name ?? "Guest User";
   const initial = displayName.charAt(0).toUpperCase();
 
