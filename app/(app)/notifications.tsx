@@ -19,6 +19,10 @@ import {
   useNotifications,
 } from "../../context/NotificationContext";
 import { useTheme } from "../../context/ThemeContext";
+import {
+  getNotificationActionLabel,
+  resolveNotificationRoute,
+} from "../../utils/notificationRouter";
 
 const TYPE_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   announcement: "megaphone-outline",
@@ -30,6 +34,9 @@ const TYPE_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   checkin_help: "alert-circle-outline",
   accommodation_request: "accessibility-outline",
   accommodation_response: "checkmark-done-outline",
+  appointment: "calendar-outline",
+  schedule_reminder: "time-outline",
+  class_post: "document-text-outline",
 };
 
 function timeAgo(iso: string): string {
@@ -46,13 +53,6 @@ function timeAgo(iso: string): string {
   if (days < 7) return `${days}d ago`;
 
   return new Date(iso).toLocaleDateString();
-}
-
-function isAccommodation(item: AppNotification) {
-  return (
-    item.type === "accommodation_request" ||
-    item.type === "accommodation_response"
-  );
 }
 
 export default function NotificationsScreen() {
@@ -83,51 +83,19 @@ export default function NotificationsScreen() {
   };
 
   const handlePress = async (item: AppNotification) => {
-    /*
-     * SIS reminders are actionable notifications.
-     *
-     * When the student taps one:
-     * 1. Mark it as read.
-     * 2. Open the SIS screen.
-     *
-     * Other notification types keep the original
-     * expand/collapse behavior.
-     */
-    if (item.sourceType === "sis" || item.type === "sis_reminder") {
+    // Every notification type goes through one helper. If it has a
+    // destination: mark it read and open it.
+    const route = resolveNotificationRoute(item, user?.role);
+
+    if (route) {
       if (!item.isRead) {
         await markRead(item.id);
       }
-
-      router.push("/sis");
+      router.push(route as any);
       return;
     }
 
-    // Teacher check-ins and student replies open the Check-ins screen.
-    if (item.type === "checkin" || item.type === "checkin_reply") {
-      if (!item.isRead) {
-        await markRead(item.id);
-      }
-
-      router.push("/checkins" as any);
-      return;
-    }
-
-    // Accommodation requests and answers open the class. The teacher lands on
-    // the Requests tab. Older notifications without a class id open My Classes.
-    if (isAccommodation(item)) {
-      if (!item.isRead) {
-        await markRead(item.id);
-      }
-
-      if (item.sourceType === "class" && item.sourceId) {
-        const suffix = user?.role === "teacher" ? "?tab=support" : "";
-        router.push(`/class/${item.sourceId}${suffix}` as any);
-      } else {
-        router.push("/my-classes" as any);
-      }
-      return;
-    }
-
+    // No screen of its own (e.g. a Guidance announcement): expand to read it.
     setExpandedId((prev) => (prev === item.id ? null : item.id));
 
     if (!item.isRead) {
@@ -139,15 +107,7 @@ export default function NotificationsScreen() {
     const expanded = expandedId === item.id;
     const icon = TYPE_ICONS[item.type] ?? "notifications-outline";
 
-    const isSISReminder =
-      item.sourceType === "sis" || item.type === "sis_reminder";
-    const accommodation = isAccommodation(item);
-
-    const actionLabel = isSISReminder
-      ? "Open SIS"
-      : accommodation
-        ? "Open class"
-        : null;
+    const actionLabel = getNotificationActionLabel(item, user?.role);
 
     return (
       <Pressable
@@ -157,13 +117,11 @@ export default function NotificationsScreen() {
           item.createdAt,
         )}`}
         accessibilityHint={
-          isSISReminder
-            ? "Opens your Student Information Sheet"
-            : accommodation
-              ? "Opens the class"
-              : item.body
-                ? "Double tap to expand or collapse"
-                : undefined
+          actionLabel
+            ? actionLabel
+            : item.body
+              ? "Double tap to expand or collapse"
+              : undefined
         }
         style={({ pressed }) => [
           styles.card,

@@ -1,22 +1,23 @@
 // app/(app)/schedule.tsx
 //
-// Visual Schedule — the student's day as large, predictable cards.
-// Shows what's happening now, what's next (with a countdown), and lets
-// the student add their own classes (optionally repeating weekly).
+// Student calendar — the day as large, predictable cards.
+// Shows classes, exams, assignments and Guidance appointments in one place,
+// what's happening now, what's next (with a countdown), and lets the student
+// add their own classes (optionally repeating weekly).
 
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
@@ -25,11 +26,12 @@ import { useTheme } from "../../context/ThemeContext";
 import { getMySessions } from "../../utils/api";
 import { crossAlert } from "../../utils/crossAlert";
 import {
-    ScheduleItem,
-    createScheduleItem,
-    deleteScheduleItem,
-    getTodaySchedule,
-    getWeekSchedule,
+  ScheduleItem,
+  createScheduleItem,
+  deleteScheduleItem,
+  getTodaySchedule,
+  getUpcomingSchedule,
+  getWeekSchedule,
 } from "../../utils/scheduleApi";
 
 interface JoinedSession {
@@ -39,7 +41,7 @@ interface JoinedSession {
   isLive: boolean;
 }
 
-type ViewMode = "today" | "week";
+type ViewMode = "today" | "week" | "upcoming";
 
 // ---------- helpers ----------
 
@@ -128,7 +130,33 @@ const REPEAT_OPTIONS = [
   { label: "Weekly · 12 wks", weeks: 12 },
 ];
 
-function findLiveSession(item: ScheduleItem, sessions: JoinedSession[]) {
+// How each kind of item is labelled. Anything but a plain class gets a tag.
+const TYPE_META: Record<
+  string,
+  { label: string; icon: keyof typeof Ionicons.glyphMap }
+> = {
+  class: { label: "Class", icon: "school-outline" },
+  exam: { label: "Exam", icon: "document-text-outline" },
+  assignment: { label: "Due", icon: "create-outline" },
+  appointment: { label: "Guidance", icon: "people-outline" },
+  event: { label: "Event", icon: "calendar-outline" },
+  reminder: { label: "Reminder", icon: "alarm-outline" },
+};
+
+// Who manages an item that the student can't delete themselves.
+function managedNote(item: ScheduleItem): string | null {
+  if (item.sourceType === "session") return "Added from your class schedule.";
+  if (item.sourceType === "class_post") return "Posted by your teacher.";
+  if (item.sourceType === "appointment") {
+    return "Managed in Guidance appointments.";
+  }
+  if (item.sourceType === "announcement") return "From an announcement.";
+  if (item.sourceType) return "Added automatically.";
+  return null;
+}
+
+// Older, hand-typed classes link to a live session by matching the name.
+function findLiveSessionByName(item: ScheduleItem, sessions: JoinedSession[]) {
   const keys = [norm(item.subject), norm(item.title)].filter(Boolean);
   return sessions.find(
     (s) => s.isLive && s.status === "active" && keys.includes(norm(s.title)),
@@ -436,20 +464,258 @@ function AddItemForm({
   );
 }
 
+// ---------- add reminder form ----------
+
+function AddReminderForm({
+  onSaved,
+  onCancel,
+}: {
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const { colors, typography, spacing, radius } = useTheme();
+
+  const dayOptions = buildDayOptions();
+
+  const [title, setTitle] = useState("");
+  const [dayIndex, setDayIndex] = useState(0);
+  const [timeText, setTimeText] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const inputStyle = {
+    backgroundColor: colors.secondaryBackground,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    padding: spacing.sm + 2,
+    marginBottom: spacing.sm,
+    fontFamily: typography.body.fontFamily,
+    fontSize: typography.body.fontSize,
+    color: colors.text,
+    minHeight: 48,
+  } as const;
+
+  const labelStyle = {
+    fontFamily: typography.caption.fontFamily,
+    fontSize: typography.caption.fontSize,
+    fontWeight: "600" as const,
+    color: colors.textSecondary,
+    marginBottom: 4,
+    marginTop: spacing.xs,
+  };
+
+  const chip = (label: string, selected: boolean, onPress: () => void) => (
+    <TouchableOpacity
+      key={label}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      style={{
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        minHeight: 44,
+        justifyContent: "center",
+        borderRadius: radius.md,
+        borderWidth: 1,
+        borderColor: selected ? colors.primary : colors.border,
+        backgroundColor: selected ? colors.primary : colors.secondaryBackground,
+      }}
+    >
+      <Text
+        style={{
+          fontFamily: typography.body.fontFamily,
+          fontSize: typography.caption.fontSize,
+          fontWeight: "600",
+          color: selected ? "#FFFFFF" : colors.text,
+        }}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  const handleSave = async () => {
+    if (!title.trim()) {
+      Toast.show({ type: "error", text1: "Add a reminder title first." });
+      return;
+    }
+
+    const time = parseTime(timeText);
+    if (!time) {
+      Toast.show({
+        type: "error",
+        text1: "Check the time",
+        text2: 'Use a format like "8:30 AM" or "14:00".',
+      });
+      return;
+    }
+
+    const day = dayOptions[dayIndex].date;
+
+    setSaving(true);
+    try {
+      await createScheduleItem({
+        title: title.trim(),
+        type: "reminder",
+        startTime: toLocalString(day, time.h, time.m),
+        endTime: toLocalString(day, time.h, time.m),
+        repeatWeeks: 1,
+      });
+      Toast.show({ type: "success", text1: "Reminder added" });
+      onSaved();
+    } catch (error: any) {
+      Toast.show({
+        type: "error",
+        text1: "Could not save",
+        text2: error.response?.data?.message ?? "Please try again.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <View
+      style={{
+        backgroundColor: colors.surface,
+        borderColor: colors.border,
+        borderWidth: 1,
+        borderRadius: radius.lg,
+        padding: spacing.lg,
+        marginBottom: spacing.lg,
+      }}
+    >
+      <Text
+        style={{
+          fontFamily: typography.title.fontFamily,
+          fontSize: typography.title.fontSize,
+          fontWeight: "700",
+          color: colors.text,
+          marginBottom: spacing.sm,
+        }}
+        accessibilityRole="header"
+      >
+        Add a reminder
+      </Text>
+
+      <Text style={labelStyle}>What is it? *</Text>
+      <TextInput
+        style={inputStyle}
+        value={title}
+        onChangeText={setTitle}
+        placeholder="e.g. Submit history essay"
+        placeholderTextColor={colors.placeholder}
+        maxLength={150}
+        accessibilityLabel="Reminder title"
+      />
+
+      <Text style={labelStyle}>Day</Text>
+      <View
+        style={{
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: 8,
+          marginBottom: spacing.sm,
+        }}
+      >
+        {dayOptions.map((opt, i) =>
+          chip(opt.label, i === dayIndex, () => setDayIndex(i)),
+        )}
+      </View>
+
+      <Text style={labelStyle}>Time *</Text>
+      <TextInput
+        style={inputStyle}
+        value={timeText}
+        onChangeText={setTimeText}
+        placeholder="3:00 PM"
+        placeholderTextColor={colors.placeholder}
+        autoCapitalize="characters"
+        accessibilityLabel="Reminder time"
+      />
+
+      <TouchableOpacity
+        onPress={handleSave}
+        disabled={saving}
+        accessibilityRole="button"
+        accessibilityLabel="Save reminder"
+        style={{
+          backgroundColor: colors.primary,
+          borderRadius: radius.md,
+          paddingVertical: 14,
+          minHeight: 52,
+          alignItems: "center",
+          justifyContent: "center",
+          opacity: saving ? 0.6 : 1,
+          marginTop: spacing.sm,
+        }}
+      >
+        {saving ? (
+          <ActivityIndicator color="#FFFFFF" />
+        ) : (
+          <Text
+            style={{
+              color: "#FFFFFF",
+              fontFamily: typography.button.fontFamily,
+              fontSize: typography.button.fontSize,
+              fontWeight: "700",
+            }}
+          >
+            Save reminder
+          </Text>
+        )}
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        onPress={onCancel}
+        accessibilityRole="button"
+        accessibilityLabel="Cancel"
+        style={{ alignItems: "center", paddingVertical: spacing.md }}
+      >
+        <Text
+          style={{
+            fontFamily: typography.body.fontFamily,
+            fontSize: typography.body.fontSize,
+            color: colors.textSecondary,
+          }}
+        >
+          Cancel
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 // ---------- screen ----------
 
 export default function ScheduleScreen() {
   const router = useRouter();
-  const { highlight } = useLocalSearchParams<{ highlight?: string }>();
+  // Notifications open this screen with one of these to highlight an item:
+  //   ?highlight=12                              (a calendar item id)
+  //   ?sourceType=class_post&sourceId=5          (an exam/assignment post)
+  const {
+    highlight,
+    sourceType: hlSourceType,
+    sourceId: hlSourceId,
+  } = useLocalSearchParams<{
+    highlight?: string;
+    sourceType?: string;
+    sourceId?: string;
+  }>();
   const { colors, typography, spacing, radius } = useTheme();
 
   const highlightId = highlight ? Number(highlight) : null;
+  const highlightSourceId = hlSourceId ? Number(hlSourceId) : null;
+  const hasHighlight = !!(highlightId || (hlSourceType && highlightSourceId));
 
-  const [view, setView] = useState<ViewMode>("today");
+  const [view, setView] = useState<ViewMode>(
+    hasHighlight ? "upcoming" : "today",
+  );
   const [items, setItems] = useState<ScheduleItem[]>([]);
   const [sessions, setSessions] = useState<JoinedSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [showReminderForm, setShowReminderForm] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [now, setNow] = useState(new Date());
 
@@ -459,10 +725,27 @@ export default function ScheduleScreen() {
     return () => clearInterval(t);
   }, []);
 
+  // This screen stays mounted, so a notification tap while it's open
+  // changes the params but not the state: switch to the wide view ourselves
+  // so a far-off exam is actually in the list.
+  useEffect(() => {
+    if (hasHighlight) {
+      setView("upcoming");
+      setLoading(true);
+    }
+  }, [highlightId, hlSourceType, highlightSourceId, hasHighlight]);
+
   const load = useCallback(async () => {
     try {
+      const fetchItems =
+        view === "today"
+          ? getTodaySchedule()
+          : view === "week"
+            ? getWeekSchedule()
+            : getUpcomingSchedule(45);
+
       const [sched, sess] = await Promise.all([
-        view === "today" ? getTodaySchedule() : getWeekSchedule(),
+        fetchItems,
         getMySessions().catch(() => ({ sessions: [] })),
       ]);
       setItems(sched.items || []);
@@ -490,6 +773,13 @@ export default function ScheduleScreen() {
       nowMs < new Date(i.endTime).getTime(),
   );
   const next = items.find((i) => new Date(i.startTime).getTime() > nowMs);
+
+  const isHighlightedItem = (item: ScheduleItem) =>
+    (highlightId !== null && item.id === highlightId) ||
+    (!!hlSourceType &&
+      highlightSourceId !== null &&
+      item.sourceType === hlSourceType &&
+      item.sourceId === highlightSourceId);
 
   const handleDelete = (item: ScheduleItem) => {
     crossAlert("Remove this class?", `${item.title} will be removed.`, [
@@ -529,7 +819,12 @@ export default function ScheduleScreen() {
     } else {
       icon = "checkmark-circle-outline";
       heading = "Nothing else coming up";
-      sub = view === "today" ? "You're done for today." : "Your week is clear.";
+      sub =
+        view === "today"
+          ? "You're done for today."
+          : view === "week"
+            ? "Your week is clear."
+            : "Nothing scheduled in the next 45 days.";
     }
 
     return (
@@ -580,31 +875,50 @@ export default function ScheduleScreen() {
   const renderCard = (item: ScheduleItem) => {
     const start = new Date(item.startTime);
     const end = new Date(item.endTime);
+    const isAssignment = item.type === "assignment";
     const isCurrent = current?.id === item.id;
     const isNext = !current && next?.id === item.id;
     const isPast = end.getTime() <= nowMs;
-    const isHighlighted = highlightId === item.id;
-    const expanded = expandedId === item.id;
-    const liveSession = findLiveSession(item, sessions);
+    const isHighlighted = isHighlightedItem(item);
+    const expanded = expandedId === item.id || isHighlighted;
+    const meta = item.type !== "class" ? TYPE_META[item.type] : undefined;
+    const managed = managedNote(item);
+
+    const toggle = () => setExpandedId(expandedId === item.id ? null : item.id);
+
+    // Which session (if any) this card can open.
+    const sessionId =
+      item.sourceType === "session" && item.sourceId ? item.sourceId : null;
+    const liveSession = sessionId
+      ? sessions.find(
+          (s) => s.id === sessionId && s.isLive && s.status === "active",
+        )
+      : item.sourceType
+        ? undefined
+        : findLiveSessionByName(item, sessions);
+
+    const timeLabel = isAssignment
+      ? `Due ${fmtTime(start)}`
+      : item.type === "reminder"
+        ? fmtTime(start)
+        : `${fmtTime(start)} – ${fmtTime(end)}`;
 
     const badge = isCurrent
       ? { text: "Happening now", bg: colors.success }
       : isNext
         ? { text: "Up next", bg: colors.primary }
         : isPast
-          ? { text: "Finished", bg: colors.disabled }
+          ? {
+              text: isAssignment ? "Past due" : "Finished",
+              bg: colors.disabled,
+            }
           : null;
 
     return (
-      <TouchableOpacity
+      // The card itself is a plain View. Only the parts that toggle details
+      // are buttons, so no button ever sits inside another button.
+      <View
         key={item.id}
-        activeOpacity={0.9}
-        onPress={() => setExpandedId(expanded ? null : item.id)}
-        accessibilityRole="button"
-        accessibilityState={{ expanded }}
-        accessibilityLabel={`${item.title}, ${fmtTime(start)} to ${fmtTime(end)}${
-          badge ? `, ${badge.text}` : ""
-        }`}
         style={{
           backgroundColor: colors.surface,
           borderColor:
@@ -616,67 +930,106 @@ export default function ScheduleScreen() {
           opacity: isPast && !isHighlighted ? 0.6 : 1,
         }}
       >
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={toggle}
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          accessibilityLabel={`${meta ? meta.label + ", " : ""}${item.title}, ${timeLabel}${
+            badge ? `, ${badge.text}` : ""
+          }`}
         >
-          <Text
+          <View
             style={{
-              fontFamily: typography.title.fontFamily,
-              fontSize: 22,
-              fontWeight: "700",
-              color: colors.primary,
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
             }}
           >
-            {fmtTime(start)} – {fmtTime(end)}
-          </Text>
-          {badge && (
-            <View
+            <Text
               style={{
-                backgroundColor: badge.bg,
-                borderRadius: radius.sm,
-                paddingHorizontal: 10,
-                paddingVertical: 4,
+                flex: 1,
+                fontFamily: typography.title.fontFamily,
+                fontSize: 22,
+                fontWeight: "700",
+                color: colors.primary,
               }}
             >
-              <Text
-                style={{ color: "#FFFFFF", fontSize: 11, fontWeight: "700" }}
+              {timeLabel}
+            </Text>
+            {badge && (
+              <View
+                style={{
+                  backgroundColor: badge.bg,
+                  borderRadius: radius.sm,
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                  marginLeft: spacing.sm,
+                }}
               >
-                {badge.text}
+                <Text
+                  style={{ color: "#FFFFFF", fontSize: 11, fontWeight: "700" }}
+                >
+                  {badge.text}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {meta && (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                marginTop: spacing.sm,
+              }}
+            >
+              <Ionicons
+                name={meta.icon}
+                size={16}
+                color={item.type === "exam" ? colors.error : colors.primary}
+              />
+              <Text
+                style={{
+                  marginLeft: 6,
+                  fontFamily: typography.caption.fontFamily,
+                  fontSize: typography.caption.fontSize,
+                  fontWeight: "700",
+                  color: item.type === "exam" ? colors.error : colors.primary,
+                }}
+              >
+                {meta.label}
               </Text>
             </View>
           )}
-        </View>
 
-        <Text
-          style={{
-            fontFamily: typography.title.fontFamily,
-            fontSize: 20,
-            fontWeight: "700",
-            color: colors.text,
-            marginTop: spacing.sm,
-          }}
-        >
-          {item.title}
-        </Text>
-
-        {item.subject ? (
           <Text
             style={{
-              fontFamily: typography.body.fontFamily,
-              fontSize: typography.body.fontSize,
-              color: colors.textSecondary,
-              marginTop: 2,
+              fontFamily: typography.title.fontFamily,
+              fontSize: 20,
+              fontWeight: "700",
+              color: colors.text,
+              marginTop: spacing.sm,
             }}
           >
-            {item.subject}
+            {item.title}
           </Text>
-        ) : null}
 
-        {liveSession && (
+          {item.subject ? (
+            <Text
+              style={{
+                fontFamily: typography.body.fontFamily,
+                fontSize: typography.body.fontSize,
+                color: colors.textSecondary,
+                marginTop: 2,
+              }}
+            >
+              {item.subject}
+            </Text>
+          ) : null}
+        </TouchableOpacity>
+
+        {liveSession ? (
           <TouchableOpacity
             onPress={() =>
               router.push(`/session/${liveSession.id}/live` as any)
@@ -707,7 +1060,37 @@ export default function ScheduleScreen() {
               Join live class
             </Text>
           </TouchableOpacity>
-        )}
+        ) : sessionId && !isPast ? (
+          <TouchableOpacity
+            onPress={() => router.push(`/session/${sessionId}` as any)}
+            accessibilityRole="button"
+            accessibilityLabel={`Open class ${item.title}`}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              borderColor: colors.primary,
+              borderWidth: 1,
+              borderRadius: radius.md,
+              paddingVertical: 14,
+              minHeight: 52,
+              marginTop: spacing.md,
+            }}
+          >
+            <Ionicons name="enter-outline" size={20} color={colors.primary} />
+            <Text
+              style={{
+                color: colors.primary,
+                fontFamily: typography.button.fontFamily,
+                fontSize: typography.button.fontSize,
+                fontWeight: "700",
+                marginLeft: spacing.sm,
+              }}
+            >
+              Open class
+            </Text>
+          </TouchableOpacity>
+        ) : null}
 
         {expanded ? (
           <View style={{ marginTop: spacing.md }}>
@@ -749,7 +1132,7 @@ export default function ScheduleScreen() {
                 </Text>
               </View>
             ) : null}
-            {!item.teacherName && !item.location && (
+            {!item.teacherName && !item.location && !managed && (
               <Text
                 style={{
                   fontFamily: typography.caption.fontFamily,
@@ -761,34 +1144,52 @@ export default function ScheduleScreen() {
               </Text>
             )}
 
-            <TouchableOpacity
-              onPress={() => handleDelete(item)}
-              accessibilityRole="button"
-              accessibilityLabel={`Remove ${item.title}`}
-              style={{
-                alignSelf: "flex-start",
-                flexDirection: "row",
-                alignItems: "center",
-                minHeight: 44,
-                marginTop: spacing.sm,
-              }}
-            >
-              <Ionicons name="trash-outline" size={18} color={colors.error} />
+            {managed ? (
               <Text
                 style={{
-                  marginLeft: 6,
-                  fontFamily: typography.body.fontFamily,
-                  fontSize: typography.body.fontSize,
-                  fontWeight: "600",
-                  color: colors.error,
+                  fontFamily: typography.caption.fontFamily,
+                  fontSize: typography.caption.fontSize,
+                  color: colors.textSecondary,
+                  marginTop: 4,
                 }}
               >
-                Remove
+                {managed}
               </Text>
-            </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                onPress={() => handleDelete(item)}
+                accessibilityRole="button"
+                accessibilityLabel={`Remove ${item.title}`}
+                style={{
+                  alignSelf: "flex-start",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  minHeight: 44,
+                  marginTop: spacing.sm,
+                }}
+              >
+                <Ionicons name="trash-outline" size={18} color={colors.error} />
+                <Text
+                  style={{
+                    marginLeft: 6,
+                    fontFamily: typography.body.fontFamily,
+                    fontSize: typography.body.fontSize,
+                    fontWeight: "600",
+                    color: colors.error,
+                  }}
+                >
+                  Remove
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         ) : (
-          <View style={[styles.detailRow, { marginTop: spacing.sm }]}>
+          <TouchableOpacity
+            onPress={toggle}
+            accessibilityRole="button"
+            accessibilityLabel={`View details for ${item.title}`}
+            style={[styles.detailRow, { marginTop: spacing.sm, minHeight: 36 }]}
+          >
             {item.teacherName ? (
               <Text
                 style={{
@@ -823,13 +1224,13 @@ export default function ScheduleScreen() {
             >
               View details
             </Text>
-          </View>
+          </TouchableOpacity>
         )}
-      </TouchableOpacity>
+      </View>
     );
   };
 
-  // Week view groups cards under a day heading
+  // Today is a flat list; week and upcoming group cards under a day heading
   const renderList = () => {
     if (items.length === 0) {
       return (
@@ -854,8 +1255,10 @@ export default function ScheduleScreen() {
             }}
           >
             {view === "today"
-              ? "No classes on your schedule today."
-              : "No classes on your schedule this week."}
+              ? "Nothing on your schedule today."
+              : view === "week"
+                ? "Nothing on your schedule this week."
+                : "Nothing on your schedule in the next 45 days."}
           </Text>
           <Text
             style={{
@@ -866,7 +1269,8 @@ export default function ScheduleScreen() {
               marginTop: 4,
             }}
           >
-            Tap "Add a class" to build your day.
+            Classes, exams and appointments appear here automatically. Tap "Add
+            a class" for anything else.
           </Text>
         </View>
       );
@@ -926,7 +1330,7 @@ export default function ScheduleScreen() {
         <Text
           style={{
             fontFamily: typography.body.fontFamily,
-            fontSize: typography.body.fontSize,
+            fontSize: typography.caption.fontSize,
             fontWeight: "700",
             color: selected ? "#FFFFFF" : colors.textSecondary,
           }}
@@ -984,7 +1388,7 @@ export default function ScheduleScreen() {
             }}
             accessibilityRole="header"
           >
-            My Schedule
+            My Calendar
           </Text>
           <Text
             style={{
@@ -1011,7 +1415,48 @@ export default function ScheduleScreen() {
           >
             {toggleButton("Today", "today")}
             {toggleButton("This week", "week")}
+            {toggleButton("Upcoming", "upcoming")}
           </View>
+
+          {showReminderForm ? (
+            <AddReminderForm
+              onSaved={() => {
+                setShowReminderForm(false);
+                load();
+              }}
+              onCancel={() => setShowReminderForm(false)}
+            />
+          ) : !showForm ? (
+            <TouchableOpacity
+              onPress={() => setShowReminderForm(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Add a reminder"
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                borderColor: colors.primary,
+                borderWidth: 1,
+                borderRadius: radius.md,
+                paddingVertical: 14,
+                minHeight: 52,
+                marginBottom: spacing.md,
+              }}
+            >
+              <Ionicons name="alarm-outline" size={20} color={colors.primary} />
+              <Text
+                style={{
+                  color: colors.primary,
+                  fontFamily: typography.button.fontFamily,
+                  fontSize: typography.button.fontSize,
+                  fontWeight: "700",
+                  marginLeft: 8,
+                }}
+              >
+                Add a reminder
+              </Text>
+            </TouchableOpacity>
+          ) : null}
 
           {showForm ? (
             <AddItemForm

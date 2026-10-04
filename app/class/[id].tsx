@@ -752,6 +752,41 @@ export default function ClassDetailScreen() {
                 </View>
               )}
 
+              {isTeacher && (
+                <TouchableOpacity
+                  onPress={() => router.push(`/class-calendar/${id}` as any)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Post exams and assignments"
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderColor: colors.primary,
+                    borderWidth: 1,
+                    borderRadius: radius.md,
+                    padding: spacing.md,
+                    marginBottom: spacing.lg,
+                  }}
+                >
+                  <Ionicons
+                    name="calendar-outline"
+                    size={20}
+                    color={colors.primary}
+                  />
+                  <Text
+                    style={{
+                      marginLeft: 8,
+                      fontFamily: typography.button.fontFamily,
+                      fontSize: typography.button.fontSize,
+                      fontWeight: "700",
+                      color: colors.primary,
+                    }}
+                  >
+                    Exams & assignments
+                  </Text>
+                </TouchableOpacity>
+              )}
+
               {sessions.length === 0 ? (
                 <Text
                   style={{
