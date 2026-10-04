@@ -12,6 +12,20 @@ const {
   getClassMembers,
   createClassSession,
 } = require("../models/classModel");
+const {
+  syncSessionForMembers,
+  syncClassForUser,
+  removeClassForUser,
+} = require("../services/calendarSyncService");
+
+// Calendar sync must never break joining, leaving or scheduling.
+async function safeCalendar(label, fn) {
+  try {
+    await fn();
+  } catch (err) {
+    console.error(`Calendar sync (${label}) failed:`, err.message);
+  }
+}
 
 // includeAccommodations: only the class's teacher gets the pending-request
 // count. Students always get 0.
@@ -120,6 +134,10 @@ async function joinClassController(req, res) {
     }
 
     await joinClass(cls.id, req.user.id);
+
+    // Put the class's upcoming sessions, exams and assignments on their calendar.
+    await safeCalendar("join", () => syncClassForUser(cls.id, req.user.id));
+
     res.json({ message: "Joined class.", class: mapClass(cls, false) });
   } catch (err) {
     console.error("joinClass error:", err);
@@ -220,6 +238,11 @@ async function createClassSessionController(req, res) {
       scheduledEnd,
     });
 
+    // A scheduled session lands on every enrolled student's calendar.
+    if (scheduledStart) {
+      await safeCalendar("session", () => syncSessionForMembers(session.id));
+    }
+
     res.status(201).json({
       message: "Session added.",
       session: mapSession({ ...session, participant_count: 0 }),
@@ -240,6 +263,11 @@ async function leaveClassController(req, res) {
     const ok = await leaveClass(req.params.id, req.user.id);
     if (!ok)
       return res.status(400).json({ message: "You are not in this class." });
+
+    await safeCalendar("leave", () =>
+      removeClassForUser(Number(req.params.id), req.user.id),
+    );
+
     res.json({ message: "Left class." });
   } catch (err) {
     console.error("leaveClass error:", err);

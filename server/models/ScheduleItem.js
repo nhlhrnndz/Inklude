@@ -61,8 +61,24 @@ async function getWeekForUser(userId) {
   return rows;
 }
 
+// Calendar range: today through the next `days` days (exams and
+// assignments are often more than a week away).
+async function getUpcomingForUser(userId, days = 45) {
+  const [rows] = await pool.query(
+    `SELECT * FROM schedule_items
+     WHERE user_id = ?
+       AND start_time >= CURDATE()
+       AND start_time < DATE_ADD(CURDATE(), INTERVAL ? DAY)
+     ORDER BY start_time ASC
+     LIMIT 300`,
+    [userId, days],
+  );
+  return rows;
+}
+
 // Student-initiated delete. Items created by another module
-// (appointments, later events) are managed by that module, not removed here.
+// (appointments, class sessions, teacher posts) are managed by that
+// module, not removed here.
 async function deleteScheduleItem(id, userId) {
   const [result] = await pool.query(
     "DELETE FROM schedule_items WHERE id = ? AND user_id = ? AND source_type IS NULL",
@@ -84,6 +100,7 @@ module.exports = {
   createScheduleItem,
   getTodayForUser,
   getWeekForUser,
+  getUpcomingForUser,
   deleteScheduleItem,
   deleteBySource,
 };

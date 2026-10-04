@@ -4,14 +4,17 @@ const pool = require("../config/db");
 async function createAnnouncement({
   authorId,
   audience,
+  audienceLabel = null,
   sessionId = null,
   title,
   body,
+  deadline = null,
 }) {
   const [result] = await pool.query(
-    `INSERT INTO announcements (author_id, audience, session_id, title, body)
-     VALUES (?, ?, ?, ?, ?)`,
-    [authorId, audience, sessionId, title, body],
+    `INSERT INTO announcements
+       (author_id, audience, audience_label, session_id, title, body, deadline)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [authorId, audience, audienceLabel, sessionId, title, body, deadline],
   );
 
   const [rows] = await pool.query("SELECT * FROM announcements WHERE id = ?", [
@@ -87,10 +90,26 @@ async function getAllStudentIds() {
   return rows.map((r) => r.id);
 }
 
+// Recipients for a college announcement: students whose Basic Information
+// course is one of the given courses.
+// (If your table or columns are named differently, change them here only.)
+async function getStudentIdsByCourses(courses) {
+  if (!courses || courses.length === 0) return [];
+  const [rows] = await pool.query(
+    `SELECT DISTINCT u.id
+     FROM users u
+     JOIN student_basic_info b ON b.user_id = u.id
+     WHERE u.role = 'student' AND b.course IN (?)`,
+    [courses],
+  );
+  return rows.map((r) => r.id);
+}
+
 module.exports = {
   createAnnouncement,
   getAnnouncementsByAuthor,
   getAnnouncementsBySession,
   getSessionStudentIds,
   getAllStudentIds,
+  getStudentIdsByCourses,
 };

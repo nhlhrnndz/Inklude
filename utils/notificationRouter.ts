@@ -1,0 +1,94 @@
+// utils/notificationRouter.ts
+//
+// ONE place that decides where a notification goes when tapped.
+// Returns an app route, or null when the notification has no screen of its
+// own (the notifications list then just expands it to show the full text).
+//
+// A notification's destination is its sourceType + sourceId:
+//   class           -> /class/:id            (teacher + accommodation -> Requests tab)
+//   session         -> /session/:id
+//   appointment     -> /guidance/appointments
+//   message_thread  -> student: /messages, guidance: /guidance/message/:id
+//   schedule_item   -> /schedule (that exact item highlighted)
+//   class_post      -> /schedule (the exam/assignment highlighted)
+//   sis             -> /sis
+
+export type NotificationLike = {
+  type: string;
+  sourceType: string | null;
+  sourceId: number | null;
+};
+
+const isAccommodation = (type: string) =>
+  type === "accommodation_request" || type === "accommodation_response";
+
+export function resolveNotificationRoute(
+  n: NotificationLike,
+  role?: string | null,
+): string | null {
+  const id = n.sourceId;
+
+  // Type-based (older notifications that carry no useful sourceType)
+  if (n.sourceType === "sis" || n.type === "sis_reminder") return "/sis";
+  if (n.type === "checkin" || n.type === "checkin_reply") return "/checkins";
+
+  switch (n.sourceType) {
+    case "class": {
+      if (!id) return "/my-classes";
+      const teacherRequests = role === "teacher" && isAccommodation(n.type);
+      return teacherRequests ? `/class/${id}?tab=support` : `/class/${id}`;
+    }
+
+    case "session":
+      return id ? `/session/${id}` : null;
+
+    case "appointment":
+      return id
+        ? `/guidance/appointments?highlight=${id}`
+        : "/guidance/appointments";
+
+    case "message_thread":
+      if (role === "guidance" || role === "admin") {
+        return id ? `/guidance/message/${id}` : "/guidance/messages";
+      }
+      return "/messages";
+
+    case "schedule_item":
+      return id ? `/schedule?highlight=${id}` : "/schedule";
+
+    case "class_post":
+      return id
+        ? `/schedule?sourceType=class_post&sourceId=${id}`
+        : "/schedule";
+
+    default:
+      return null;
+  }
+}
+
+// Short label for the "arrow" chip on a notification card.
+export function getNotificationActionLabel(
+  n: NotificationLike,
+  role?: string | null,
+): string | null {
+  if (!resolveNotificationRoute(n, role)) return null;
+
+  if (n.sourceType === "sis" || n.type === "sis_reminder") return "Open SIS";
+  if (n.type === "checkin" || n.type === "checkin_reply")
+    return "Open check-ins";
+
+  switch (n.sourceType) {
+    case "class":
+    case "session":
+      return "Open class";
+    case "appointment":
+      return "Open appointment";
+    case "message_thread":
+      return "Open messages";
+    case "schedule_item":
+    case "class_post":
+      return "Open schedule";
+    default:
+      return null;
+  }
+}

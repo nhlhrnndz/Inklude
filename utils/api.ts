@@ -252,6 +252,10 @@ export const postAnnouncement = async (payload: {
   title: string;
   body: string;
   sessionId?: number;
+  deadline?: string;
+  audience?: "college";
+  colleges?: string[];
+  courses?: string[];
 }) => {
   const response = await api.post("/api/announcements", payload);
   return response.data;

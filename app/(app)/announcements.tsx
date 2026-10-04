@@ -2,29 +2,37 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 
+import {
+  DateField,
+  TimeField,
+  todayString,
+} from "../../components/DateTimePicker";
+import { COLLEGES } from "../../constants/courses";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
 import {
-    getMyAnnouncements,
-    getMySessions,
-    postAnnouncement,
+  getMyAnnouncements,
+  getMySessions,
+  postAnnouncement,
 } from "../../utils/api";
 
 const TITLE_MAX = 150;
 const BODY_MAX = 2000;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^\d{2}:\d{2}$/;
 
 type Session = {
   id: number;
@@ -35,11 +43,13 @@ type Session = {
 
 type Announcement = {
   id: number;
-  audience: "session" | "all_students";
+  audience: "session" | "all_students" | "college";
+  audienceLabel: string | null;
   sessionId: number | null;
   sessionTitle: string | null;
   title: string;
   body: string;
+  deadline: string | null;
   createdAt: string;
 };
 
@@ -52,6 +62,10 @@ export default function AnnouncementsScreen() {
 
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [deadlineDate, setDeadlineDate] = useState("");
+  const [deadlineTime, setDeadlineTime] = useState("");
+  const [audienceMode, setAudienceMode] = useState<"all" | "college">("all");
+  const [selectedColleges, setSelectedColleges] = useState<string[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(
     null,
@@ -114,13 +128,50 @@ export default function AnnouncementsScreen() {
       return;
     }
 
+    if (
+      !isTeacher &&
+      audienceMode === "college" &&
+      selectedColleges.length === 0
+    ) {
+      Toast.show({
+        type: "error",
+        text1: "Choose a college",
+        text2: "Pick at least one college, or switch to All students.",
+      });
+      return;
+    }
+
+    // Deadline is optional, but if one half is filled the other is needed.
+    let deadline: string | undefined;
+    if (deadlineDate || deadlineTime) {
+      if (!DATE_RE.test(deadlineDate) || !TIME_RE.test(deadlineTime)) {
+        Toast.show({
+          type: "error",
+          text1: "Check the deadline",
+          text2: "Pick both a date and a time, or clear them.",
+        });
+        return;
+      }
+      deadline = `${deadlineDate} ${deadlineTime}`;
+    }
+
     setPosting(true);
     try {
       const res = await postAnnouncement({
         title: title.trim(),
         body: body.trim(),
         sessionId: isTeacher ? (selectedSessionId ?? undefined) : undefined,
-      });
+        deadline,
+        ...(!isTeacher && audienceMode === "college"
+          ? {
+              audience: "college",
+              colleges: selectedColleges,
+              courses: COLLEGES.filter((c) =>
+                selectedColleges.includes(c.code),
+              ).flatMap((c) => c.courses),
+            }
+          : {}),
+      } as any);
 
       const count: number = res.recipientCount ?? 0;
       Toast.show({
@@ -128,12 +179,18 @@ export default function AnnouncementsScreen() {
         text1: "Announcement posted",
         text2:
           count === 0
-            ? "No students have joined this session yet."
-            : `Sent to ${count} student${count === 1 ? "" : "s"}.`,
+            ? isTeacher
+              ? "No students have joined this session yet."
+              : "No students match that audience yet."
+            : `Sent to ${count} student${count === 1 ? "" : "s"}${
+                deadline ? " and added to their calendars." : "."
+              }`,
       });
 
       setTitle("");
       setBody("");
+      setDeadlineDate("");
+      setDeadlineTime("");
 
       const annRes = await getMyAnnouncements();
       setHistory(annRes.announcements ?? []);
@@ -316,9 +373,120 @@ export default function AnnouncementsScreen() {
                   color: colors.text,
                 }}
               >
-                This announcement will be sent to all students.
+                {audienceMode === "all"
+                  ? "This announcement will be sent to all students."
+                  : selectedColleges.length === 0
+                    ? "Choose which colleges should receive this."
+                    : `This announcement will go to students in: ${selectedColleges.join(", ")}.`}
               </Text>
             </View>
+          )}
+
+          {!isTeacher && (
+            <>
+              <Text style={labelStyle}>AUDIENCE</Text>
+              <View style={[styles.chipRow, { gap: spacing.sm }]}>
+                {(
+                  [
+                    { key: "all", label: "All students" },
+                    { key: "college", label: "By college" },
+                  ] as const
+                ).map((opt) => {
+                  const selected = audienceMode === opt.key;
+                  return (
+                    <TouchableOpacity
+                      key={opt.key}
+                      onPress={() => setAudienceMode(opt.key)}
+                      accessibilityRole="button"
+                      accessibilityLabel={opt.label}
+                      accessibilityState={{ selected }}
+                      style={[
+                        styles.chip,
+                        {
+                          minHeight: 44,
+                          justifyContent: "center",
+                          borderColor: selected
+                            ? colors.primary
+                            : colors.border,
+                          backgroundColor: selected
+                            ? colors.primary
+                            : colors.surface,
+                          borderRadius: radius.md,
+                          paddingHorizontal: spacing.md,
+                          paddingVertical: spacing.sm,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          fontFamily: typography.body.fontFamily,
+                          fontSize: typography.caption.fontSize,
+                          fontWeight: "700",
+                          color: selected ? "#FFFFFF" : colors.text,
+                        }}
+                      >
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {audienceMode === "college" && (
+                <View
+                  style={[
+                    styles.chipRow,
+                    { gap: spacing.sm, marginTop: spacing.sm },
+                  ]}
+                >
+                  {COLLEGES.map((college) => {
+                    const selected = selectedColleges.includes(college.code);
+                    return (
+                      <TouchableOpacity
+                        key={college.code}
+                        onPress={() =>
+                          setSelectedColleges((prev) =>
+                            prev.includes(college.code)
+                              ? prev.filter((c) => c !== college.code)
+                              : [...prev, college.code],
+                          )
+                        }
+                        accessibilityRole="checkbox"
+                        accessibilityLabel={college.code}
+                        accessibilityState={{ checked: selected }}
+                        style={[
+                          styles.chip,
+                          {
+                            minHeight: 44,
+                            justifyContent: "center",
+                            borderColor: selected
+                              ? colors.primary
+                              : colors.border,
+                            backgroundColor: selected
+                              ? colors.primary
+                              : colors.surface,
+                            borderRadius: radius.md,
+                            paddingHorizontal: spacing.md,
+                            paddingVertical: spacing.sm,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={{
+                            fontFamily: typography.body.fontFamily,
+                            fontSize: typography.caption.fontSize,
+                            fontWeight: "700",
+                            color: selected ? "#FFFFFF" : colors.text,
+                          }}
+                        >
+                          {college.code}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+            </>
           )}
 
           <Text style={labelStyle}>TITLE</Text>
@@ -355,6 +523,57 @@ export default function AnnouncementsScreen() {
           >
             {body.length}/{BODY_MAX}
           </Text>
+
+          <Text style={labelStyle}>DEADLINE (OPTIONAL)</Text>
+          <Text
+            style={{
+              fontFamily: typography.caption.fontFamily,
+              fontSize: 11,
+              color: colors.textSecondary,
+              marginBottom: spacing.sm,
+            }}
+          >
+            If you set one, it appears on every recipient's calendar.
+          </Text>
+          <DateField
+            value={deadlineDate}
+            onChange={setDeadlineDate}
+            label="Deadline date"
+            placeholder="Pick a date (optional)"
+            minDate={todayString()}
+          />
+          <TimeField
+            value={deadlineTime}
+            onChange={setDeadlineTime}
+            label="Deadline time"
+            placeholder="Pick a time (optional)"
+          />
+          {!!(deadlineDate || deadlineTime) && (
+            <TouchableOpacity
+              onPress={() => {
+                setDeadlineDate("");
+                setDeadlineTime("");
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Clear deadline"
+              style={{
+                alignSelf: "flex-start",
+                minHeight: 44,
+                justifyContent: "center",
+              }}
+            >
+              <Text
+                style={{
+                  fontFamily: typography.body.fontFamily,
+                  fontSize: typography.caption.fontSize,
+                  fontWeight: "700",
+                  color: colors.primary,
+                }}
+              >
+                Clear deadline
+              </Text>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             onPress={handlePost}
@@ -454,9 +673,24 @@ export default function AnnouncementsScreen() {
               >
                 {a.audience === "all_students"
                   ? "All students"
-                  : (a.sessionTitle ?? "Session")}{" "}
+                  : a.audience === "college"
+                    ? `Colleges: ${a.audienceLabel ?? ""}`
+                    : (a.sessionTitle ?? "Session")}{" "}
                 · {new Date(a.createdAt).toLocaleString()}
               </Text>
+              {a.deadline ? (
+                <Text
+                  style={{
+                    fontFamily: typography.caption.fontFamily,
+                    fontSize: 11,
+                    fontWeight: "700",
+                    color: colors.textSecondary,
+                    marginTop: 2,
+                  }}
+                >
+                  Deadline: {new Date(a.deadline).toLocaleString()}
+                </Text>
+              ) : null}
               <Text
                 style={{
                   fontFamily: typography.caption.fontFamily,

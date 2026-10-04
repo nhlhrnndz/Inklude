@@ -44,6 +44,8 @@ IncluEd
 │  │  └─ _layout.tsx
 │  ├─ class
 │  │  └─ [id].tsx
+│  ├─ class-calendar
+│  │  └─ [id].tsx
 │  ├─ index.tsx
 │  ├─ index.tsx.bak
 │  ├─ login.tsx
@@ -78,6 +80,7 @@ IncluEd
 │     └─ splash-icon.png
 ├─ CLAUDE.md
 ├─ components
+│  ├─ AddReminderForm.tsx
 │  ├─ appointments
 │  │  └─ SlotPicker.tsx
 │  ├─ AskTeacherPanel.tsx
@@ -197,6 +200,7 @@ IncluEd
 │  │  ├─ breakModel.js
 │  │  ├─ Checkin.js
 │  │  ├─ classModel.js
+│  │  ├─ classPostModel.js
 │  │  ├─ ClassPulse.js
 │  │  ├─ Document.js
 │  │  ├─ followupModel.js
@@ -239,6 +243,7 @@ IncluEd
 │  │  ├─ transcribe.js
 │  │  └─ transcript.js
 │  ├─ services
+│  │  ├─ calendarSyncService.js
 │  │  ├─ documentTextService.js
 │  │  ├─ notificationService.js
 │  │  └─ scheduleReminderService.js
@@ -262,6 +267,7 @@ IncluEd
 │  ├─ crossAlert.ts
 │  ├─ documentApi.ts
 │  ├─ liveApi.ts
+│  ├─ notificationRouter.ts
 │  ├─ scheduleApi.ts
 │  ├─ sensoryApi.ts
 │  ├─ socket.ts

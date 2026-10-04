@@ -1,20 +1,23 @@
 // context/NotificationContext.tsx
+import { useRouter } from "expo-router";
 import React, {
-    createContext,
-    useCallback,
-    useContext,
-    useEffect,
-    useMemo,
-    useState,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from "react";
 import { AppState } from "react-native";
 import Toast from "react-native-toast-message";
 
 import {
-    getNotifications,
-    markAllNotificationsRead,
-    markNotificationRead,
+  getNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
 } from "../utils/api";
+import { resolveNotificationRoute } from "../utils/notificationRouter";
 import { getSocket } from "../utils/socket";
 import { useAuth } from "./AuthContext";
 
@@ -29,6 +32,14 @@ export type AppNotification = {
   isRead: boolean;
   readAt: string | null;
   createdAt: string;
+};
+
+type LivePayload = {
+  type: string;
+  title: string;
+  body: string | null;
+  sourceType: string | null;
+  sourceId: number | null;
 };
 
 type NotificationContextType = {
@@ -47,11 +58,21 @@ export const NotificationProvider = ({
 }: {
   children: React.ReactNode;
 }) => {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const router = useRouter();
 
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
+
+  // Refs let the socket handler (registered once per login) always see the
+  // latest values without re-subscribing.
+  const notificationsRef = useRef<AppNotification[]>([]);
+  notificationsRef.current = notifications;
+  const roleRef = useRef<string | null>(user?.role ?? null);
+  roleRef.current = user?.role ?? null;
+  const routerRef = useRef(router);
+  routerRef.current = router;
 
   const refresh = useCallback(async () => {
     try {
@@ -64,6 +85,37 @@ export const NotificationProvider = ({
       setLoading(false);
     }
   }, []);
+
+  const markRead = useCallback(
+    async (id: number) => {
+      // Optimistic update, then confirm the real count from the server
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)),
+      );
+      try {
+        const data = await markNotificationRead(id);
+        setUnreadCount(data.unreadCount ?? 0);
+      } catch (err) {
+        console.log("Failed to mark notification read:", err);
+        refresh();
+      }
+    },
+    [refresh],
+  );
+
+  const markReadRef = useRef(markRead);
+  markReadRef.current = markRead;
+
+  const markAllRead = useCallback(async () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    setUnreadCount(0);
+    try {
+      await markAllNotificationsRead();
+    } catch (err) {
+      console.log("Failed to mark all notifications read:", err);
+      refresh();
+    }
+  }, [refresh]);
 
   // Initial load
   useEffect(() => {
@@ -83,13 +135,34 @@ export const NotificationProvider = ({
       refresh();
     };
 
-    const handleNew = (payload: { title: string; body: string | null }) => {
+    // Tapping the toast goes to the same place as tapping the list item.
+    const openFromToast = (payload: LivePayload) => {
+      Toast.hide();
+      const route = resolveNotificationRoute(payload, roleRef.current);
+      if (!route) return;
+
+      // The list was refreshed when the toast appeared, so the matching row
+      // is normally there. Mark it read so the badge stays honest.
+      const match = notificationsRef.current.find(
+        (n) =>
+          !n.isRead &&
+          n.type === payload.type &&
+          n.sourceType === payload.sourceType &&
+          n.sourceId === payload.sourceId,
+      );
+      if (match) markReadRef.current(match.id);
+
+      routerRef.current.push(route as any);
+    };
+
+    const handleNew = (payload: LivePayload) => {
       refresh();
       Toast.show({
         type: "info",
         text1: payload.title,
         text2: payload.body ?? undefined,
         visibilityTime: 4000,
+        onPress: () => openFromToast(payload),
       });
     };
 
@@ -113,34 +186,6 @@ export const NotificationProvider = ({
     });
     return () => subscription.remove();
   }, [token, refresh]);
-
-  const markRead = useCallback(
-    async (id: number) => {
-      // Optimistic update, then confirm the real count from the server
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)),
-      );
-      try {
-        const data = await markNotificationRead(id);
-        setUnreadCount(data.unreadCount ?? 0);
-      } catch (err) {
-        console.log("Failed to mark notification read:", err);
-        refresh();
-      }
-    },
-    [refresh],
-  );
-
-  const markAllRead = useCallback(async () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-    setUnreadCount(0);
-    try {
-      await markAllNotificationsRead();
-    } catch (err) {
-      console.log("Failed to mark all notifications read:", err);
-      refresh();
-    }
-  }, [refresh]);
 
   const value = useMemo(
     () => ({
