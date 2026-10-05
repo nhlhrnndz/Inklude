@@ -1,9 +1,9 @@
-//sis.js
+// server/routes/sis.js
 const express = require("express");
 
 const router = express.Router();
 
-const { verifyToken } = require("../middleware/authMiddleware");
+const { verifyToken, requireRole } = require("../middleware/authMiddleware");
 
 const {
   getMySIS,
@@ -13,12 +13,22 @@ const {
 } = require("../controllers/sisController");
 
 // Student: own SIS only
-router.get("/me", verifyToken, getMySIS);
-router.post("/me", verifyToken, saveMySIS);
-router.put("/me", verifyToken, saveMySIS);
+router.get("/me", verifyToken, requireRole("student"), getMySIS);
+router.post("/me", verifyToken, requireRole("student"), saveMySIS);
+router.put("/me", verifyToken, requireRole("student"), saveMySIS);
 
 // Guidance: student SIS records
-router.get("/students", verifyToken, getGuidanceSISList);
-router.get("/students/:id", verifyToken, getGuidanceStudentSIS);
+router.get(
+  "/students",
+  verifyToken,
+  requireRole("guidance", "admin"),
+  getGuidanceSISList,
+);
+router.get(
+  "/students/:id",
+  verifyToken,
+  requireRole("guidance", "admin"),
+  getGuidanceStudentSIS,
+);
 
 module.exports = router;

@@ -1,4 +1,4 @@
-//context\AuthContext.tsx
+// context/AuthContext.tsx
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import api, { clearCachedToken, setCachedToken } from "../utils/api";
@@ -15,6 +15,12 @@ type ProfileData = {
   accessibilityPreferences: Record<string, any>;
 };
 
+type RegisterResult = {
+  message: string;
+  userId: number;
+  role: string;
+};
+
 type AuthContextType = {
   user: User | null;
   token: string | null;
@@ -26,9 +32,8 @@ type AuthContextType = {
     name: string,
     email: string,
     password: string,
-    role: string,
     inviteCode?: string,
-  ) => Promise<void>;
+  ) => Promise<RegisterResult>;
   logout: () => void;
   updateUser: (updatedUser: User) => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -46,9 +51,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
 
-  // Fetches the student's disability profile from the API and updates
-  // both in-memory state and AsyncStorage. Swallows 404 (no profile yet)
-  // as a normal "no preferences set" state rather than an error.
   const fetchProfile = async (): Promise<ProfileData | null> => {
     try {
       const res = await api.get("/api/profile");
@@ -65,14 +67,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         await AsyncStorage.removeItem(PROFILE_STORAGE_KEY);
         return null;
       }
-      // Network hiccup etc. — leave whatever's already in state/storage
-      // alone rather than wiping it out.
       console.error("Failed to fetch profile:", err);
       return profile;
     }
   };
 
-  // Load saved login on app start
   useEffect(() => {
     const loadStoredAuth = async () => {
       try {
@@ -95,8 +94,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setProfileLoading(false);
       }
 
-      // Refresh preferences in the background so a stale cached profile
-      // doesn't stick around after a change made on another device.
       const storedToken = await AsyncStorage.getItem("token");
       if (storedToken) {
         setProfileLoading(true);
@@ -107,20 +104,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     loadStoredAuth();
   }, []);
 
-  // Teacher/Guidance registration needs an invite code (checked by the
-  // server). Students leave inviteCode undefined.
+  // The server decides the role from inviteCode. The app never sends "role".
   const register = async (
     name: string,
     email: string,
     password: string,
-    role: string,
     inviteCode?: string,
-  ) => {
+  ): Promise<RegisterResult> => {
     const res = await api.post("/api/auth/register", {
       name,
       email,
       password,
-      role,
       inviteCode,
     });
     return res.data;
@@ -135,8 +129,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     await AsyncStorage.setItem("token", token);
     await AsyncStorage.setItem("user", JSON.stringify(user));
 
-    // Pull preferences right away so screens don't render a beat behind
-    // with the wrong feature set right after login.
     setProfileLoading(true);
     await fetchProfile();
     setProfileLoading(false);
@@ -153,33 +145,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.error("Failed to clear stored auth:", err);
     } finally {
       clearCachedToken();
-      // Clearing user/token here is all this function needs to do.
-      // RootLayoutNav watches `user` and redirects to index/login
-      // automatically once it flips to null — see _layout.tsx.
       setToken(null);
       setUser(null);
       setProfile(null);
     }
   };
 
-  // Refresh the in-memory + persisted user after a profile edit,
-  // without requiring the user to log in again.
   const updateUser = async (updatedUser: User) => {
     setUser(updatedUser);
     await AsyncStorage.setItem("user", JSON.stringify(updatedUser));
   };
 
-  // Re-fetch preferences from the server. Call this after a screen
-  // outside this context's own save flow might have changed them.
   const refreshProfile = async () => {
     setProfileLoading(true);
     await fetchProfile();
     setProfileLoading(false);
   };
 
-  // Update preferences locally right after a successful save, so callers
-  // (e.g. the profile screen) don't need to trigger a second network
-  // round-trip just to see the new feature set take effect.
   const updateProfileData = async (updated: ProfileData) => {
     setProfile(updated);
     await AsyncStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(updated));

@@ -1,3 +1,4 @@
+// server/controllers/authController.js
 const crypto = require("crypto");
 const db = require("../config/db");
 const bcrypt = require("bcryptjs");
@@ -29,8 +30,13 @@ function getInviteCodeFor(role) {
 }
 
 // REGISTER
+// The app can NOT choose a role. The invite code decides:
+//   no code        -> student
+//   teacher code   -> teacher
+//   guidance code  -> guidance
+//   anything else  -> rejected (403)
 const register = async (req, res) => {
-  const { name, email, password, role, inviteCode } = req.body;
+  const { name, email, password, inviteCode } = req.body;
 
   try {
     if (!name || !name.trim()) {
@@ -45,29 +51,21 @@ const register = async (req, res) => {
         .json({ message: "Password must be at least 8 characters." });
     }
 
-    if (role === "admin") {
-      return res
-        .status(403)
-        .json({ message: "This role cannot be self-registered." });
-    }
+    let finalRole = "student";
+    const code = String(inviteCode || "").trim();
 
-    // Anything that is not an explicit teacher/guidance request is a student.
-    const requestedRole =
-      role === "teacher" || role === "guidance" ? role : "student";
+    if (code) {
+      const teacherCode = getInviteCodeFor("teacher");
+      const guidanceCode = getInviteCodeFor("guidance");
 
-    if (requestedRole !== "student") {
-      const expected = getInviteCodeFor(requestedRole);
-
-      if (!expected) {
-        return res.status(403).json({
-          message:
-            "Invite codes are not configured on the server. Check server/.env and restart.",
-        });
-      }
-      if (!safeEqual(inviteCode, expected)) {
-        return res.status(403).json({
-          message: "A valid invite code is required for this role.",
-        });
+      if (teacherCode && safeEqual(code, teacherCode)) {
+        finalRole = "teacher";
+      } else if (guidanceCode && safeEqual(code, guidanceCode)) {
+        finalRole = "guidance";
+      } else {
+        return res
+          .status(403)
+          .json({ message: "Invalid staff registration code." });
       }
     }
 
@@ -84,12 +82,13 @@ const register = async (req, res) => {
 
     const [result] = await db.query(
       "INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)",
-      [name.trim(), cleanEmail, hashedPassword, requestedRole],
+      [name.trim(), cleanEmail, hashedPassword, finalRole],
     );
 
     res.status(201).json({
       message: "User registered successfully ✅",
       userId: result.insertId,
+      role: finalRole,
     });
   } catch (err) {
     console.error("Register error:", err);
@@ -100,22 +99,30 @@ const register = async (req, res) => {
 };
 
 // LOGIN
+// One generic message for wrong email OR wrong password, so an attacker
+// can't find out which emails exist.
 const login = async (req, res) => {
   const { email, password } = req.body;
 
   try {
+    if (!email || !password) {
+      return res
+        .status(400)
+        .json({ message: "Email and password are required." });
+    }
+
     const [rows] = await db.query("SELECT * FROM users WHERE email = ?", [
-      email,
+      String(email).trim(),
     ]);
     if (rows.length === 0) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(401).json({ message: "Incorrect email or password." });
     }
 
     const user = rows[0];
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(401).json({ message: "Invalid password" });
+      return res.status(401).json({ message: "Incorrect email or password." });
     }
 
     const secret = process.env.JWT_SECRET;

@@ -20,20 +20,13 @@ import { useTheme } from "../../context/ThemeContext";
  * Presentational drawer content shared across Student, Teacher, and
  * Guidance Counselor roles. This component does NOT perform navigation
  * itself — it reports a logical route key via onNavigate, so the
- * actual Drawer navigator (Phase 7) can resolve real Expo Router paths
- * without this component needing to know them.
- *
- * Which items are visible can be trimmed by the parent through
- * `hiddenKeys` (for example, hiding "joinSession" for students who do not
- * use live captions). The Sidebar itself stays free of that logic.
+ * actual Drawer navigator resolves real Expo Router paths without
+ * this component needing to know them.
  *
  * Exception: Logout. Logging out needs to clear the navigation stack
  * (not just swap the current screen), so any screens visited during
  * the ended session — e.g. /tts, /session/[id] — can't resurface via
- * the back button after the next login. That's handled directly here
- * via router.dismissTo("/") rather than being routed through
- * onNavigate, since it's a cross-cutting concern rather than a normal
- * dashboard nav item.
+ * the back button after the next login.
  */
 
 export type UserRole = "student" | "teacher" | "guidance";
@@ -49,6 +42,7 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { key: "dashboard", label: "Dashboard", icon: "home-outline" },
     { key: "mySessions", label: "My Classes", icon: "albums-outline" },
     { key: "joinSession", label: "Join Class", icon: "enter-outline" },
+    { key: "checkins", label: "Check-ins", icon: "chatbubbles-outline" },
     { key: "guidance", label: "Guidance", icon: "heart-outline" },
     {
       key: "reportIssue",
@@ -81,9 +75,9 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
       icon: "add-circle-outline",
     },
     { key: "mySessions", label: "My Classes", icon: "albums-outline" },
+    { key: "checkins", label: "Check-ins", icon: "chatbubbles-outline" },
     { key: "referrals", label: "Guidance Referrals", icon: "school-outline" },
     { key: "profile", label: "Profile", icon: "person-outline" },
-    { key: "settings", label: "Settings", icon: "settings-outline" },
   ],
   guidance: [
     { key: "dashboard", label: "Dashboard", icon: "home-outline" },
@@ -150,14 +144,12 @@ export default function Sidebar({
   const displayName = user?.name ?? "Guest User";
   const initial = displayName.charAt(0).toUpperCase();
 
-  // Clears the auth state AND resets the native navigation stack back
-  // to the root. Without the dismiss, any screens visited this
-  // session (e.g. /tts) stay parked in history and can reappear via
-  // the back button after the next login, regardless of role.
   const handleLogout = async () => {
-    await logout();
-    router.dismissTo("/");
-  };
+  // Read the role BEFORE logout clears the user
+  const wasStaff = role === "teacher" || role === "guidance";
+  await logout();
+  router.dismissTo((wasStaff ? "/staff-login" : "/") as any);
+};
 
   return (
     <SafeAreaView

@@ -1,8 +1,8 @@
-//app\_layout.tsx
+// app/_layout.tsx
 import { useFonts } from "expo-font";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import Toast from "react-native-toast-message";
 
@@ -10,25 +10,19 @@ import { createToastConfig } from "../components/common/ToastConfig";
 import { AuthProvider, useAuth } from "../context/AuthContext";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
 
-// All screens reachable without being logged in.
-// "support-needs" is public because new students pick their needs BEFORE
-// creating an account (it is also reused after login for accounts that
-// somehow have no saved needs yet).
 const PUBLIC_ROUTES = [
   "index",
   "role-select",
   "login",
   "register",
   "support-needs",
+  "staff-login",
+  "staff-register",
 ];
 
-// Entry screens only — if a user is already authenticated and lands
-// here (e.g. app reopened with a stored token), we redirect them
-// straight to their dashboard. login/register are deliberately
-// excluded: they already do their own post-action navigation
-// (including the /accessibility first-time-profile case), so this
-// effect must not race against that.
 const ENTRY_ROUTES = ["index", "role-select"];
+
+const STAFF_ROLES = ["teacher", "guidance"];
 
 const ROLE_HOME: Record<string, string> = {
   student: "/student",
@@ -42,6 +36,9 @@ function RootLayoutNav() {
   const router = useRouter();
   const segments = useSegments();
 
+  // Role of the last signed-in user, so we know who just logged out.
+  const lastRoleRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (loading) return;
 
@@ -50,17 +47,19 @@ function RootLayoutNav() {
     const inEntryRoute = ENTRY_ROUTES.includes(currentRoute);
 
     if (!user && !inPublicRoute) {
-      // Not logged in, trying to view a protected dashboard/screen.
-      router.replace("/");
+      // Signed out from a protected screen:
+      // teacher/guidance -> Staff Portal, everyone else -> landing page.
+      const wasStaff =
+        lastRoleRef.current !== null &&
+        STAFF_ROLES.includes(lastRoleRef.current);
+      router.replace((wasStaff ? "/staff-login" : "/") as any);
     } else if (user && inEntryRoute) {
-      // Already logged in but sitting on Get Started / role-select
-      // (e.g. app reopened with a stored session) — skip straight
-      // to their dashboard.
       const home = ROLE_HOME[user.role] ?? "/";
       router.replace(home as any);
     }
-    // Note: user is on "login" or "register" — do nothing here.
-    // Those screens navigate themselves after a successful action.
+
+    // Remember who is signed in (null once signed out).
+    lastRoleRef.current = user?.role ?? null;
   }, [user, loading, segments]);
 
   if (loading) {
