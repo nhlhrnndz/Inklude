@@ -18,21 +18,19 @@ async function recordTap(sessionId, userId) {
   );
 }
 
-// Students who joined the classroom but never tapped "I'm here" during
-// THIS specific live run.
+// Students who joined this classroom session.
+// Presence is now recorded automatically when a student joins or the
+// teacher goes live, so the old "never tapped I'm here" rule would always
+// return nobody. The teacher can check in with anyone who joined.
 async function getQuietStudentsForLiveRun(sessionId, liveRunId) {
   const [rows] = await pool.query(
-    `SELECT u.id, u.name, u.email
+    `SELECT DISTINCT u.id, u.name, u.email
      FROM participants p
      JOIN users u ON u.id = p.user_id
      WHERE p.session_id = ?
        AND u.role = 'student'
-       AND NOT EXISTS (
-         SELECT 1 FROM presence_taps t
-         WHERE t.live_run_id = ? AND t.user_id = p.user_id
-       )
      ORDER BY u.name ASC`,
-    [sessionId, liveRunId],
+    [sessionId],
   );
   return rows;
 }

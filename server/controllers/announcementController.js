@@ -9,15 +9,12 @@ const TITLE_MAX = 150;
 const BODY_MAX = 2000;
 const DEADLINE_RE = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})(?::(\d{2}))?$/;
 
-// Same rule as sessionController: class members can open a session;
-// sessions without a class fall back to "joined the session".
+// Legacy sessions with no class fall back to "joined the session".
 async function studentCanAccess(session, userId) {
   if (session.class_id) return isClassMember(session.class_id, userId);
   return isParticipant(session.id, userId);
 }
 
-// "YYYY-MM-DD HH:MM[:SS]" -> normalized string, or null when empty.
-// Throws on a bad format.
 function parseDeadline(value) {
   if (value === undefined || value === null || value === "") return null;
   const m = String(value).trim().match(DEADLINE_RE);
@@ -25,7 +22,6 @@ function parseDeadline(value) {
   return `${m[1]} ${m[2]}:${m[3] || "00"}`;
 }
 
-// Array of trimmed, unique, non-empty strings (bounded).
 function cleanList(value, maxItems, maxLen) {
   if (!Array.isArray(value)) return [];
   const out = value
@@ -46,8 +42,11 @@ function fmtWhen(dt) {
 function toDto(a) {
   return {
     id: a.id,
-    audience: a.audience,
+    // Class announcements are stored with audience "session"; report "class".
+    audience: a.class_id ? "class" : a.audience,
     audienceLabel: a.audience_label ?? null,
+    classId: a.class_id ?? null,
+    classTitle: a.class_title ?? null,
     sessionId: a.session_id,
     sessionTitle: a.session_title ?? null,
     title: a.title,
@@ -58,17 +57,14 @@ function toDto(a) {
 }
 
 // POST /api/announcements
-// Teacher:  { sessionId, title, body, deadline? }
-//             -> students in that session's class
-// Guidance: { title, body, deadline? }
-//             -> all students
-//           { audience: "college", colleges: ["CICS"], courses: [...], title, body }
-//             -> students whose course is in `courses`
-// deadline: "YYYY-MM-DD HH:MM". When set, it appears on each recipient's calendar.
+// Teacher:  { classId, title, body, deadline? }  -> students in that class
+//           (legacy: { sessionId, ... } is resolved to its class)
+// Guidance: { title, body, deadline? }           -> all students
+//           { audience: "college", colleges, courses, title, body }
 async function postAnnouncement(req, res) {
   try {
     const { id: userId, role } = req.user;
-    const { title, body, sessionId } = req.body;
+    const { title, body, classId, sessionId } = req.body;
 
     if (role !== "teacher" && role !== "guidance") {
       return res.status(403).json({
@@ -118,41 +114,62 @@ async function postAnnouncement(req, res) {
 
     let audience;
     let audienceLabel = null;
+    let resolvedClassId = null;
     let resolvedSessionId = null;
     let recipientIds;
     let notifTitle;
     let subjectLabel = "Guidance";
-    // Where tapping the notification should go.
     let target = { sourceType: "announcement", sourceId: null };
 
     if (role === "teacher") {
-      if (!sessionId) {
+      let cls = null;
+      let session = null;
+
+      if (classId) {
+        cls = await announcementModel.getClassById(classId);
+        if (!cls) {
+          return res.status(404).json({ message: "Class not found." });
+        }
+        if (cls.teacher_id !== userId) {
+          return res
+            .status(403)
+            .json({ message: "You can only post to your own classes." });
+        }
+      } else if (sessionId) {
+        session = await getSessionById(sessionId);
+        if (!session) {
+          return res.status(404).json({ message: "Session not found." });
+        }
+        if (session.teacher_id !== userId) {
+          return res
+            .status(403)
+            .json({ message: "You can only post to your own sessions." });
+        }
+        if (session.class_id) {
+          cls = await announcementModel.getClassById(session.class_id);
+        }
+      } else {
         return res
           .status(400)
-          .json({ message: "Please select a session for this announcement." });
-      }
-
-      const session = await getSessionById(sessionId);
-      if (!session) {
-        return res.status(404).json({ message: "Session not found." });
-      }
-      if (session.teacher_id !== userId) {
-        return res
-          .status(403)
-          .json({ message: "You can only post to your own sessions." });
+          .json({ message: "Please choose a class for this announcement." });
       }
 
       audience = "session";
-      resolvedSessionId = session.id;
-      recipientIds = await announcementModel.getSessionStudentIds(session.id);
-      notifTitle = `${session.title}: ${cleanTitle}`.slice(0, TITLE_MAX);
-      subjectLabel = session.class_title || session.title;
 
-      // Class announcement -> opens the class. Old sessions with no class
-      // open the session instead.
-      target = session.class_id
-        ? { sourceType: "class", sourceId: session.class_id }
-        : { sourceType: "session", sourceId: session.id };
+      if (cls) {
+        resolvedClassId = cls.id;
+        recipientIds = await announcementModel.getClassStudentIds(cls.id);
+        notifTitle = `${cls.title}: ${cleanTitle}`.slice(0, TITLE_MAX);
+        subjectLabel = cls.title;
+        target = { sourceType: "class", sourceId: cls.id };
+      } else {
+        // Legacy session with no class
+        resolvedSessionId = session.id;
+        recipientIds = await announcementModel.getSessionStudentIds(session.id);
+        notifTitle = `${session.title}: ${cleanTitle}`.slice(0, TITLE_MAX);
+        subjectLabel = session.title;
+        target = { sourceType: "session", sourceId: session.id };
+      }
     } else if (req.body.audience === "college") {
       const colleges = cleanList(req.body.colleges, 20, 30);
       const courses = cleanList(req.body.courses, 300, 150);
@@ -177,14 +194,13 @@ async function postAnnouncement(req, res) {
       authorId: userId,
       audience,
       audienceLabel,
+      classId: resolvedClassId,
       sessionId: resolvedSessionId,
       title: cleanTitle,
       body: cleanBody,
       deadline,
     });
 
-    // Guidance announcements have no screen of their own, so they keep
-    // pointing at the announcement (the notification expands to show it).
     if (target.sourceType === "announcement") {
       target.sourceId = announcement.id;
     }
@@ -200,8 +216,6 @@ async function postAnnouncement(req, res) {
       senderId: userId,
     });
 
-    // Put the deadline on every recipient's calendar. A failure here must
-    // not undo the announcement itself.
     if (deadline) {
       try {
         await addAnnouncementDeadline(announcement.id, recipientIds, {
@@ -247,9 +261,38 @@ async function getMyAnnouncements(req, res) {
   }
 }
 
-// GET /api/announcements/session/:sessionId
-// Classroom detail screen — announcements posted to this specific session.
-// Teacher (owner), guidance (any), or a student who joined can read.
+// GET /api/announcements/class/:classId
+// Teacher (owner), guidance (any), or a current class member.
+async function getClassAnnouncements(req, res) {
+  try {
+    const { id: userId, role } = req.user;
+    const classId = Number(req.params.classId);
+
+    const cls = await announcementModel.getClassById(classId);
+    if (!cls) {
+      return res.status(404).json({ message: "Class not found." });
+    }
+
+    if (role === "teacher" && cls.teacher_id !== userId) {
+      return res.status(403).json({ message: "Access denied." });
+    }
+    if (role === "student" && !(await isClassMember(classId, userId))) {
+      return res
+        .status(403)
+        .json({ message: "You are not a member of this class." });
+    }
+
+    const rows = await announcementModel.getAnnouncementsByClass(classId);
+    res.json({ announcements: rows.map(toDto) });
+  } catch (err) {
+    console.error("getClassAnnouncements error:", err);
+    res
+      .status(500)
+      .json({ message: "Server error while fetching announcements." });
+  }
+}
+
+// GET /api/announcements/session/:sessionId  (legacy)
 async function getSessionAnnouncements(req, res) {
   try {
     const { id: userId, role } = req.user;
@@ -272,7 +315,10 @@ async function getSessionAnnouncements(req, res) {
       }
     }
 
-    const rows = await announcementModel.getAnnouncementsBySession(sessionId);
+    // Sessions that belong to a class show the class's announcements.
+    const rows = session.class_id
+      ? await announcementModel.getAnnouncementsByClass(session.class_id)
+      : await announcementModel.getAnnouncementsBySession(sessionId);
     res.json({ announcements: rows.map(toDto) });
   } catch (err) {
     console.error("getSessionAnnouncements error:", err);
@@ -285,5 +331,6 @@ async function getSessionAnnouncements(req, res) {
 module.exports = {
   postAnnouncement,
   getMyAnnouncements,
+  getClassAnnouncements,
   getSessionAnnouncements,
 };

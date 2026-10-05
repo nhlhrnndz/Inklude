@@ -271,6 +271,11 @@ export const getSessionAnnouncements = async (sessionId: number) => {
   return response.data;
 };
 
+export async function getClassAnnouncements(classId: number) {
+  const res = await api.get(`/api/announcements/class/${classId}`);
+  return res.data;
+}
+
 // =========================
 // Basic Information (mandatory onboarding step)
 // =========================
@@ -494,6 +499,14 @@ export const replyToThread = async (
 // Classes (Phase 4 Week 3)
 // =========================
 
+export interface ClassSchedule {
+  days: number[]; // 0 = Sunday ... 6 = Saturday
+  startTime: string; // "HH:MM" 24-hour
+  endTime: string;
+  startDate: string; // "YYYY-MM-DD"
+  endDate: string;
+}
+
 export interface ClassSummary {
   id: number;
   code: string;
@@ -505,8 +518,10 @@ export interface ClassSummary {
   memberCount: number;
   sessionCount: number;
   isLive: boolean;
+  liveSessionId: number | null;
   accommodationCount: number;
   isOwner?: boolean;
+  schedule: ClassSchedule | null;
 }
 
 export interface ClassSession {
@@ -530,9 +545,27 @@ export interface ClassMember {
   joinedAt: string;
 }
 
-export const createClass = async (title: string, description?: string) => {
-  const response = await api.post("/api/classes", { title, description });
-  return response.data as { message: string; class: ClassSummary };
+export const createClass = async (
+  title: string,
+  description?: string,
+  schedule?: ClassSchedule,
+) => {
+  const response = await api.post("/api/classes", {
+    title,
+    description,
+    schedule,
+  });
+  return response.data as {
+    message: string;
+    class: ClassSummary;
+    sessionCount: number;
+  };
+};
+
+// Teacher: today's session for this class (created on the spot if needed)
+export const openClassSession = async (classId: number) => {
+  const response = await api.post(`/api/classes/${classId}/open-session`);
+  return response.data as { sessionId: number };
 };
 
 export const getMyClasses = async () => {

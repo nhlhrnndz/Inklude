@@ -6,6 +6,7 @@ IncluEd
 ├─ AGENTS.md
 ├─ app
 │  ├─ (app)
+│  │  ├─ accessibility-map.tsx
 │  │  ├─ accessibility.tsx
 │  │  ├─ announcements.tsx
 │  │  ├─ basic-info.tsx
@@ -16,12 +17,15 @@ IncluEd
 │  │  ├─ display-name.tsx
 │  │  ├─ documents.tsx
 │  │  ├─ edit-profile.tsx
+│  │  ├─ events.tsx
 │  │  ├─ explore.tsx
 │  │  ├─ guidance
+│  │  │  ├─ accessibility-reports.tsx
 │  │  │  ├─ appointments.tsx
 │  │  │  ├─ message
 │  │  │  │  └─ [id].tsx
 │  │  │  ├─ messages.tsx
+│  │  │  ├─ reports.tsx
 │  │  │  ├─ student
 │  │  │  │  └─ [id].tsx
 │  │  │  └─ students.tsx
@@ -30,11 +34,13 @@ IncluEd
 │  │  ├─ join.tsx
 │  │  ├─ messages.tsx
 │  │  ├─ my-classes.tsx
+│  │  ├─ my-reports.tsx
 │  │  ├─ my-sessions.tsx
 │  │  ├─ notifications.tsx
 │  │  ├─ profile.tsx
 │  │  ├─ quick-talk.tsx
 │  │  ├─ referrals.tsx
+│  │  ├─ report-issue.tsx
 │  │  ├─ schedule.tsx
 │  │  ├─ settings.tsx
 │  │  ├─ sis.tsx
@@ -71,6 +77,7 @@ IncluEd
 │  │  ├─ AtkinsonHyperlegible-Italic.ttf
 │  │  └─ AtkinsonHyperlegible-Regular.ttf
 │  └─ images
+│     ├─ campus-map.jpg
 │     ├─ favicon.png
 │     ├─ icon.png
 │     ├─ partial-react-logo.png
@@ -174,12 +181,16 @@ IncluEd
 │  │  ├─ classController.js
 │  │  ├─ classPulseController.js
 │  │  ├─ documentController.js
+│  │  ├─ eventController.js
 │  │  ├─ followupController.js
 │  │  ├─ guidanceController.js
+│  │  ├─ guidanceReportController.js
+│  │  ├─ mapController.js
 │  │  ├─ messageController.js
 │  │  ├─ notificationController.js
 │  │  ├─ profileController.js
 │  │  ├─ referralController.js
+│  │  ├─ reportController.js
 │  │  ├─ scheduleController.js
 │  │  ├─ sensoryController.js
 │  │  ├─ sessionController.js
@@ -191,6 +202,7 @@ IncluEd
 │  │  └─ authMiddleware.js
 │  ├─ models
 │  │  ├─ accessibilityProfileModel.js
+│  │  ├─ accessibilityReportModel.js
 │  │  ├─ accommodationModel.js
 │  │  ├─ announcementModel.js
 │  │  ├─ appointmentModel.js
@@ -198,6 +210,7 @@ IncluEd
 │  │  ├─ belongingModel.js
 │  │  ├─ belongingOverviewModel.js
 │  │  ├─ breakModel.js
+│  │  ├─ campusEventModel.js
 │  │  ├─ Checkin.js
 │  │  ├─ classModel.js
 │  │  ├─ classPostModel.js
@@ -205,8 +218,11 @@ IncluEd
 │  │  ├─ Document.js
 │  │  ├─ followupModel.js
 │  │  ├─ guidanceModel.js
+│  │  ├─ guidanceReportModel.js
+│  │  ├─ mapModel.js
 │  │  ├─ messageModel.js
 │  │  ├─ MotorSettings.js
+│  │  ├─ needsHelpModel.js
 │  │  ├─ notificationModel.js
 │  │  ├─ PeerShare.js
 │  │  ├─ PresenceTap.js
@@ -231,11 +247,14 @@ IncluEd
 │  │  ├─ classPulseRoutes.js
 │  │  ├─ classRoutes.js
 │  │  ├─ documentRoutes.js
+│  │  ├─ events.js
 │  │  ├─ guidance.js
+│  │  ├─ map.js
 │  │  ├─ message.js
 │  │  ├─ notification.js
 │  │  ├─ profile.js
 │  │  ├─ referrals.js
+│  │  ├─ reports.js
 │  │  ├─ scheduleRoutes.js
 │  │  ├─ sensoryRoutes.js
 │  │  ├─ session.js
@@ -250,6 +269,25 @@ IncluEd
 │  ├─ sockets
 │  │  ├─ captionSocket.js
 │  │  └─ notificationSocket.js
+│  ├─ uploads
+│  │  ├─ map
+│  │  │  ├─ 1791121198410-aca2b003fe45a73c.jpg
+│  │  │  ├─ 1791121499074-02b5e668c7ab80ed.jpg
+│  │  │  ├─ 1791184301731-be4601fdf7e2a45e.jpg
+│  │  │  ├─ 1791184506364-56a0640c3cbc46d1.jpg
+│  │  │  ├─ 1791184797130-3e3b254604a18f4f.jpg
+│  │  │  ├─ 1791185052530-daab111b931d57ca.jpg
+│  │  │  ├─ 1791185174155-0f26a29a1f4d7c72.jpg
+│  │  │  ├─ 1791185329504-fc158bbfe3b2511b.jpg
+│  │  │  ├─ 1791185424857-d9ab98a17c006cf4.jpg
+│  │  │  ├─ 1791185541601-3748771b076388ca.jpg
+│  │  │  ├─ 1791185652472-2e6f1984bd4b6111.jpg
+│  │  │  ├─ 1791185717611-e09178a93f76ce90.jpg
+│  │  │  ├─ 1791185786391-2bec470d19d1463a.jpg
+│  │  │  ├─ 1791185854349-1ce5bbf6651fcb3b.jpg
+│  │  │  └─ 1791186050744-c85086f26c0c5f0b.jpg
+│  │  └─ reports
+│  │     └─ 1791097800961-73e6932e4b924c42.jpg
 │  └─ utils
 │     ├─ generateSessionReport.js
 │     └─ ioRegistry.js
@@ -263,11 +301,17 @@ IncluEd
 │  ├─ accessibilityApi.ts
 │  ├─ api.ts
 │  ├─ belongingApi.ts
+│  ├─ campusApi.ts
 │  ├─ checkinApi.ts
+│  ├─ classSchedule.ts
 │  ├─ crossAlert.ts
 │  ├─ documentApi.ts
+│  ├─ guidanceDashboardApi.ts
+│  ├─ guidanceReportApi.ts
 │  ├─ liveApi.ts
 │  ├─ notificationRouter.ts
+│  ├─ reportApi.ts
+│  ├─ reportPdf.ts
 │  ├─ scheduleApi.ts
 │  ├─ sensoryApi.ts
 │  ├─ socket.ts

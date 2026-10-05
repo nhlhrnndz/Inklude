@@ -4,6 +4,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { useTheme } from "../context/ThemeContext";
 import type { ClassSummary } from "../utils/api";
+import { formatMeetingSchedule } from "../utils/classSchedule";
 
 interface Props {
   cls: ClassSummary;
@@ -87,6 +88,20 @@ export default function ClassCard({ cls, onPress, showAccommodations }: Props) {
           }}
         >
           {cls.teacherName}
+        </Text>
+      ) : null}
+
+      {cls.schedule ? (
+        <Text
+          style={{
+            fontFamily: typography.caption.fontFamily,
+            fontSize: typography.caption.fontSize,
+            fontWeight: "600",
+            color: colors.primary,
+            marginTop: 2,
+          }}
+        >
+          {formatMeetingSchedule(cls.schedule)}
         </Text>
       ) : null}
 

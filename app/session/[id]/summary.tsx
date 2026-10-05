@@ -29,7 +29,7 @@ import {
 } from "../../../utils/checkinApi";
 
 const TEMPLATES = [
-  "Hey, noticed you were quiet today. Everything okay?",
+  "Hi, just checking in. How are you doing in class?",
   "Just checking in — let me know if you need anything.",
   "Great to see you in class today.",
 ];
@@ -291,8 +291,8 @@ export default function SessionSummaryScreen() {
               }}
             >
               {pulse.responded} response{pulse.responded === 1 ? "" : "s"} so
-              far. The breakdown appears once at least 5 students answer, to
-              keep answers anonymous.
+              far. The breakdown appears once enough students answer, to keep
+              answers anonymous.
             </Text>
           ) : (
             <View style={styles.pulseRow}>
@@ -348,10 +348,8 @@ export default function SessionSummaryScreen() {
               accessibilityRole="header"
             >
               {quiet.length === 0
-                ? "Everyone joined in today"
-                : `${quiet.length} student${
-                    quiet.length === 1 ? " was" : "s were"
-                  } quiet today`}
+                ? "No students joined this session"
+                : `Students who joined (${quiet.length})`}
             </Text>
 
             {quiet.length === 0 ? (
@@ -362,7 +360,8 @@ export default function SessionSummaryScreen() {
                   color: colors.textSecondary,
                 }}
               >
-                Everyone who joined tapped "I'm here" at least once.
+                Students who join the live session will show up here, and you
+                can send each one a check-in.
               </Text>
             ) : (
               quiet.map((s) => (

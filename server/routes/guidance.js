@@ -1,4 +1,4 @@
-//guidance.js
+// server/routes/guidance.js
 const express = require("express");
 const router = express.Router();
 const { verifyToken } = require("../middleware/authMiddleware");
@@ -20,6 +20,9 @@ const {
 const {
   getBelongingOverviewController,
 } = require("../controllers/belongingOverviewController");
+const {
+  getAccessibilityReportController,
+} = require("../controllers/guidanceReportController");
 
 router.get("/dashboard", verifyToken, getDashboardSummaryController);
 
@@ -37,6 +40,13 @@ router.patch(
   "/followups/:id/complete",
   verifyToken,
   completeFollowupController,
+);
+
+// Guidance reports (exportable)
+router.get(
+  "/reports/accessibility",
+  verifyToken,
+  getAccessibilityReportController,
 );
 
 // Old Belonging / reach-out routes: kept until Phase F cleanup

@@ -160,6 +160,13 @@ export default function SettingsScreen() {
         {sectionTitle("Account")}
         <View style={[styles.card, card]}>
           <SettingsRow
+            icon="person-circle-outline"
+            title="My Profile"
+            description="Your account and information."
+            onPress={() => router.push("/profile" as any)}
+          />
+          <View style={{ height: 1, backgroundColor: colors.divider }} />
+          <SettingsRow
             icon="person-outline"
             title="Edit Profile"
             description="Update your name and email."
@@ -200,16 +207,9 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
-  card: {
-    borderWidth: 1,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
+  safeArea: { flex: 1 },
+  card: { borderWidth: 1 },
+  row: { flexDirection: "row", alignItems: "center" },
   backButton: {
     flexDirection: "row",
     alignItems: "center",

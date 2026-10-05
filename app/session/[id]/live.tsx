@@ -41,6 +41,7 @@ interface Session {
   title: string;
   status: "active" | "ended";
   isLive: boolean;
+  classId: number | null;
   participants: { id: number }[];
 }
 
@@ -169,6 +170,12 @@ export default function LiveCaptioningScreen() {
   }, [sessionEnded, classroomDisabled, wantsVoicePrompts]);
 
   const goBackToClassroom = () => {
+    // Sessions belong to a class: always return to the class page, even if
+    // the user arrived from a notification and there's nothing to go back to.
+    if (session?.classId) {
+      router.replace(`/class/${session.classId}` as any);
+      return;
+    }
     if (router.canGoBack()) {
       router.back();
       return;

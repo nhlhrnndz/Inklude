@@ -1,5 +1,7 @@
+//documentController.js
 const pool = require("../config/db");
 const { getSessionById } = require("../models/sessionModel");
+const { getClassById, getMaterialsSession } = require("../models/classModel");
 const {
   createDocument,
   getDocumentById,
@@ -27,11 +29,19 @@ function toMetaDto(row) {
   };
 }
 
-// Teacher: must own the classroom. Student: must have joined it.
+// Teacher: must own the classroom. Student: must be in its class
+// (or, for a session with no class, have joined it).
 async function canAccessSession(user, session) {
   if (!session) return false;
   if (user.role === "teacher") return session.teacher_id === user.id;
   if (user.role === "student") {
+    if (session.class_id) {
+      const [rows] = await pool.query(
+        "SELECT 1 FROM class_members WHERE class_id = ? AND user_id = ? AND left_at IS NULL LIMIT 1",
+        [session.class_id, user.id],
+      );
+      return rows.length > 0;
+    }
     const [rows] = await pool.query(
       "SELECT 1 FROM participants WHERE session_id = ? AND user_id = ? LIMIT 1",
       [session.id, user.id],
@@ -50,7 +60,7 @@ function fixFilename(name) {
   }
 }
 
-// POST /api/documents  (multipart: sessionId, file)
+// POST /api/documents  (multipart: sessionId OR classId, file)
 async function uploadDocument(req, res) {
   try {
     if (req.user.role !== "teacher") {
@@ -59,12 +69,30 @@ async function uploadDocument(req, res) {
         .json({ message: "Only teachers can upload documents." });
     }
 
-    const sessionId = Number(req.body?.sessionId);
-    if (!sessionId) {
-      return res.status(400).json({ message: "A classroom is required." });
-    }
     if (!req.file) {
       return res.status(400).json({ message: "No file provided." });
+    }
+
+    let sessionId = Number(req.body?.sessionId);
+    const classId = Number(req.body?.classId);
+
+    // Class-level upload: store it against the class's materials session.
+    if (!sessionId && classId) {
+      const cls = await getClassById(classId);
+      if (!cls) return res.status(404).json({ message: "Class not found." });
+      if (cls.teacher_id !== req.user.id) {
+        return res
+          .status(403)
+          .json({ message: "You can only upload to your own classes." });
+      }
+      if (cls.status !== "active") {
+        return res.status(400).json({ message: "This class is archived." });
+      }
+      sessionId = await getMaterialsSession(cls);
+    }
+
+    if (!sessionId) {
+      return res.status(400).json({ message: "A class is required." });
     }
 
     const session = await getSessionById(sessionId);
@@ -110,16 +138,21 @@ async function uploadDocument(req, res) {
     // Tell every student who joined this classroom. Never fail the upload
     // just because a notification could not be sent.
     try {
-      const [rows] = await pool.query(
-        "SELECT user_id FROM participants WHERE session_id = ?",
-        [sessionId],
-      );
+      const [rows] = session.class_id
+        ? await pool.query(
+            "SELECT user_id FROM class_members WHERE class_id = ? AND left_at IS NULL",
+            [session.class_id],
+          )
+        : await pool.query(
+            "SELECT user_id FROM participants WHERE session_id = ?",
+            [sessionId],
+          );
       await notifyUsers(
         rows.map((r) => r.user_id),
         {
           type: "document_uploaded",
           title: `New handout: ${filename}`.slice(0, 150),
-          body: `From "${session.title}". Open Documents to listen.`,
+          body: `From "${session.class_title || session.title}". Open Documents to listen.`,
           sourceType: "document",
           sourceId: doc.id,
           senderId: req.user.id,

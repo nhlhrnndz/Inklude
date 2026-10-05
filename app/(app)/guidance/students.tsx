@@ -28,6 +28,7 @@ type Student = {
   course?: string | null;
   yearLevel?: string | null;
   section?: string | null;
+  flags?: { needsHelp: boolean };
 };
 
 type CollegeBucket = {
@@ -154,14 +155,18 @@ export default function GuidanceStudentsScreen() {
 
     const term = search.trim().toLowerCase();
 
-    if (!term) {
-      return base;
-    }
+    const filtered = !term
+      ? base
+      : base.filter(
+          (s) =>
+            s.name.toLowerCase().includes(term) ||
+            s.email.toLowerCase().includes(term),
+        );
 
-    return base.filter(
-      (s) =>
-        s.name.toLowerCase().includes(term) ||
-        s.email.toLowerCase().includes(term),
+    // Students who told a teacher they need help go first. The sort is
+    // stable, so everyone else keeps the server's course / name order.
+    return [...filtered].sort(
+      (a, b) => Number(!!b.flags?.needsHelp) - Number(!!a.flags?.needsHelp),
     );
   }, [studentsInSelectedCollege, selectedYear, search]);
 
@@ -287,81 +292,123 @@ export default function GuidanceStudentsScreen() {
     </TouchableOpacity>
   );
 
-  const renderStudentRow = ({ item }: { item: Student }) => (
-    <TouchableOpacity
-      onPress={() => router.push(`/guidance/student/${item.id}`)}
-      activeOpacity={0.8}
-      accessibilityRole="button"
-      accessibilityLabel={`${item.name}, ${item.email}`}
-      style={[
-        styles.studentRow,
-        {
-          backgroundColor: colors.surface,
-          borderColor: colors.border,
-          borderRadius: radius.md,
-          padding: spacing.md,
-          marginBottom: spacing.sm,
-        },
-      ]}
-    >
-      <View
+  const renderStudentRow = ({ item }: { item: Student }) => {
+    const needsHelp = !!item.flags?.needsHelp;
+
+    return (
+      <TouchableOpacity
+        onPress={() => router.push(`/guidance/student/${item.id}`)}
+        activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel={`${item.name}, ${item.email}${
+          needsHelp ? ", needs help" : ""
+        }`}
         style={[
-          styles.avatar,
+          styles.studentRow,
           {
-            borderRadius: radius.round,
-            backgroundColor: colors.primary,
-            marginRight: spacing.sm + 2,
+            backgroundColor: colors.surface,
+            borderColor: needsHelp ? colors.warning : colors.border,
+            borderRadius: radius.md,
+            padding: spacing.md,
+            marginBottom: spacing.sm,
           },
         ]}
       >
-        <Text style={{ color: "#FFFFFF", fontWeight: "700" }}>
-          {item.name.charAt(0).toUpperCase()}
-        </Text>
-      </View>
-
-      <View style={{ flex: 1 }}>
-        <Text
-          style={{
-            fontFamily: typography.body.fontFamily,
-            fontSize: typography.body.fontSize,
-            fontWeight: "700",
-            color: colors.text,
-          }}
+        <View
+          style={[
+            styles.avatar,
+            {
+              borderRadius: radius.round,
+              backgroundColor: colors.primary,
+              marginRight: spacing.sm + 2,
+            },
+          ]}
         >
-          {item.name}
-        </Text>
+          <Text style={{ color: "#FFFFFF", fontWeight: "700" }}>
+            {item.name.charAt(0).toUpperCase()}
+          </Text>
+        </View>
 
-        <Text
-          style={{
-            fontFamily: typography.caption.fontFamily,
-            fontSize: typography.caption.fontSize,
-            color: colors.textSecondary,
-            marginTop: 1,
-          }}
-          numberOfLines={1}
-        >
-          {item.email}
-        </Text>
+        <View style={{ flex: 1 }}>
+          <Text
+            style={{
+              fontFamily: typography.body.fontFamily,
+              fontSize: typography.body.fontSize,
+              fontWeight: "700",
+              color: colors.text,
+            }}
+          >
+            {item.name}
+          </Text>
 
-        {!!item.course && (
           <Text
             style={{
               fontFamily: typography.caption.fontFamily,
-              fontSize: typography.caption.fontSize - 1,
-              color: colors.placeholder,
+              fontSize: typography.caption.fontSize,
+              color: colors.textSecondary,
               marginTop: 1,
             }}
             numberOfLines={1}
           >
-            {item.course}
-            {item.section ? ` • Section ${item.section}` : ""}
+            {item.email}
           </Text>
-        )}
-      </View>
 
-      <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-    </TouchableOpacity>
-  );
+          {!!item.course && (
+            <Text
+              style={{
+                fontFamily: typography.caption.fontFamily,
+                fontSize: typography.caption.fontSize - 1,
+                color: colors.placeholder,
+                marginTop: 1,
+              }}
+              numberOfLines={1}
+            >
+              {item.course}
+              {item.section ? ` • Section ${item.section}` : ""}
+            </Text>
+          )}
+        </View>
+
+        {needsHelp && (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              backgroundColor: colors.warning + "22",
+              borderColor: colors.warning,
+              borderWidth: 1,
+              borderRadius: radius.sm,
+              paddingHorizontal: 8,
+              paddingVertical: 3,
+              marginRight: spacing.sm,
+            }}
+          >
+            <Ionicons
+              name="alert-circle"
+              size={13}
+              color={colors.warning}
+              style={{ marginRight: 4 }}
+            />
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: "700",
+                color: colors.text,
+              }}
+            >
+              Needs help
+            </Text>
+          </View>
+        )}
+
+        <Ionicons
+          name="chevron-forward"
+          size={20}
+          color={colors.textSecondary}
+        />
+      </TouchableOpacity>
+    );
+  };
 
   if (loading) {
     return (

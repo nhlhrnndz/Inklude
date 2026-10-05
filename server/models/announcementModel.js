@@ -5,6 +5,7 @@ async function createAnnouncement({
   authorId,
   audience,
   audienceLabel = null,
+  classId = null,
   sessionId = null,
   title,
   body,
@@ -12,9 +13,18 @@ async function createAnnouncement({
 }) {
   const [result] = await pool.query(
     `INSERT INTO announcements
-       (author_id, audience, audience_label, session_id, title, body, deadline)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [authorId, audience, audienceLabel, sessionId, title, body, deadline],
+       (author_id, audience, audience_label, class_id, session_id, title, body, deadline)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      authorId,
+      audience,
+      audienceLabel,
+      classId,
+      sessionId,
+      title,
+      body,
+      deadline,
+    ],
   );
 
   const [rows] = await pool.query("SELECT * FROM announcements WHERE id = ?", [
@@ -23,12 +33,22 @@ async function createAnnouncement({
   return rows[0];
 }
 
+// Minimal class lookup (ownership checks + labels)
+async function getClassById(classId) {
+  const [rows] = await pool.query(
+    "SELECT id, title, teacher_id FROM classes WHERE id = ?",
+    [classId],
+  );
+  return rows[0] || null;
+}
+
 // Announcements posted by one author (teacher/guidance), newest first
 async function getAnnouncementsByAuthor(authorId) {
   const [rows] = await pool.query(
-    `SELECT a.*, s.title AS session_title
+    `SELECT a.*, s.title AS session_title, c.title AS class_title
      FROM announcements a
      LEFT JOIN sessions s ON a.session_id = s.id
+     LEFT JOIN classes c ON a.class_id = c.id
      WHERE a.author_id = ?
      ORDER BY a.created_at DESC
      LIMIT 50`,
@@ -37,13 +57,28 @@ async function getAnnouncementsByAuthor(authorId) {
   return rows;
 }
 
-// Announcements for one specific session/classroom, newest first.
-// Used by the classroom detail screen.
-async function getAnnouncementsBySession(sessionId) {
+// Announcements for one class, newest first (class page Announcements tab)
+async function getAnnouncementsByClass(classId) {
   const [rows] = await pool.query(
-    `SELECT a.*, s.title AS session_title
+    `SELECT a.*, s.title AS session_title, c.title AS class_title
      FROM announcements a
      LEFT JOIN sessions s ON a.session_id = s.id
+     LEFT JOIN classes c ON a.class_id = c.id
+     WHERE a.class_id = ?
+     ORDER BY a.created_at DESC
+     LIMIT 50`,
+    [classId],
+  );
+  return rows;
+}
+
+// Legacy: announcements for one session (old sessions with no class)
+async function getAnnouncementsBySession(sessionId) {
+  const [rows] = await pool.query(
+    `SELECT a.*, s.title AS session_title, c.title AS class_title
+     FROM announcements a
+     LEFT JOIN sessions s ON a.session_id = s.id
+     LEFT JOIN classes c ON a.class_id = c.id
      WHERE a.session_id = ?
      ORDER BY a.created_at DESC
      LIMIT 50`,
@@ -52,9 +87,20 @@ async function getAnnouncementsBySession(sessionId) {
   return rows;
 }
 
-// Recipients for a teacher announcement.
-// If the session belongs to a class: every current member of that class.
-// Otherwise (old sessions with no class): students who joined the session.
+// Recipients for a class announcement: every current student member
+async function getClassStudentIds(classId) {
+  const [rows] = await pool.query(
+    `SELECT DISTINCT cm.user_id AS id
+     FROM class_members cm
+     JOIN users u ON u.id = cm.user_id
+     WHERE cm.class_id = ? AND cm.left_at IS NULL AND u.role = 'student'`,
+    [classId],
+  );
+  return rows.map((r) => r.id);
+}
+
+// Recipients for a legacy session announcement (session with no class):
+// students who joined the session.
 async function getSessionStudentIds(sessionId) {
   const [[session]] = await pool.query(
     "SELECT class_id FROM sessions WHERE id = ?",
@@ -62,14 +108,7 @@ async function getSessionStudentIds(sessionId) {
   );
 
   if (session && session.class_id) {
-    const [rows] = await pool.query(
-      `SELECT DISTINCT cm.user_id AS id
-       FROM class_members cm
-       JOIN users u ON u.id = cm.user_id
-       WHERE cm.class_id = ? AND cm.left_at IS NULL AND u.role = 'student'`,
-      [session.class_id],
-    );
-    return rows.map((r) => r.id);
+    return getClassStudentIds(session.class_id);
   }
 
   const [rows] = await pool.query(
@@ -90,9 +129,7 @@ async function getAllStudentIds() {
   return rows.map((r) => r.id);
 }
 
-// Recipients for a college announcement: students whose Basic Information
-// course is one of the given courses.
-// (If your table or columns are named differently, change them here only.)
+// Recipients for a college announcement
 async function getStudentIdsByCourses(courses) {
   if (!courses || courses.length === 0) return [];
   const [rows] = await pool.query(
@@ -107,8 +144,11 @@ async function getStudentIdsByCourses(courses) {
 
 module.exports = {
   createAnnouncement,
+  getClassById,
   getAnnouncementsByAuthor,
+  getAnnouncementsByClass,
   getAnnouncementsBySession,
+  getClassStudentIds,
   getSessionStudentIds,
   getAllStudentIds,
   getStudentIdsByCourses,

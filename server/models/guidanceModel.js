@@ -178,6 +178,153 @@ async function getStudentMessageSummary(studentId) {
   return row;
 }
 
+/* ------------------------------------------------------------------ */
+/* Dashboard redesign: visual summary helpers                          */
+/* ------------------------------------------------------------------ */
+
+// Each student is counted once, by priority:
+// follow-up needed > appointment pending > awaiting reply > no open items.
+// awaitingReplyTotal counts every student whose last message is unanswered,
+// regardless of priority (used by the "Needs attention" box).
+async function getSupportStatusBreakdown() {
+  const [rows] = await pool.query(
+    `SELECT u.id,
+       EXISTS(
+         SELECT 1 FROM guidance_followups f
+         WHERE f.student_id = u.id AND f.status = 'active'
+       ) AS has_followup,
+       EXISTS(
+         SELECT 1 FROM guidance_appointments a
+         WHERE a.student_id = u.id AND a.status = 'pending'
+       ) AS has_pending_appt,
+       (
+         (SELECT m.sender_role
+            FROM messages m
+            JOIN message_threads mt ON mt.id = m.thread_id
+            WHERE mt.student_id = u.id
+            ORDER BY m.created_at DESC, m.id DESC
+            LIMIT 1) = 'student'
+       ) AS awaiting_reply
+     FROM users u
+     WHERE u.role = 'student'`,
+  );
+
+  const result = {
+    total: rows.length,
+    followUp: 0,
+    appointmentPending: 0,
+    awaitingReply: 0,
+    noOpenItems: 0,
+    awaitingReplyTotal: 0,
+  };
+
+  rows.forEach((row) => {
+    const hasFollowup = Number(row.has_followup) === 1;
+    const hasAppt = Number(row.has_pending_appt) === 1;
+    const awaiting = Number(row.awaiting_reply) === 1;
+
+    if (awaiting) result.awaitingReplyTotal += 1;
+
+    if (hasFollowup) result.followUp += 1;
+    else if (hasAppt) result.appointmentPending += 1;
+    else if (awaiting) result.awaitingReply += 1;
+    else result.noOpenItems += 1;
+  });
+
+  return result;
+}
+
+// Confirmed / rescheduled appointments happening today.
+async function getTodayAppointments() {
+  const [rows] = await pool.query(
+    `SELECT a.id, a.student_id, a.reason, a.status,
+            TIME_FORMAT(a.confirmed_time, '%H:%i') AS confirmed_time,
+            u.name AS student_name
+     FROM guidance_appointments a
+     JOIN users u ON u.id = a.student_id
+     WHERE a.status IN ('confirmed', 'rescheduled')
+       AND a.confirmed_date = CURDATE()
+     ORDER BY a.confirmed_time ASC`,
+  );
+  return rows;
+}
+
+// Accessibility reports still waiting for Guidance (all time, not just this month).
+async function getPendingReportCount() {
+  const [rows] = await pool.query(
+    "SELECT COUNT(*) AS count FROM accessibility_reports WHERE status = 'pending'",
+  );
+  return Number(rows[0].count) || 0;
+}
+
+// Most reported locations for one month. Location is free text, so
+// "Library" and "library " are grouped together.
+async function getTopReportLocations(start, end, limit = 5) {
+  const [rows] = await pool.query(
+    `SELECT MIN(TRIM(location)) AS location, COUNT(*) AS count
+     FROM accessibility_reports
+     WHERE created_at >= ? AND created_at < ?
+     GROUP BY LOWER(TRIM(location))
+     ORDER BY count DESC, location ASC
+     LIMIT ?`,
+    [start, end, limit],
+  );
+  return rows.map((r) => ({
+    location: r.location,
+    count: Number(r.count),
+  }));
+}
+
+// Support activity over the last `weeks` rolling 7-day windows:
+// appointment requests + messages from students + accessibility reports.
+async function getWeeklyActivity(weeks = 4) {
+  const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const origin = now - weeks * WEEK_MS;
+  const days = weeks * 7;
+
+  const [[appointments], [messages], [reports]] = await Promise.all([
+    pool.query(
+      "SELECT created_at FROM guidance_appointments WHERE created_at >= NOW() - INTERVAL ? DAY",
+      [days],
+    ),
+    pool.query(
+      `SELECT created_at FROM messages
+       WHERE sender_role = 'student' AND created_at >= NOW() - INTERVAL ? DAY`,
+      [days],
+    ),
+    pool.query(
+      "SELECT created_at FROM accessibility_reports WHERE created_at >= NOW() - INTERVAL ? DAY",
+      [days],
+    ),
+  ]);
+
+  const buckets = Array.from({ length: weeks }, (_, i) => ({
+    start: new Date(origin + i * WEEK_MS).toISOString(),
+    appointments: 0,
+    messages: 0,
+    reports: 0,
+    total: 0,
+  }));
+
+  const add = (rows, key) => {
+    rows.forEach((row) => {
+      const t = new Date(row.created_at).getTime();
+      let idx = Math.floor((t - origin) / WEEK_MS);
+      if (Number.isNaN(idx) || idx < 0) return;
+      if (idx >= weeks) idx = weeks - 1;
+      buckets[idx][key] += 1;
+      buckets[idx].total += 1;
+    });
+  };
+
+  add(appointments, "appointments");
+  add(messages, "messages");
+  add(reports, "reports");
+
+  return buckets;
+}
+
 module.exports = {
   getAllStudents,
   getStudentById,
@@ -186,4 +333,9 @@ module.exports = {
   getDashboardStats,
   getAppointmentSummary,
   getStudentMessageSummary,
+  getSupportStatusBreakdown,
+  getTodayAppointments,
+  getPendingReportCount,
+  getTopReportLocations,
+  getWeeklyActivity,
 };

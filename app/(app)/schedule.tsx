@@ -22,6 +22,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 
+import AddReminderForm from "../../components/AddReminderForm";
+import {
+  DateField,
+  TimeField,
+  todayString,
+} from "../../components/DateTimePicker";
 import { useTheme } from "../../context/ThemeContext";
 import { getMySessions } from "../../utils/api";
 import { crossAlert } from "../../utils/crossAlert";
@@ -44,8 +50,6 @@ interface JoinedSession {
 type ViewMode = "today" | "week" | "upcoming";
 
 // ---------- helpers ----------
-
-const pad = (n: number) => String(n).padStart(2, "0");
 
 const norm = (s?: string | null) => (s || "").trim().toLowerCase();
 
@@ -78,51 +82,6 @@ function fmtCountdown(ms: number) {
   return m === 0 ? `${h} hr` : `${h} hr ${m} min`;
 }
 
-// Accepts "8:30 AM", "8:30am", "14:00", "9 pm"
-function parseTime(input: string): { h: number; m: number } | null {
-  const s = input.trim().toLowerCase().replace(/\./g, "");
-  const match = s.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/);
-  if (!match) return null;
-
-  let h = parseInt(match[1], 10);
-  const m = match[2] ? parseInt(match[2], 10) : 0;
-  const meridiem = match[3];
-
-  if (m > 59) return null;
-
-  if (meridiem) {
-    if (h < 1 || h > 12) return null;
-    if (meridiem === "pm" && h < 12) h += 12;
-    if (meridiem === "am" && h === 12) h = 0;
-  } else if (h > 23) {
-    return null;
-  }
-
-  return { h, m };
-}
-
-function toLocalString(day: Date, h: number, m: number) {
-  return `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(
-    day.getDate(),
-  )} ${pad(h)}:${pad(m)}:00`;
-}
-
-function buildDayOptions() {
-  const base = new Date();
-  base.setHours(0, 0, 0, 0);
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(base);
-    d.setDate(base.getDate() + i);
-    const label =
-      i === 0
-        ? "Today"
-        : i === 1
-          ? "Tomorrow"
-          : d.toLocaleDateString([], { weekday: "short", day: "numeric" });
-    return { label, date: d };
-  });
-}
-
 const REPEAT_OPTIONS = [
   { label: "Just once", weeks: 1 },
   { label: "Weekly · 4 wks", weeks: 4 },
@@ -151,6 +110,9 @@ function managedNote(item: ScheduleItem): string | null {
     return "Managed in Guidance appointments.";
   }
   if (item.sourceType === "announcement") return "From an announcement.";
+  if (item.sourceType === "campus_event") {
+    return "From Campus Events. Remove it from the Campus Events screen.";
+  }
   if (item.sourceType) return "Added automatically.";
   return null;
 }
@@ -165,6 +127,9 @@ function findLiveSessionByName(item: ScheduleItem, sessions: JoinedSession[]) {
 
 // ---------- add form ----------
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^\d{2}:\d{2}$/;
+
 function AddItemForm({
   onSaved,
   onCancel,
@@ -174,15 +139,13 @@ function AddItemForm({
 }) {
   const { colors, typography, spacing, radius } = useTheme();
 
-  const dayOptions = buildDayOptions();
-
   const [title, setTitle] = useState("");
   const [subject, setSubject] = useState("");
   const [teacherName, setTeacherName] = useState("");
   const [location, setLocation] = useState("");
-  const [dayIndex, setDayIndex] = useState(0);
-  const [startText, setStartText] = useState("");
-  const [endText, setEndText] = useState("");
+  const [date, setDate] = useState("");
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
   const [repeatWeeks, setRepeatWeeks] = useState(1);
   const [saving, setSaving] = useState(false);
 
@@ -243,26 +206,21 @@ function AddItemForm({
       Toast.show({ type: "error", text1: "Add a class name first." });
       return;
     }
-
-    const start = parseTime(startText);
-    const end = parseTime(endText);
-    if (!start || !end) {
-      Toast.show({
-        type: "error",
-        text1: "Check the times",
-        text2: 'Use a format like "8:30 AM" or "14:00".',
-      });
+    if (!DATE_RE.test(date)) {
+      Toast.show({ type: "error", text1: "Pick a date" });
       return;
     }
-    if (end.h * 60 + end.m <= start.h * 60 + start.m) {
+    if (!TIME_RE.test(start) || !TIME_RE.test(end)) {
+      Toast.show({ type: "error", text1: "Pick a start and end time" });
+      return;
+    }
+    if (end <= start) {
       Toast.show({
         type: "error",
         text1: "End time must be after the start time.",
       });
       return;
     }
-
-    const day = dayOptions[dayIndex].date;
 
     setSaving(true);
     try {
@@ -271,8 +229,8 @@ function AddItemForm({
         subject: subject.trim() || undefined,
         teacherName: teacherName.trim() || undefined,
         location: location.trim() || undefined,
-        startTime: toLocalString(day, start.h, start.m),
-        endTime: toLocalString(day, end.h, end.m),
+        startTime: `${date} ${start}:00`,
+        endTime: `${date} ${end}:00`,
         repeatWeeks,
       });
       Toast.show({ type: "success", text1: "Added to your schedule" });
@@ -356,43 +314,32 @@ function AddItemForm({
         accessibilityLabel="Room"
       />
 
-      <Text style={labelStyle}>Day</Text>
-      <View
-        style={{
-          flexDirection: "row",
-          flexWrap: "wrap",
-          gap: 8,
-          marginBottom: spacing.sm,
-        }}
-      >
-        {dayOptions.map((opt, i) =>
-          chip(opt.label, i === dayIndex, () => setDayIndex(i)),
-        )}
-      </View>
+      <Text style={labelStyle}>Date *</Text>
+      <DateField
+        value={date}
+        onChange={setDate}
+        label="Class date"
+        placeholder="Pick a date"
+        minDate={todayString()}
+      />
 
-      <View style={{ flexDirection: "row", gap: 12 }}>
+      <View style={{ flexDirection: "row", gap: 8 }}>
         <View style={{ flex: 1 }}>
           <Text style={labelStyle}>Starts *</Text>
-          <TextInput
-            style={inputStyle}
-            value={startText}
-            onChangeText={setStartText}
-            placeholder="8:30 AM"
-            placeholderTextColor={colors.placeholder}
-            autoCapitalize="characters"
-            accessibilityLabel="Start time"
+          <TimeField
+            value={start}
+            onChange={setStart}
+            label="Start time"
+            placeholder="Start time"
           />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={labelStyle}>Ends *</Text>
-          <TextInput
-            style={inputStyle}
-            value={endText}
-            onChangeText={setEndText}
-            placeholder="9:30 AM"
-            placeholderTextColor={colors.placeholder}
-            autoCapitalize="characters"
-            accessibilityLabel="End time"
+          <TimeField
+            value={end}
+            onChange={setEnd}
+            label="End time"
+            placeholder="End time"
           />
         </View>
       </View>
@@ -440,228 +387,6 @@ function AddItemForm({
             }}
           >
             Save class
-          </Text>
-        )}
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        onPress={onCancel}
-        accessibilityRole="button"
-        accessibilityLabel="Cancel"
-        style={{ alignItems: "center", paddingVertical: spacing.md }}
-      >
-        <Text
-          style={{
-            fontFamily: typography.body.fontFamily,
-            fontSize: typography.body.fontSize,
-            color: colors.textSecondary,
-          }}
-        >
-          Cancel
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-// ---------- add reminder form ----------
-
-function AddReminderForm({
-  onSaved,
-  onCancel,
-}: {
-  onSaved: () => void;
-  onCancel: () => void;
-}) {
-  const { colors, typography, spacing, radius } = useTheme();
-
-  const dayOptions = buildDayOptions();
-
-  const [title, setTitle] = useState("");
-  const [dayIndex, setDayIndex] = useState(0);
-  const [timeText, setTimeText] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  const inputStyle = {
-    backgroundColor: colors.secondaryBackground,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.sm,
-    padding: spacing.sm + 2,
-    marginBottom: spacing.sm,
-    fontFamily: typography.body.fontFamily,
-    fontSize: typography.body.fontSize,
-    color: colors.text,
-    minHeight: 48,
-  } as const;
-
-  const labelStyle = {
-    fontFamily: typography.caption.fontFamily,
-    fontSize: typography.caption.fontSize,
-    fontWeight: "600" as const,
-    color: colors.textSecondary,
-    marginBottom: 4,
-    marginTop: spacing.xs,
-  };
-
-  const chip = (label: string, selected: boolean, onPress: () => void) => (
-    <TouchableOpacity
-      key={label}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      style={{
-        paddingVertical: 10,
-        paddingHorizontal: 14,
-        minHeight: 44,
-        justifyContent: "center",
-        borderRadius: radius.md,
-        borderWidth: 1,
-        borderColor: selected ? colors.primary : colors.border,
-        backgroundColor: selected ? colors.primary : colors.secondaryBackground,
-      }}
-    >
-      <Text
-        style={{
-          fontFamily: typography.body.fontFamily,
-          fontSize: typography.caption.fontSize,
-          fontWeight: "600",
-          color: selected ? "#FFFFFF" : colors.text,
-        }}
-      >
-        {label}
-      </Text>
-    </TouchableOpacity>
-  );
-
-  const handleSave = async () => {
-    if (!title.trim()) {
-      Toast.show({ type: "error", text1: "Add a reminder title first." });
-      return;
-    }
-
-    const time = parseTime(timeText);
-    if (!time) {
-      Toast.show({
-        type: "error",
-        text1: "Check the time",
-        text2: 'Use a format like "8:30 AM" or "14:00".',
-      });
-      return;
-    }
-
-    const day = dayOptions[dayIndex].date;
-
-    setSaving(true);
-    try {
-      await createScheduleItem({
-        title: title.trim(),
-        type: "reminder",
-        startTime: toLocalString(day, time.h, time.m),
-        endTime: toLocalString(day, time.h, time.m),
-        repeatWeeks: 1,
-      });
-      Toast.show({ type: "success", text1: "Reminder added" });
-      onSaved();
-    } catch (error: any) {
-      Toast.show({
-        type: "error",
-        text1: "Could not save",
-        text2: error.response?.data?.message ?? "Please try again.",
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <View
-      style={{
-        backgroundColor: colors.surface,
-        borderColor: colors.border,
-        borderWidth: 1,
-        borderRadius: radius.lg,
-        padding: spacing.lg,
-        marginBottom: spacing.lg,
-      }}
-    >
-      <Text
-        style={{
-          fontFamily: typography.title.fontFamily,
-          fontSize: typography.title.fontSize,
-          fontWeight: "700",
-          color: colors.text,
-          marginBottom: spacing.sm,
-        }}
-        accessibilityRole="header"
-      >
-        Add a reminder
-      </Text>
-
-      <Text style={labelStyle}>What is it? *</Text>
-      <TextInput
-        style={inputStyle}
-        value={title}
-        onChangeText={setTitle}
-        placeholder="e.g. Submit history essay"
-        placeholderTextColor={colors.placeholder}
-        maxLength={150}
-        accessibilityLabel="Reminder title"
-      />
-
-      <Text style={labelStyle}>Day</Text>
-      <View
-        style={{
-          flexDirection: "row",
-          flexWrap: "wrap",
-          gap: 8,
-          marginBottom: spacing.sm,
-        }}
-      >
-        {dayOptions.map((opt, i) =>
-          chip(opt.label, i === dayIndex, () => setDayIndex(i)),
-        )}
-      </View>
-
-      <Text style={labelStyle}>Time *</Text>
-      <TextInput
-        style={inputStyle}
-        value={timeText}
-        onChangeText={setTimeText}
-        placeholder="3:00 PM"
-        placeholderTextColor={colors.placeholder}
-        autoCapitalize="characters"
-        accessibilityLabel="Reminder time"
-      />
-
-      <TouchableOpacity
-        onPress={handleSave}
-        disabled={saving}
-        accessibilityRole="button"
-        accessibilityLabel="Save reminder"
-        style={{
-          backgroundColor: colors.primary,
-          borderRadius: radius.md,
-          paddingVertical: 14,
-          minHeight: 52,
-          alignItems: "center",
-          justifyContent: "center",
-          opacity: saving ? 0.6 : 1,
-          marginTop: spacing.sm,
-        }}
-      >
-        {saving ? (
-          <ActivityIndicator color="#FFFFFF" />
-        ) : (
-          <Text
-            style={{
-              color: "#FFFFFF",
-              fontFamily: typography.button.fontFamily,
-              fontSize: typography.button.fontSize,
-              fontWeight: "700",
-            }}
-          >
-            Save reminder
           </Text>
         )}
       </TouchableOpacity>
