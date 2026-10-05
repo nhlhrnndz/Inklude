@@ -1,7 +1,7 @@
 // server/routes/classRoutes.js
 const express = require("express");
 const router = express.Router();
-const { verifyToken } = require("../middleware/authMiddleware");
+const { verifyToken, requireRole } = require("../middleware/authMiddleware");
 const {
   createClassController,
   listMyClasses,
@@ -14,14 +14,29 @@ const {
   leaveClassController,
 } = require("../controllers/classController");
 
-router.post("/", verifyToken, createClassController);
+router.post("/", verifyToken, requireRole("teacher"), createClassController);
 router.get("/", verifyToken, listMyClasses);
-router.post("/join", verifyToken, joinClassController);
+router.post("/join", verifyToken, requireRole("student"), joinClassController);
 router.get("/:id", verifyToken, getClassController);
 router.get("/:id/members", verifyToken, getClassMembersController);
-router.post("/:id/open-session", verifyToken, openClassSessionController);
+router.post(
+  "/:id/open-session",
+  verifyToken,
+  requireRole("teacher"),
+  openClassSessionController,
+);
 router.get("/:id/documents", verifyToken, getClassDocumentsController);
-router.post("/:id/sessions", verifyToken, createClassSessionController);
-router.post("/:id/leave", verifyToken, leaveClassController);
+router.post(
+  "/:id/sessions",
+  verifyToken,
+  requireRole("teacher"),
+  createClassSessionController,
+);
+router.post(
+  "/:id/leave",
+  verifyToken,
+  requireRole("student"),
+  leaveClassController,
+);
 
 module.exports = router;

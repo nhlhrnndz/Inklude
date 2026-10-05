@@ -1,7 +1,7 @@
 // server/routes/checkinRoutes.js
 const express = require("express");
 const router = express.Router();
-const { verifyToken } = require("../middleware/authMiddleware");
+const { verifyToken, requireRole } = require("../middleware/authMiddleware");
 const {
   getQuietStudentsController,
   createCheckinController,
@@ -14,12 +14,18 @@ const {
 router.get(
   "/session/:sessionId/quiet",
   verifyToken,
+  requireRole("teacher"),
   getQuietStudentsController,
 );
-router.get("/sent", verifyToken, getSentController);
-router.get("/received", verifyToken, getReceivedController);
+router.get("/sent", verifyToken, requireRole("teacher"), getSentController);
+router.get(
+  "/received",
+  verifyToken,
+  requireRole("student"),
+  getReceivedController,
+);
 
-router.post("/", verifyToken, createCheckinController);
-router.post("/:id/reply", verifyToken, replyController);
+router.post("/", verifyToken, requireRole("teacher"), createCheckinController);
+router.post("/:id/reply", verifyToken, requireRole("student"), replyController);
 
 module.exports = router;

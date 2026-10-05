@@ -1,6 +1,7 @@
 // app/(app)/_layout.tsx
 import { usePathname, useRouter } from "expo-router";
 import { Drawer } from "expo-router/drawer";
+import { Platform, useWindowDimensions } from "react-native";
 import Toast from "react-native-toast-message";
 
 import Sidebar, { UserRole } from "../../components/navigation/Sidebar";
@@ -22,6 +23,7 @@ const ROUTES_BY_ROLE: Record<UserRole, RouteMap> = {
     dashboard: "/student",
     mySessions: "/my-classes",
     joinSession: "/join",
+    checkins: "/checkins",
     guidance: "/guidance-hub",
     reportIssue: "/report-issue",
     events: "/events",
@@ -35,10 +37,10 @@ const ROUTES_BY_ROLE: Record<UserRole, RouteMap> = {
     dashboard: "/teacher",
     createSession: "/create-session",
     mySessions: "/my-classes",
+    checkins: "/checkins",
     announcements: "/announcements",
     referrals: "/referrals",
     profile: "/profile",
-    settings: null,
   },
   guidance: {
     dashboard: "/guidance-dashboard",
@@ -132,6 +134,11 @@ function SidebarDrawerContent({ navigation }: SidebarDrawerContentProps) {
 
 export default function AppDrawerLayout() {
   const { colors } = useTheme();
+  const { width } = useWindowDimensions();
+
+  // On a computer screen the sidebar stays open like a real dashboard.
+  // Phones (and narrow browser windows) keep the slide-out drawer.
+  const isDesktop = Platform.OS === "web" && width >= 1024;
 
   return (
     <AccessibilityProvider>
@@ -146,12 +153,16 @@ export default function AppDrawerLayout() {
             headerShadowVisible: false,
             headerTintColor: colors.primary,
             headerTitle: () => null,
+            // Hide the burger on desktop (web) where the drawer is
+            // already permanent. On phone / narrow web, keep the default
+            // burger so the user can open the slide-out drawer.
+            headerLeft: isDesktop ? () => null : undefined,
             headerRight: () => <NotificationBell />,
-            drawerType: "front",
+            drawerType: isDesktop ? "permanent" : "front",
             drawerStyle: {
               width: 300,
             },
-            overlayColor: "rgba(0,0,0,0.4)",
+            overlayColor: isDesktop ? "transparent" : "rgba(0,0,0,0.4)",
           }}
         >
           <Drawer.Screen

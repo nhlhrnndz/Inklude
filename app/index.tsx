@@ -1,4 +1,4 @@
-//app\index.tsx
+// app/index.tsx
 import { useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
 import {
@@ -22,8 +22,6 @@ export default function StartScreen() {
   const logoScale = useRef(new Animated.Value(0.8)).current;
   const contentOpacity = useRef(new Animated.Value(0)).current;
 
-  // Short intro: logo fades/scales in (~1.2s), then the text and button.
-  // Skipped entirely if the device has "reduce motion" turned on.
   useEffect(() => {
     let cancelled = false;
     const useNative = Platform.OS !== "web";
@@ -69,7 +67,6 @@ export default function StartScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
     >
       <View style={[styles.content, { paddingHorizontal: spacing.lg }]}>
-        {/* Replace this with your IncluEd logo image later */}
         <Animated.View
           style={[
             styles.logoPlaceholder,
@@ -144,7 +141,7 @@ export default function StartScreen() {
             },
           ]}
           activeOpacity={0.85}
-          onPress={() => router.push("/role-select")}
+          onPress={() => router.push("/support-needs")}
           accessibilityRole="button"
           accessibilityLabel="Get started"
         >
@@ -157,6 +154,29 @@ export default function StartScreen() {
             }}
           >
             Get Started
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() =>
+            router.push({ pathname: "/login", params: { role: "student" } })
+          }
+          accessibilityRole="button"
+          accessibilityLabel="I already have an account. Log in"
+          style={{
+            marginTop: spacing.md,
+            minHeight: 48,
+            justifyContent: "center",
+          }}
+        >
+          <Text
+            style={{
+              color: colors.primary,
+              fontFamily: typography.button.fontFamily,
+              fontSize: typography.body.fontSize,
+            }}
+          >
+            I already have an account · Log in
           </Text>
         </TouchableOpacity>
 
@@ -182,12 +202,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 40,
   },
-
   content: {
     alignItems: "center",
     marginTop: 40,
   },
-
   logoPlaceholder: {
     width: 120,
     height: 120,
@@ -195,11 +213,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-
   bottomContainer: {
     alignItems: "center",
   },
-
   button: {
     width: "100%",
     alignItems: "center",

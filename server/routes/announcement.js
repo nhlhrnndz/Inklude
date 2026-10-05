@@ -1,7 +1,7 @@
 // server/routes/announcement.js
 const express = require("express");
 const router = express.Router();
-const { verifyToken } = require("../middleware/authMiddleware");
+const { verifyToken, requireRole } = require("../middleware/authMiddleware");
 const {
   postAnnouncement,
   getMyAnnouncements,
@@ -9,7 +9,15 @@ const {
   getSessionAnnouncements,
 } = require("../controllers/announcementController");
 
-router.post("/", verifyToken, postAnnouncement);
+// Only staff can post
+router.post(
+  "/",
+  verifyToken,
+  requireRole("teacher", "guidance", "admin"),
+  postAnnouncement,
+);
+
+// Reading stays open to any logged-in user (the controller scopes what they see)
 router.get("/mine", verifyToken, getMyAnnouncements);
 router.get("/class/:classId", verifyToken, getClassAnnouncements);
 router.get("/session/:sessionId", verifyToken, getSessionAnnouncements);

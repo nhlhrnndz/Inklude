@@ -1,4 +1,4 @@
-//app\_layout.tsx
+// app/_layout.tsx
 import { useFonts } from "expo-font";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -10,24 +10,16 @@ import { createToastConfig } from "../components/common/ToastConfig";
 import { AuthProvider, useAuth } from "../context/AuthContext";
 import { ThemeProvider, useTheme } from "../context/ThemeContext";
 
-// All screens reachable without being logged in.
-// "support-needs" is public because new students pick their needs BEFORE
-// creating an account (it is also reused after login for accounts that
-// somehow have no saved needs yet).
 const PUBLIC_ROUTES = [
   "index",
   "role-select",
   "login",
   "register",
   "support-needs",
+  "staff-login",
+  "staff-register",
 ];
 
-// Entry screens only — if a user is already authenticated and lands
-// here (e.g. app reopened with a stored token), we redirect them
-// straight to their dashboard. login/register are deliberately
-// excluded: they already do their own post-action navigation
-// (including the /accessibility first-time-profile case), so this
-// effect must not race against that.
 const ENTRY_ROUTES = ["index", "role-select"];
 
 const ROLE_HOME: Record<string, string> = {
@@ -50,17 +42,11 @@ function RootLayoutNav() {
     const inEntryRoute = ENTRY_ROUTES.includes(currentRoute);
 
     if (!user && !inPublicRoute) {
-      // Not logged in, trying to view a protected dashboard/screen.
       router.replace("/");
     } else if (user && inEntryRoute) {
-      // Already logged in but sitting on Get Started / role-select
-      // (e.g. app reopened with a stored session) — skip straight
-      // to their dashboard.
       const home = ROLE_HOME[user.role] ?? "/";
       router.replace(home as any);
     }
-    // Note: user is on "login" or "register" — do nothing here.
-    // Those screens navigate themselves after a successful action.
   }, [user, loading, segments]);
 
   if (loading) {

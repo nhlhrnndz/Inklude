@@ -11,6 +11,8 @@ const api = axios.create({
   timeout: 15000, // never hang forever — fail loudly after 15s instead
   headers: {
     "Content-Type": "application/json",
+    // Skips ngrok's "Visit Site" warning page for API calls
+    "ngrok-skip-browser-warning": "true",
   },
 });
 
