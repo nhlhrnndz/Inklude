@@ -94,7 +94,7 @@ app.use("/api/reports", reportRoutes); // ⬅️ Phase 4 Week 9
 app.use("/api/map", mapRoutes); // ⬅️ Phase 4 Week 10
 app.use("/api/events", eventRoutes); // ⬅️ Phase 4 Week 10
 
-app.get("/", (req, res) => {
+app.get("/api/health", (req, res) => {
   res.json({ message: "IncluEd Backend is running ✅" });
 });
 
@@ -107,6 +107,31 @@ app.get("/test-db", async (req, res) => {
       .status(500)
       .json({ message: "Database connection failed ❌", error: err.message });
   }
+});
+
+// ---- Serve the website + APK (keep this BELOW all /api routes) ----
+const DIST_DIR = path.join(__dirname, "..", "dist");
+const DOWNLOADS_DIR = path.join(__dirname, "downloads");
+
+app.use("/downloads", express.static(DOWNLOADS_DIR));
+app.use(express.static(DIST_DIR));
+
+// Any other address (/staff-login, /teacher...) → send the website,
+// so refreshing a page doesn't show "Cannot GET".
+app.use((req, res, next) => {
+  if (req.method !== "GET") return next();
+  const p = req.path;
+  if (
+    p.startsWith("/api") ||
+    p.startsWith("/uploads") ||
+    p.startsWith("/socket.io") ||
+    p.startsWith("/downloads")
+  ) {
+    return next();
+  }
+  res.sendFile(path.join(DIST_DIR, "index.html"), (err) => {
+    if (err) next();
+  });
 });
 
 const server = http.createServer(app);

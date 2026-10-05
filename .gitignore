@@ -46,3 +46,6 @@ app-example
 server/.env
 node_modules
 server/node_modules
+
+# server downloads (APKs)
+server/downloads/

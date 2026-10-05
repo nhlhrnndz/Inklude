@@ -1,4 +1,4 @@
-//register.tsx
+// app/register.tsx
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet } from "react-native";
@@ -27,8 +27,6 @@ export default function RegisterScreen() {
     role?: string | string[];
   }>();
 
-  // roleParam can arrive as a string OR an array depending on nav history —
-  // normalize it to a single string before checking it.
   const normalizedRole = Array.isArray(roleParam) ? roleParam[0] : roleParam;
 
   const role: "student" | "teacher" | "guidance" =
@@ -36,7 +34,8 @@ export default function RegisterScreen() {
       ? normalizedRole
       : "student";
 
-  // Faculty and Guidance accounts need an invite code (checked by the server).
+  // Faculty and Guidance accounts need an invite code (the server uses it
+  // to decide the real role). Students leave it empty.
   const needsInviteCode = role === "teacher" || role === "guidance";
 
   const [name, setName] = useState("");
@@ -105,31 +104,39 @@ export default function RegisterScreen() {
         text1: "Check Your Information",
         text2: "Please correct the highlighted fields.",
       });
-
       return;
     }
 
     try {
       setLoading(true);
 
-      await register(
+      // Step 9 fix: no "role" argument anymore. The inviteCode (if any)
+      // goes in position 4, and the server decides the actual role.
+      const result = await register(
         name.trim(),
         email.trim(),
         password,
-        role,
         needsInviteCode ? inviteCode.trim() : undefined,
       );
+
+      const assignedRole = result?.role ?? "student";
+      const roleLabel =
+        assignedRole === "teacher"
+          ? "Teacher"
+          : assignedRole === "guidance"
+            ? "Guidance"
+            : "Student";
 
       Toast.show({
         type: "success",
         text1: "Account Created!",
-        text2: "Your account was created successfully.",
+        text2: `You are registered as ${roleLabel}.`,
       });
 
       setTimeout(() => {
         router.replace({
           pathname: "/login",
-          params: { role },
+          params: { role: assignedRole },
         });
       }, 1200);
     } catch (err: any) {
@@ -140,7 +147,6 @@ export default function RegisterScreen() {
         err?.response?.data?.error ||
         "We couldn't create your account. Please try again.";
 
-      // Wrong / missing invite code: show it on the field itself too.
       if (err?.response?.status === 403 && needsInviteCode) {
         setInviteCodeError(message);
       }

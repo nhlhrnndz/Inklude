@@ -1,7 +1,7 @@
 // server/routes/guidance.js
 const express = require("express");
 const router = express.Router();
-const { verifyToken } = require("../middleware/authMiddleware");
+const { verifyToken, requireRole } = require("../middleware/authMiddleware");
 const {
   getStudentsController,
   getStudentDetailController,
@@ -24,40 +24,27 @@ const {
   getAccessibilityReportController,
 } = require("../controllers/guidanceReportController");
 
-router.get("/dashboard", verifyToken, getDashboardSummaryController);
+// Every route in this file is Guidance only.
+router.use(verifyToken, requireRole("guidance", "admin"));
 
-router.get("/students", verifyToken, getStudentsController);
-router.get("/students/:id", verifyToken, getStudentDetailController);
+router.get("/dashboard", getDashboardSummaryController);
 
-// Follow-ups (Week 7)
-router.get(
-  "/students/:id/followups",
-  verifyToken,
-  listStudentFollowupsController,
-);
-router.post("/students/:id/followups", verifyToken, createFollowupController);
-router.patch(
-  "/followups/:id/complete",
-  verifyToken,
-  completeFollowupController,
-);
+router.get("/students", getStudentsController);
+router.get("/students/:id", getStudentDetailController);
+
+// Follow-ups
+router.get("/students/:id/followups", listStudentFollowupsController);
+router.post("/students/:id/followups", createFollowupController);
+router.patch("/followups/:id/complete", completeFollowupController);
 
 // Guidance reports (exportable)
-router.get(
-  "/reports/accessibility",
-  verifyToken,
-  getAccessibilityReportController,
-);
+router.get("/reports/accessibility", getAccessibilityReportController);
 
 // Old Belonging / reach-out routes: kept until Phase F cleanup
-router.get(
-  "/students/:id/belonging",
-  verifyToken,
-  getStudentBelongingController,
-);
-router.post("/students/:id/reach-out", verifyToken, postReachOutController);
-router.get("/belonging/overview", verifyToken, getBelongingOverviewController);
+router.get("/students/:id/belonging", getStudentBelongingController);
+router.post("/students/:id/reach-out", postReachOutController);
+router.get("/belonging/overview", getBelongingOverviewController);
 
-router.get("/stats", verifyToken, getStatsController);
+router.get("/stats", getStatsController);
 
 module.exports = router;
