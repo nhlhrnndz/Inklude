@@ -8,6 +8,8 @@ const {
   joinClassController,
   getClassController,
   getClassMembersController,
+  openClassSessionController,
+  getClassDocumentsController,
   createClassSessionController,
   leaveClassController,
 } = require("../controllers/classController");
@@ -17,6 +19,8 @@ router.get("/", verifyToken, listMyClasses);
 router.post("/join", verifyToken, joinClassController);
 router.get("/:id", verifyToken, getClassController);
 router.get("/:id/members", verifyToken, getClassMembersController);
+router.post("/:id/open-session", verifyToken, openClassSessionController);
+router.get("/:id/documents", verifyToken, getClassDocumentsController);
 router.post("/:id/sessions", verifyToken, createClassSessionController);
 router.post("/:id/leave", verifyToken, leaveClassController);
 

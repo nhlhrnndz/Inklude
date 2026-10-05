@@ -74,3 +74,40 @@ export const uploadDocument = async (
   });
   return response.data;
 };
+export const getClassDocuments = async (
+  classId: number,
+): Promise<{ documents: DocumentMeta[] }> => {
+  const response = await api.get(`/api/classes/${classId}/documents`);
+  return response.data;
+};
+
+export const uploadClassDocument = async (
+  classId: number,
+  file: {
+    uri: string;
+    name: string;
+    mimeType?: string | null;
+    webFile?: File | null;
+  },
+) => {
+  const formData = new FormData();
+  formData.append("classId", String(classId));
+
+  if (Platform.OS === "web") {
+    const blob = file.webFile ?? (await (await fetch(file.uri)).blob());
+    formData.append("file", blob, file.name);
+  } else {
+    // @ts-ignore — React Native's FormData accepts this shape
+    formData.append("file", {
+      uri: file.uri,
+      name: file.name,
+      type: file.mimeType || "application/octet-stream",
+    });
+  }
+
+  const response = await api.post("/api/documents", formData, {
+    headers: { "Content-Type": undefined },
+    timeout: 120000,
+  });
+  return response.data;
+};

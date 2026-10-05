@@ -1,6 +1,7 @@
 //IncluEd/server/index.js
 require("dotenv").config({ path: require("path").join(__dirname, ".env") });
 
+const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const http = require("http");
@@ -36,6 +37,9 @@ const {
 } = require("./services/scheduleReminderService");
 const appointmentRoutes = require("./routes/appointments"); // Phase 4 Week 6
 const referralRoutes = require("./routes/referrals");
+const reportRoutes = require("./routes/reports"); // ⬅️ Phase 4 Week 9
+const mapRoutes = require("./routes/map"); // ⬅️ Phase 4 Week 10
+const eventRoutes = require("./routes/events"); // ⬅️ Phase 4 Week 10
 
 // Models required here so startup fails fast on any syntax error.
 require("./models/PeerShare");
@@ -50,12 +54,19 @@ require("./models/accessibilityProfileModel");
 require("./models/classModel"); // ⬅️ Phase 4 Week 3
 require("./models/accommodationModel"); // ⬅️ Phase 4 Week 5A
 require("./models/appointmentModel"); // Phase 4 Week 6
+require("./models/accessibilityReportModel"); // ⬅️ Phase 4 Week 9
+require("./models/mapModel"); // ⬅️ Phase 4 Week 10
+require("./models/campusEventModel"); // ⬅️ Phase 4 Week 10
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+
+// Uploaded photos (accessibility reports and map pins)
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
 app.use("/api/messages", messageRoutes);
 
 app.use("/api/auth", authRoutes);
@@ -79,6 +90,9 @@ app.use("/api/documents", documentRoutes);
 app.use("/api/accessibility", accessibilityProfileRoutes);
 app.use("/api/appointments", appointmentRoutes); // Phase 4 Week 6
 app.use("/api/referrals", referralRoutes);
+app.use("/api/reports", reportRoutes); // ⬅️ Phase 4 Week 9
+app.use("/api/map", mapRoutes); // ⬅️ Phase 4 Week 10
+app.use("/api/events", eventRoutes); // ⬅️ Phase 4 Week 10
 
 app.get("/", (req, res) => {
   res.json({ message: "IncluEd Backend is running ✅" });

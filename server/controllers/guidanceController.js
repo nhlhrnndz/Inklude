@@ -7,16 +7,24 @@ const {
   getDashboardStats,
   getAppointmentSummary,
   getStudentMessageSummary,
+  getSupportStatusBreakdown,
+  getTodayAppointments,
+  getPendingReportCount,
+  getTopReportLocations,
+  getWeeklyActivity,
 } = require("../models/guidanceModel");
 const {
   getNeedsHelpInfo,
   getNeedsHelpStudentIds,
 } = require("../models/Checkin");
-const { hasLowMoodStreak } = require("../models/ClassPulse");
+const { getNeedsHelpStudents } = require("../models/needsHelpModel");
 const { getAppointmentsForStudent } = require("../models/appointmentModel");
 const { getGuidanceThreads } = require("../models/messageModel");
 const { getAnnouncementsByAuthor } = require("../models/announcementModel");
 const { getAllStudentSIS } = require("../models/sisModel");
+const {
+  getStats: getReportStats,
+} = require("../models/accessibilityReportModel");
 const {
   toDto: followupToDto,
   getFollowupsForStudent,
@@ -59,6 +67,22 @@ function mapAppointment(a) {
   };
 }
 
+// Current calendar month as 'YYYY-MM' plus SQL start/end bounds.
+function currentMonthBounds() {
+  const pad = (n) => String(n).padStart(2, "0");
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth() + 1;
+  const nextY = m === 12 ? y + 1 : y;
+  const nextM = m === 12 ? 1 : m + 1;
+
+  return {
+    month: `${y}-${pad(m)}`,
+    start: `${y}-${pad(m)}-01 00:00:00`,
+    end: `${nextY}-${pad(nextM)}-01 00:00:00`,
+  };
+}
+
 // GET /api/guidance/students?disability=Autism&course=BS%20Information%20Technology&search=juan
 async function getStudentsController(req, res) {
   try {
@@ -70,14 +94,12 @@ async function getStudentsController(req, res) {
 
     const students = await getAllStudents(disability, search, course);
 
-    // Phase 2.3 Week 3 flags (yes/no only, never the underlying answers)
+    // Yes/no only: the student told a teacher "I need help" in the last
+    // 14 days. It never exposes the underlying check-in.
     const needsHelpIds = await getNeedsHelpStudentIds();
-    const lowMoodFlags = await Promise.all(
-      students.map((s) => hasLowMoodStreak(s.id)),
-    );
 
     res.json({
-      students: students.map((s, index) => ({
+      students: students.map((s) => ({
         id: s.id,
         name: s.name,
         email: s.email,
@@ -93,7 +115,6 @@ async function getStudentsController(req, res) {
         section: s.section ?? null,
         flags: {
           needsHelp: needsHelpIds.has(s.id),
-          lowMood: lowMoodFlags[index],
         },
       })),
     });
@@ -124,7 +145,6 @@ async function getStudentDetailController(req, res) {
       attendance,
       transcripts,
       needsHelp,
-      lowMood,
       appointmentRows,
       followupRows,
       thread,
@@ -132,7 +152,6 @@ async function getStudentDetailController(req, res) {
       getStudentAttendance(studentId),
       getStudentTranscripts(studentId),
       getNeedsHelpInfo(student.id),
-      hasLowMoodStreak(student.id),
       getAppointmentsForStudent(student.id),
       getFollowupsForStudent(student.id),
       getStudentMessageSummary(student.id),
@@ -158,7 +177,6 @@ async function getStudentDetailController(req, res) {
       },
       flags: {
         needsHelp,
-        lowMood,
       },
       appointments: appointmentRows.slice(0, 20).map(mapAppointment),
       followups: followupRows.map(followupToDto),
@@ -220,6 +238,8 @@ async function getDashboardSummaryController(req, res) {
       return res.status(403).json(FORBIDDEN);
     }
 
+    const { month, start, end } = currentMonthBounds();
+
     const [
       stats,
       apptSummary,
@@ -228,6 +248,13 @@ async function getDashboardSummaryController(req, res) {
       threads,
       announcements,
       sisRows,
+      supportStatus,
+      todayRows,
+      pendingReports,
+      reportStats,
+      topLocations,
+      weeklyActivity,
+      needsHelpStudents,
     ] = await Promise.all([
       getDashboardStats(),
       getAppointmentSummary(),
@@ -236,6 +263,13 @@ async function getDashboardSummaryController(req, res) {
       getGuidanceThreads(),
       getAnnouncementsByAuthor(req.user.id),
       getAllStudentSIS(),
+      getSupportStatusBreakdown(),
+      getTodayAppointments(),
+      getPendingReportCount(),
+      getReportStats(start, end),
+      getTopReportLocations(start, end, 5),
+      getWeeklyActivity(4),
+      getNeedsHelpStudents(),
     ]);
 
     // Messages: only threads that actually have a message
@@ -259,6 +293,12 @@ async function getDashboardSummaryController(req, res) {
       if (row.status === "in_progress") inProgress += 1;
       else notStarted += 1;
       incompleteStudentIds.push(row.user_id);
+    });
+
+    // Accessibility reports for this month
+    const byStatus = { pending: 0, in_progress: 0, resolved: 0 };
+    reportStats.statusRows.forEach((row) => {
+      byStatus[row.status] = Number(row.count);
     });
 
     const next = apptSummary.next;
@@ -307,6 +347,47 @@ async function getDashboardSummaryController(req, res) {
         inProgress,
         notStarted,
         incompleteStudentIds,
+      },
+
+      // ---- redesigned dashboard ----
+      supportStatus: {
+        total: supportStatus.total,
+        followUp: supportStatus.followUp,
+        appointmentPending: supportStatus.appointmentPending,
+        awaitingReply: supportStatus.awaitingReply,
+        noOpenItems: supportStatus.noOpenItems,
+      },
+      needsAttention: {
+        followups: activeCount,
+        pendingAppointments: apptSummary.pendingCount,
+        unansweredMessages: supportStatus.awaitingReplyTotal,
+        pendingReports,
+        appointmentsToday: todayRows.length,
+        needsHelp: needsHelpStudents.length,
+      },
+      needsHelpStudents: needsHelpStudents.slice(0, 5),
+      today: todayRows.map((a) => ({
+        id: a.id,
+        studentId: a.student_id,
+        studentName: a.student_name,
+        reason: a.reason,
+        status: a.status,
+        time: a.confirmed_time,
+      })),
+      accessibility: {
+        month,
+        total: byStatus.pending + byStatus.in_progress + byStatus.resolved,
+        pending: byStatus.pending,
+        inProgress: byStatus.in_progress,
+        resolved: byStatus.resolved,
+        topLocations,
+        topCategories: reportStats.categoryRows.slice(0, 5).map((row) => ({
+          category: row.category,
+          count: Number(row.count),
+        })),
+      },
+      activity: {
+        weeks: weeklyActivity,
       },
     });
   } catch (err) {

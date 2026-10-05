@@ -206,8 +206,9 @@ export default function ClassPulse({
           marginTop: 4,
         }}
       >
-        Anonymous. Your teacher only sees class totals, and only when enough
-        students answer.
+        Your teacher only sees class totals, and only when enough students
+        answer. If class feels hard several times in a row, the Guidance Office
+        may check in with you.
       </Text>
 
       <View style={[styles.row, { marginTop: spacing.md, gap: 10 }]}>

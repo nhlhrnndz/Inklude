@@ -2,6 +2,10 @@
 const { getSessionById, wasParticipant } = require("../models/sessionModel");
 const { getClassById, isClassMember } = require("../models/classModel");
 const {
+  hasActiveFollowup,
+  createFollowup,
+} = require("../models/followupModel");
+const {
   MOOD,
   PHASES,
   MIN_RESPONSES,
@@ -13,15 +17,38 @@ const {
   recordExperience,
   getSessionExperience,
   getClassExperience,
+  hasLowMoodStreak,
 } = require("../models/ClassPulse");
 
 const VALID_MOODS = [MOOD.SAD, MOOD.OKAY, MOOD.HAPPY];
+
+// Matches one of the reasons in followupController's REASONS list.
+const REPEATED_DIFFICULTY_REASON = "Repeated class difficulty";
 
 // A student can use a session if they belong to its class (or, for a session
 // with no class, if they joined it).
 async function studentCanAccess(timing, userId) {
   if (timing.class_id) return isClassMember(timing.class_id, userId);
   return wasParticipant(timing.id, userId);
+}
+
+// When a student answers "Difficult" after class and has done so after each of
+// their last few finished classes, open one "Repeated class difficulty"
+// follow-up for Guidance. It never blocks or fails the student's answer.
+async function flagRepeatedDifficulty(studentId) {
+  try {
+    if (!(await hasLowMoodStreak(studentId))) return;
+    if (await hasActiveFollowup(studentId, REPEATED_DIFFICULTY_REASON)) return;
+
+    await createFollowup({
+      studentId,
+      createdBy: null,
+      reason: REPEATED_DIFFICULTY_REASON,
+      note: "Added automatically: the student answered Difficult after each of their most recent classes.",
+    });
+  } catch (err) {
+    console.error("flagRepeatedDifficulty error:", err);
+  }
 }
 
 // GET /api/class-pulse/session/:sessionId/due  (student)
@@ -157,6 +184,11 @@ async function submitExperienceController(req, res) {
       return res
         .status(409)
         .json({ message: "You already answered this one." });
+    }
+
+    // Difficult after class: check for a repeated pattern (never blocks the answer)
+    if (phase === "after" && mood === MOOD.SAD) {
+      await flagRepeatedDifficulty(req.user.id);
     }
 
     res.status(201).json({ message: "Thanks for sharing." });

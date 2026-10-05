@@ -6,9 +6,9 @@ import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import { useTheme } from "../context/ThemeContext";
 import {
-    ClassInsights,
-    PulsePhaseSummary,
-    getClassInsights,
+  ClassInsights,
+  PulsePhaseSummary,
+  getClassInsights,
 } from "../utils/checkinApi";
 
 type Props = { classId: number };
@@ -187,9 +187,9 @@ export default function ClassExperienceInsights({ classId }: Props) {
           marginBottom: spacing.md,
         }}
       >
-        Students answer before and after each class. Answers are anonymous. A
-        breakdown only appears once at least {min} students have answered, and
-        you never see who said what.
+        Students answer before and after each class. Answers are never shown to
+        you by name. A breakdown only appears once at least {min} students have
+        answered, and you never see who said what.
       </Text>
 
       <Text

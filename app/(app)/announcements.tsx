@@ -1,5 +1,6 @@
 // app/(app)/announcements.tsx
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -23,28 +24,19 @@ import {
 import { COLLEGES } from "../../constants/courses";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
-import {
-  getMyAnnouncements,
-  getMySessions,
-  postAnnouncement,
-} from "../../utils/api";
+import { getMyAnnouncements, postAnnouncement } from "../../utils/api";
 
 const TITLE_MAX = 150;
 const BODY_MAX = 2000;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^\d{2}:\d{2}$/;
 
-type Session = {
-  id: number;
-  code: string;
-  title: string;
-  status: "active" | "ended";
-};
-
 type Announcement = {
   id: number;
-  audience: "session" | "all_students" | "college";
+  audience: "class" | "session" | "all_students" | "college";
   audienceLabel: string | null;
+  classId: number | null;
+  classTitle: string | null;
   sessionId: number | null;
   sessionTitle: string | null;
   title: string;
@@ -54,11 +46,13 @@ type Announcement = {
 };
 
 export default function AnnouncementsScreen() {
+  const router = useRouter();
   const { user } = useAuth();
   const { colors, typography, spacing, radius } = useTheme();
 
   const isTeacher = user?.role === "teacher";
-  const canPost = isTeacher || user?.role === "guidance";
+  const isGuidance = user?.role === "guidance";
+  const canPost = isTeacher || isGuidance;
 
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -66,31 +60,14 @@ export default function AnnouncementsScreen() {
   const [deadlineTime, setDeadlineTime] = useState("");
   const [audienceMode, setAudienceMode] = useState<"all" | "college">("all");
   const [selectedColleges, setSelectedColleges] = useState<string[]>([]);
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [selectedSessionId, setSelectedSessionId] = useState<number | null>(
-    null,
-  );
   const [history, setHistory] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
-      const [annRes, sessRes] = await Promise.all([
-        getMyAnnouncements(),
-        isTeacher ? getMySessions() : Promise.resolve(null),
-      ]);
-
+      const annRes = await getMyAnnouncements();
       setHistory(annRes.announcements ?? []);
-
-      if (sessRes) {
-        // Active sessions first, keep newest-first order within each group
-        const list: Session[] = [...(sessRes.sessions ?? [])].sort((a, b) =>
-          a.status === b.status ? 0 : a.status === "active" ? -1 : 1,
-        );
-        setSessions(list);
-        setSelectedSessionId((prev) => prev ?? list[0]?.id ?? null);
-      }
     } catch (err: any) {
       Toast.show({
         type: "error",
@@ -100,7 +77,7 @@ export default function AnnouncementsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [isTeacher]);
+  }, []);
 
   useEffect(() => {
     if (canPost) {
@@ -110,6 +87,7 @@ export default function AnnouncementsScreen() {
     }
   }, [canPost, loadData]);
 
+  // Guidance only. Teachers post from inside their class.
   const handlePost = async () => {
     if (!title.trim() || !body.trim()) {
       Toast.show({
@@ -119,20 +97,8 @@ export default function AnnouncementsScreen() {
       });
       return;
     }
-    if (isTeacher && !selectedSessionId) {
-      Toast.show({
-        type: "error",
-        text1: "Choose a session",
-        text2: "Select which session this announcement is for.",
-      });
-      return;
-    }
 
-    if (
-      !isTeacher &&
-      audienceMode === "college" &&
-      selectedColleges.length === 0
-    ) {
+    if (audienceMode === "college" && selectedColleges.length === 0) {
       Toast.show({
         type: "error",
         text1: "Choose a college",
@@ -141,7 +107,6 @@ export default function AnnouncementsScreen() {
       return;
     }
 
-    // Deadline is optional, but if one half is filled the other is needed.
     let deadline: string | undefined;
     if (deadlineDate || deadlineTime) {
       if (!DATE_RE.test(deadlineDate) || !TIME_RE.test(deadlineTime)) {
@@ -160,9 +125,8 @@ export default function AnnouncementsScreen() {
       const res = await postAnnouncement({
         title: title.trim(),
         body: body.trim(),
-        sessionId: isTeacher ? (selectedSessionId ?? undefined) : undefined,
         deadline,
-        ...(!isTeacher && audienceMode === "college"
+        ...(audienceMode === "college"
           ? {
               audience: "college",
               colleges: selectedColleges,
@@ -179,9 +143,7 @@ export default function AnnouncementsScreen() {
         text1: "Announcement posted",
         text2:
           count === 0
-            ? isTeacher
-              ? "No students have joined this session yet."
-              : "No students match that audience yet."
+            ? "No students match that audience yet."
             : `Sent to ${count} student${count === 1 ? "" : "s"}${
                 deadline ? " and added to their calendars." : "."
               }`,
@@ -253,6 +215,12 @@ export default function AnnouncementsScreen() {
     );
   }
 
+  const audienceText = (a: Announcement) => {
+    if (a.audience === "all_students") return "All students";
+    if (a.audience === "college") return `Colleges: ${a.audienceLabel ?? ""}`;
+    return a.classTitle ?? a.sessionTitle ?? "Class";
+  };
+
   return (
     <SafeAreaView
       style={[styles.safeArea, { backgroundColor: colors.background }]}
@@ -276,77 +244,10 @@ export default function AnnouncementsScreen() {
             }}
             accessibilityRole="header"
           >
-            Post Announcement
+            {isTeacher ? "Announcements" : "Post Announcement"}
           </Text>
 
-          {isTeacher ? (
-            <>
-              <Text style={labelStyle}>SEND TO STUDENTS IN</Text>
-              {loading ? (
-                <ActivityIndicator color={colors.primary} />
-              ) : sessions.length === 0 ? (
-                <Text
-                  style={{
-                    fontFamily: typography.caption.fontFamily,
-                    fontSize: typography.caption.fontSize,
-                    color: colors.textSecondary,
-                  }}
-                >
-                  Create a session first, then you can post announcements to it.
-                </Text>
-              ) : (
-                <View style={[styles.chipRow, { gap: spacing.sm }]}>
-                  {sessions.map((s) => {
-                    const selected = s.id === selectedSessionId;
-                    return (
-                      <TouchableOpacity
-                        key={s.id}
-                        onPress={() => setSelectedSessionId(s.id)}
-                        accessibilityRole="button"
-                        accessibilityLabel={`${s.title}, code ${s.code}, ${s.status === "active" ? "live" : "ended"}`}
-                        accessibilityState={{ selected }}
-                        style={[
-                          styles.chip,
-                          {
-                            borderColor: selected
-                              ? colors.primary
-                              : colors.border,
-                            backgroundColor: selected
-                              ? colors.primary
-                              : colors.surface,
-                            borderRadius: radius.md,
-                            paddingHorizontal: spacing.md,
-                            paddingVertical: spacing.sm,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={{
-                            fontFamily: typography.body.fontFamily,
-                            fontSize: typography.caption.fontSize,
-                            fontWeight: "700",
-                            color: selected ? "#FFFFFF" : colors.text,
-                          }}
-                        >
-                          {s.title}
-                        </Text>
-                        <Text
-                          style={{
-                            fontFamily: typography.caption.fontFamily,
-                            fontSize: 11,
-                            color: selected ? "#FFFFFF" : colors.textSecondary,
-                            marginTop: 2,
-                          }}
-                        >
-                          #{s.code} · {s.status === "active" ? "Live" : "Ended"}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              )}
-            </>
-          ) : (
+          {isTeacher && (
             <View
               style={[
                 styles.infoBox,
@@ -360,7 +261,7 @@ export default function AnnouncementsScreen() {
               ]}
             >
               <Ionicons
-                name="people-outline"
+                name="information-circle-outline"
                 size={20}
                 color={colors.primary}
               />
@@ -373,17 +274,48 @@ export default function AnnouncementsScreen() {
                   color: colors.text,
                 }}
               >
-                {audienceMode === "all"
-                  ? "This announcement will be sent to all students."
-                  : selectedColleges.length === 0
-                    ? "Choose which colleges should receive this."
-                    : `This announcement will go to students in: ${selectedColleges.join(", ")}.`}
+                To post a new announcement, open a class and use its
+                Announcements tab. Everything you've posted is listed here.
               </Text>
             </View>
           )}
 
-          {!isTeacher && (
+          {isGuidance && (
             <>
+              <View
+                style={[
+                  styles.infoBox,
+                  {
+                    backgroundColor: colors.primaryLight + "1A",
+                    borderColor: colors.primary,
+                    borderRadius: radius.md,
+                    padding: spacing.md,
+                    marginTop: spacing.md,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="people-outline"
+                  size={20}
+                  color={colors.primary}
+                />
+                <Text
+                  style={{
+                    flex: 1,
+                    marginLeft: spacing.sm,
+                    fontFamily: typography.caption.fontFamily,
+                    fontSize: typography.caption.fontSize,
+                    color: colors.text,
+                  }}
+                >
+                  {audienceMode === "all"
+                    ? "This announcement will be sent to all students."
+                    : selectedColleges.length === 0
+                      ? "Choose which colleges should receive this."
+                      : `This announcement will go to students in: ${selectedColleges.join(", ")}.`}
+                </Text>
+              </View>
+
               <Text style={labelStyle}>AUDIENCE</Text>
               <View style={[styles.chipRow, { gap: spacing.sm }]}>
                 {(
@@ -486,131 +418,135 @@ export default function AnnouncementsScreen() {
                   })}
                 </View>
               )}
-            </>
-          )}
 
-          <Text style={labelStyle}>TITLE</Text>
-          <TextInput
-            style={inputStyle}
-            value={title}
-            onChangeText={setTitle}
-            placeholder="e.g. Quiz moved to Friday"
-            placeholderTextColor={colors.placeholder}
-            maxLength={TITLE_MAX}
-            accessibilityLabel="Announcement title"
-          />
+              <Text style={labelStyle}>TITLE</Text>
+              <TextInput
+                style={inputStyle}
+                value={title}
+                onChangeText={setTitle}
+                placeholder="e.g. Career Fair this Friday"
+                placeholderTextColor={colors.placeholder}
+                maxLength={TITLE_MAX}
+                accessibilityLabel="Announcement title"
+              />
 
-          <Text style={labelStyle}>MESSAGE</Text>
-          <TextInput
-            style={[inputStyle, styles.bodyInput]}
-            value={body}
-            onChangeText={setBody}
-            placeholder="Write your announcement..."
-            placeholderTextColor={colors.placeholder}
-            multiline
-            maxLength={BODY_MAX}
-            textAlignVertical="top"
-            accessibilityLabel="Announcement message"
-          />
-          <Text
-            style={{
-              alignSelf: "flex-end",
-              marginTop: 4,
-              fontFamily: typography.caption.fontFamily,
-              fontSize: 11,
-              color: colors.placeholder,
-            }}
-          >
-            {body.length}/{BODY_MAX}
-          </Text>
-
-          <Text style={labelStyle}>DEADLINE (OPTIONAL)</Text>
-          <Text
-            style={{
-              fontFamily: typography.caption.fontFamily,
-              fontSize: 11,
-              color: colors.textSecondary,
-              marginBottom: spacing.sm,
-            }}
-          >
-            If you set one, it appears on every recipient's calendar.
-          </Text>
-          <DateField
-            value={deadlineDate}
-            onChange={setDeadlineDate}
-            label="Deadline date"
-            placeholder="Pick a date (optional)"
-            minDate={todayString()}
-          />
-          <TimeField
-            value={deadlineTime}
-            onChange={setDeadlineTime}
-            label="Deadline time"
-            placeholder="Pick a time (optional)"
-          />
-          {!!(deadlineDate || deadlineTime) && (
-            <TouchableOpacity
-              onPress={() => {
-                setDeadlineDate("");
-                setDeadlineTime("");
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Clear deadline"
-              style={{
-                alignSelf: "flex-start",
-                minHeight: 44,
-                justifyContent: "center",
-              }}
-            >
+              <Text style={labelStyle}>MESSAGE</Text>
+              <TextInput
+                style={[inputStyle, styles.bodyInput]}
+                value={body}
+                onChangeText={setBody}
+                placeholder="Write your announcement..."
+                placeholderTextColor={colors.placeholder}
+                multiline
+                maxLength={BODY_MAX}
+                textAlignVertical="top"
+                accessibilityLabel="Announcement message"
+              />
               <Text
                 style={{
-                  fontFamily: typography.body.fontFamily,
-                  fontSize: typography.caption.fontSize,
-                  fontWeight: "700",
-                  color: colors.primary,
+                  alignSelf: "flex-end",
+                  marginTop: 4,
+                  fontFamily: typography.caption.fontFamily,
+                  fontSize: 11,
+                  color: colors.placeholder,
                 }}
               >
-                Clear deadline
+                {body.length}/{BODY_MAX}
               </Text>
-            </TouchableOpacity>
-          )}
 
-          <TouchableOpacity
-            onPress={handlePost}
-            disabled={posting}
-            accessibilityRole="button"
-            accessibilityLabel="Post announcement"
-            accessibilityState={{ disabled: posting }}
-            style={[
-              styles.postButton,
-              {
-                backgroundColor: colors.primary,
-                borderRadius: radius.md,
-                paddingVertical: spacing.md,
-                marginTop: spacing.md,
-                opacity: posting ? 0.6 : 1,
-              },
-            ]}
-          >
-            {posting ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <>
-                <Ionicons name="megaphone-outline" size={20} color="#FFFFFF" />
-                <Text
+              <Text style={labelStyle}>DEADLINE (OPTIONAL)</Text>
+              <Text
+                style={{
+                  fontFamily: typography.caption.fontFamily,
+                  fontSize: 11,
+                  color: colors.textSecondary,
+                  marginBottom: spacing.sm,
+                }}
+              >
+                If you set one, it appears on every recipient's calendar.
+              </Text>
+              <DateField
+                value={deadlineDate}
+                onChange={setDeadlineDate}
+                label="Deadline date"
+                placeholder="Pick a date (optional)"
+                minDate={todayString()}
+              />
+              <TimeField
+                value={deadlineTime}
+                onChange={setDeadlineTime}
+                label="Deadline time"
+                placeholder="Pick a time (optional)"
+              />
+              {!!(deadlineDate || deadlineTime) && (
+                <TouchableOpacity
+                  onPress={() => {
+                    setDeadlineDate("");
+                    setDeadlineTime("");
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear deadline"
                   style={{
-                    marginLeft: spacing.sm,
-                    fontFamily: typography.body.fontFamily,
-                    fontSize: typography.body.fontSize,
-                    fontWeight: "700",
-                    color: "#FFFFFF",
+                    alignSelf: "flex-start",
+                    minHeight: 44,
+                    justifyContent: "center",
                   }}
                 >
-                  Post Announcement
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
+                  <Text
+                    style={{
+                      fontFamily: typography.body.fontFamily,
+                      fontSize: typography.caption.fontSize,
+                      fontWeight: "700",
+                      color: colors.primary,
+                    }}
+                  >
+                    Clear deadline
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                onPress={handlePost}
+                disabled={posting}
+                accessibilityRole="button"
+                accessibilityLabel="Post announcement"
+                accessibilityState={{ disabled: posting }}
+                style={[
+                  styles.postButton,
+                  {
+                    backgroundColor: colors.primary,
+                    borderRadius: radius.md,
+                    paddingVertical: spacing.md,
+                    marginTop: spacing.md,
+                    opacity: posting ? 0.6 : 1,
+                  },
+                ]}
+              >
+                {posting ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons
+                      name="megaphone-outline"
+                      size={20}
+                      color="#FFFFFF"
+                    />
+                    <Text
+                      style={{
+                        marginLeft: spacing.sm,
+                        fontFamily: typography.body.fontFamily,
+                        fontSize: typography.body.fontSize,
+                        fontWeight: "700",
+                        color: "#FFFFFF",
+                      }}
+                    >
+                      Post Announcement
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </>
+          )}
 
           <Text
             style={{
@@ -618,13 +554,15 @@ export default function AnnouncementsScreen() {
               fontSize: 18,
               fontWeight: "700",
               color: colors.text,
-              marginTop: spacing.xl,
+              marginTop: isTeacher ? spacing.lg : spacing.xl,
               marginBottom: spacing.md,
             }}
             accessibilityRole="header"
           >
-            Recent Announcements
+            {isTeacher ? "Posted announcements" : "Recent Announcements"}
           </Text>
+
+          {loading && <ActivityIndicator color={colors.primary} />}
 
           {!loading && history.length === 0 && (
             <Text
@@ -638,72 +576,76 @@ export default function AnnouncementsScreen() {
             </Text>
           )}
 
-          {history.map((a) => (
-            <View
-              key={a.id}
-              style={[
-                styles.historyCard,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  borderRadius: radius.md,
-                  padding: spacing.md,
-                  marginBottom: spacing.sm,
-                },
-              ]}
-            >
-              <Text
-                style={{
-                  fontFamily: typography.body.fontFamily,
-                  fontSize: typography.body.fontSize,
-                  fontWeight: "700",
-                  color: colors.text,
-                }}
+          {history.map((a) => {
+            const openable = isTeacher && !!a.classId;
+            return (
+              <TouchableOpacity
+                key={a.id}
+                disabled={!openable}
+                onPress={() => router.push(`/class/${a.classId}` as any)}
+                accessibilityRole={openable ? "button" : undefined}
+                accessibilityLabel={
+                  openable ? `Open class ${a.classTitle ?? ""}` : undefined
+                }
+                style={[
+                  styles.historyCard,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    borderRadius: radius.md,
+                    padding: spacing.md,
+                    marginBottom: spacing.sm,
+                  },
+                ]}
               >
-                {a.title}
-              </Text>
-              <Text
-                style={{
-                  fontFamily: typography.caption.fontFamily,
-                  fontSize: 11,
-                  color: colors.primary,
-                  fontWeight: "600",
-                  marginTop: 2,
-                }}
-              >
-                {a.audience === "all_students"
-                  ? "All students"
-                  : a.audience === "college"
-                    ? `Colleges: ${a.audienceLabel ?? ""}`
-                    : (a.sessionTitle ?? "Session")}{" "}
-                · {new Date(a.createdAt).toLocaleString()}
-              </Text>
-              {a.deadline ? (
+                <Text
+                  style={{
+                    fontFamily: typography.body.fontFamily,
+                    fontSize: typography.body.fontSize,
+                    fontWeight: "700",
+                    color: colors.text,
+                  }}
+                >
+                  {a.title}
+                </Text>
                 <Text
                   style={{
                     fontFamily: typography.caption.fontFamily,
                     fontSize: 11,
-                    fontWeight: "700",
-                    color: colors.textSecondary,
+                    color: colors.primary,
+                    fontWeight: "600",
                     marginTop: 2,
                   }}
                 >
-                  Deadline: {new Date(a.deadline).toLocaleString()}
+                  {audienceText(a)} · {new Date(a.createdAt).toLocaleString()}
                 </Text>
-              ) : null}
-              <Text
-                style={{
-                  fontFamily: typography.caption.fontFamily,
-                  fontSize: typography.caption.fontSize,
-                  color: colors.textSecondary,
-                  marginTop: 6,
-                }}
-                numberOfLines={3}
-              >
-                {a.body}
-              </Text>
-            </View>
-          ))}
+                {a.deadline ? (
+                  <Text
+                    style={{
+                      fontFamily: typography.caption.fontFamily,
+                      fontSize: 11,
+                      fontWeight: "700",
+                      color: colors.textSecondary,
+                      marginTop: 2,
+                    }}
+                  >
+                    Deadline: {new Date(a.deadline).toLocaleString()}
+                  </Text>
+                ) : null}
+                <Text
+                  style={{
+                    fontFamily: typography.caption.fontFamily,
+                    fontSize: typography.caption.fontSize,
+                    color: colors.textSecondary,
+                    marginTop: 6,
+                  }}
+                  numberOfLines={3}
+                >
+                  {a.body}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

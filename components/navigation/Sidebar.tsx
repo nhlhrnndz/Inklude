@@ -46,35 +46,20 @@ interface NavItem {
 
 const NAV_ITEMS: Record<UserRole, NavItem[]> = {
   student: [
+    { key: "dashboard", label: "Dashboard", icon: "home-outline" },
+    { key: "mySessions", label: "My Classes", icon: "albums-outline" },
+    { key: "joinSession", label: "Join Class", icon: "enter-outline" },
+    { key: "guidance", label: "Guidance", icon: "heart-outline" },
     {
-      key: "dashboard",
-      label: "Dashboard",
-      icon: "home-outline",
+      key: "reportIssue",
+      label: "Report an Issue",
+      icon: "alert-circle-outline",
     },
+    { key: "events", label: "Campus Events", icon: "calendar-number-outline" },
     {
-      key: "mySessions",
-      label: "My Classes",
-      icon: "albums-outline",
-    },
-    {
-      key: "joinSession",
-      label: "Join Class",
-      icon: "enter-outline",
-    },
-    {
-      key: "notifications",
-      label: "Notifications",
-      icon: "notifications-outline",
-    },
-    {
-      key: "guidance",
-      label: "Guidance",
-      icon: "heart-outline",
-    },
-    {
-      key: "profile",
-      label: "Profile",
-      icon: "person-outline",
+      key: "accessibilityMap",
+      label: "Accessibility Map",
+      icon: "map-outline",
     },
     {
       key: "sis",
@@ -82,15 +67,11 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
       icon: "document-text-outline",
     },
     {
-      key: "settings",
-      label: "Settings",
-      icon: "settings-outline",
-    },
-    {
       key: "accessibility",
       label: "Accessibility Preferences",
       icon: "options-outline",
     },
+    { key: "settings", label: "Settings", icon: "settings-outline" },
   ],
   teacher: [
     { key: "dashboard", label: "Dashboard", icon: "home-outline" },
@@ -100,17 +81,7 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
       icon: "add-circle-outline",
     },
     { key: "mySessions", label: "My Classes", icon: "albums-outline" },
-    {
-      key: "referrals",
-      label: "Guidance Referrals",
-      icon: "school-outline",
-    },
-    {
-      key: "notifications",
-      label: "Notifications",
-      icon: "notifications-outline",
-    },
-    { key: "students", label: "Students", icon: "people-outline" },
+    { key: "referrals", label: "Guidance Referrals", icon: "school-outline" },
     { key: "profile", label: "Profile", icon: "person-outline" },
     { key: "settings", label: "Settings", icon: "settings-outline" },
   ],
@@ -118,16 +89,20 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { key: "dashboard", label: "Dashboard", icon: "home-outline" },
     { key: "students", label: "Students", icon: "people-outline" },
     { key: "appointments", label: "Appointments", icon: "calendar-outline" },
-    { key: "belonging", label: "Belonging", icon: "heart-outline" },
     { key: "messages", label: "Messages", icon: "chatbubble-ellipses-outline" },
-    { key: "sessions", label: "Sessions", icon: "albums-outline" },
+    {
+      key: "accessibilityReports",
+      label: "Accessibility Reports",
+      icon: "alert-circle-outline",
+    },
+    { key: "events", label: "Campus Events", icon: "calendar-number-outline" },
+    {
+      key: "accessibilityMap",
+      label: "Accessibility Map",
+      icon: "map-outline",
+    },
     { key: "reports", label: "Reports", icon: "document-text-outline" },
     { key: "announcements", label: "Announcements", icon: "megaphone-outline" },
-    {
-      key: "notifications",
-      label: "Notifications",
-      icon: "notifications-outline",
-    },
     { key: "profile", label: "Profile", icon: "person-outline" },
     { key: "settings", label: "Settings", icon: "settings-outline" },
   ],

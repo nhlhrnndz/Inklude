@@ -1,4 +1,4 @@
-// app/class/[id].tsx — class detail: sessions + people + support + experience
+// app/class/[id].tsx — class page (Google Classroom style)
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
@@ -23,6 +23,7 @@ import {
   TimeField,
   todayString,
 } from "../../components/DateTimePicker";
+import SessionDocuments from "../../components/SessionDocuments";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
 import {
@@ -36,22 +37,42 @@ import {
   ClassSummary,
   cancelAccommodationRequest,
   createAccommodationRequest,
-  createClassSession,
+  enterSession,
   getClassAccommodationRequests,
+  getClassAnnouncements,
   getClassDetails,
   getClassMembers,
   getMyAccommodationRequests,
   leaveClass,
+  openClassSession,
+  postAnnouncement,
   respondToAccommodationRequest,
 } from "../../utils/api";
+import { formatMeetingSchedule } from "../../utils/classSchedule";
 import { crossAlert } from "../../utils/crossAlert";
 
-type Tab = "sessions" | "people" | "support" | "experience";
+type Tab =
+  | "announcements"
+  | "people"
+  | "support"
+  | "experience"
+  | "documents"
+  | "classwork";
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const TIME_RE = /^\d{2}:\d{2}$/;
+type ClassAnnouncement = {
+  id: number;
+  title: string;
+  body: string;
+  deadline: string | null;
+  createdAt: string;
+};
+
 const NOTE_MAX = 300;
 const REASON_MAX = 200;
+const TITLE_MAX = 150;
+const BODY_MAX = 2000;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^\d{2}:\d{2}$/;
 
 const STATUS_LABEL: Record<AccommodationStatus, string> = {
   pending: "PENDING",
@@ -60,24 +81,6 @@ const STATUS_LABEL: Record<AccommodationStatus, string> = {
   discuss: "LET'S TALK",
   cancelled: "WITHDRAWN",
 };
-
-function formatSchedule(s: ClassSession) {
-  if (!s.scheduledStart) return "Not scheduled";
-  const start = new Date(s.scheduledStart);
-  let text = start.toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  if (s.scheduledEnd) {
-    text += ` – ${new Date(s.scheduledEnd).toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit",
-    })}`;
-  }
-  return text;
-}
 
 export default function ClassDetailScreen() {
   const router = useRouter();
@@ -89,14 +92,16 @@ export default function ClassDetailScreen() {
   const { colors, typography, spacing, radius } = useTheme();
 
   const isTeacher = user?.role === "teacher";
+  const classId = Number(id);
 
   const [cls, setCls] = useState<ClassSummary | null>(null);
   const [sessions, setSessions] = useState<ClassSession[]>([]);
   const [members, setMembers] = useState<ClassMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [goingLive, setGoingLive] = useState(false);
   const [tab, setTab] = useState<Tab>(
-    tabParam === "support" ? "support" : "sessions",
+    tabParam === "support" ? "support" : "announcements",
   );
 
   // A notification can open this screen straight on the support tab.
@@ -104,12 +109,13 @@ export default function ClassDetailScreen() {
     if (tabParam === "support") setTab("support");
   }, [tabParam]);
 
-  const [showForm, setShowForm] = useState(false);
-  const [sTitle, setSTitle] = useState("");
-  const [sDate, setSDate] = useState("");
-  const [sStart, setSStart] = useState("");
-  const [sEnd, setSEnd] = useState("");
-  const [creating, setCreating] = useState(false);
+  // Announcements
+  const [announcements, setAnnouncements] = useState<ClassAnnouncement[]>([]);
+  const [annTitle, setAnnTitle] = useState("");
+  const [annBody, setAnnBody] = useState("");
+  const [annDate, setAnnDate] = useState("");
+  const [annTime, setAnnTime] = useState("");
+  const [posting, setPosting] = useState(false);
 
   // Accommodation requests
   const [requests, setRequests] = useState<AccommodationRequest[]>([]);
@@ -122,29 +128,34 @@ export default function ClassDetailScreen() {
 
   const loadRequests = useCallback(async () => {
     try {
-      if (isTeacher) {
-        const data = await getClassAccommodationRequests(Number(id));
-        setRequests(data.requests || []);
-      } else {
-        const data = await getMyAccommodationRequests(Number(id));
-        setRequests(data.requests || []);
-      }
+      const data = isTeacher
+        ? await getClassAccommodationRequests(classId)
+        : await getMyAccommodationRequests(classId);
+      setRequests(data.requests || []);
     } catch (err) {
       console.error("Error loading accommodation requests:", err);
     }
-  }, [id, isTeacher]);
+  }, [classId, isTeacher]);
+
+  const loadAnnouncements = useCallback(async () => {
+    try {
+      const data = await getClassAnnouncements(classId);
+      setAnnouncements(data.announcements || []);
+    } catch (err) {
+      console.error("Error loading announcements:", err);
+    }
+  }, [classId]);
 
   const load = useCallback(async () => {
     try {
       const [details, mem] = await Promise.all([
-        getClassDetails(Number(id)),
-        getClassMembers(Number(id)),
+        getClassDetails(classId),
+        getClassMembers(classId),
       ]);
       setCls(details.class);
       setSessions(details.sessions || []);
       setMembers(mem.members || []);
-      // Requests load on their own so a failure here never hides the class.
-      await loadRequests();
+      await Promise.all([loadRequests(), loadAnnouncements()]);
     } catch (err) {
       console.error("Error loading class:", err);
       setCls(null);
@@ -152,12 +163,26 @@ export default function ClassDetailScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [id, loadRequests]);
+  }, [classId, loadRequests, loadAnnouncements]);
 
   useFocusEffect(
     useCallback(() => {
       load();
-    }, [load]),
+
+      // Keep "Join live class" up to date: quietly re-check the class every
+      // 4 seconds while this screen is open.
+      const timer = setInterval(async () => {
+        try {
+          const details = await getClassDetails(classId);
+          setCls(details.class);
+          setSessions(details.sessions || []);
+        } catch {
+          // ignore, the next check will try again
+        }
+      }, 4000);
+
+      return () => clearInterval(timer);
+    }, [load, classId]),
   );
 
   const goBack = () => {
@@ -168,52 +193,35 @@ export default function ClassDetailScreen() {
     router.replace("/my-classes");
   };
 
-  const handleCreateSession = async () => {
-    const date = sDate.trim();
-    const start = sStart.trim();
-    const end = sEnd.trim();
-
-    if (date || start || end) {
-      if (!DATE_RE.test(date) || !TIME_RE.test(start)) {
-        crossAlert(
-          "Check the schedule",
-          "Pick a date and a start time. Or leave all three empty to add an unscheduled session.",
-        );
-        return;
-      }
-      if (end && !TIME_RE.test(end)) {
-        crossAlert("Check the schedule", "Pick a valid end time.");
-        return;
-      }
-      if (end && end <= start) {
-        crossAlert(
-          "Check the schedule",
-          "The end time must be later than the start time.",
-        );
-        return;
-      }
-    }
-
-    setCreating(true);
+  // ---- Go Live (teacher) / Join live (student) ----
+  const handleGoLive = async () => {
+    setGoingLive(true);
     try {
-      await createClassSession(Number(id), {
-        title: sTitle.trim() || undefined,
-        scheduledStart: date ? `${date} ${start}` : undefined,
-        scheduledEnd: date && end ? `${date} ${end}` : undefined,
-      });
-      setSTitle("");
-      setSDate("");
-      setSStart("");
-      setSEnd("");
-      setShowForm(false);
-      await load();
+      const res = await openClassSession(classId);
+      router.push(`/session/${res.sessionId}/live` as any);
     } catch (error: any) {
       crossAlert(
-        "Error",
-        error.response?.data?.message || "Failed to add session",
+        "Could not go live",
+        error.response?.data?.message || "Please try again.",
       );
     } finally {
-      setCreating(false);
+      setGoingLive(false);
+    }
+  };
+
+  const handleJoinLive = async () => {
+    if (!cls?.liveSessionId) return;
+    setGoingLive(true);
+    try {
+      await enterSession(cls.liveSessionId);
+      router.push(`/session/${cls.liveSessionId}/live` as any);
+    } catch (error: any) {
+      crossAlert(
+        "Can't join",
+        error.response?.data?.message || "Could not join the live class.",
+      );
+    } finally {
+      setGoingLive(false);
     }
   };
 
@@ -228,7 +236,7 @@ export default function ClassDetailScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              await leaveClass(Number(id));
+              await leaveClass(classId);
               router.replace("/my-classes" as any);
             } catch {
               crossAlert("Error", "Could not leave the class.");
@@ -239,6 +247,58 @@ export default function ClassDetailScreen() {
     );
   };
 
+  // ---- Teacher: post an announcement ----
+  const handlePostAnnouncement = async () => {
+    if (!annTitle.trim() || !annBody.trim()) {
+      crossAlert("Missing details", "Please enter both a title and a message.");
+      return;
+    }
+
+    let deadline: string | undefined;
+    if (annDate || annTime) {
+      if (!DATE_RE.test(annDate) || !TIME_RE.test(annTime)) {
+        crossAlert(
+          "Check the deadline",
+          "Pick both a date and a time, or clear them.",
+        );
+        return;
+      }
+      deadline = `${annDate} ${annTime}`;
+    }
+
+    setPosting(true);
+    try {
+      const res = await postAnnouncement({
+        title: annTitle.trim(),
+        body: annBody.trim(),
+        classId,
+        deadline,
+      } as any);
+      setAnnTitle("");
+      setAnnBody("");
+      setAnnDate("");
+      setAnnTime("");
+      await loadAnnouncements();
+
+      const count: number = res?.recipientCount ?? 0;
+      crossAlert(
+        "Announcement posted",
+        count === 0
+          ? "No students have joined this class yet."
+          : `Sent to ${count} student${count === 1 ? "" : "s"}${
+              deadline ? " and added to their calendars." : "."
+            }`,
+      );
+    } catch (error: any) {
+      crossAlert(
+        "Could not post",
+        error.response?.data?.message || "Please try again.",
+      );
+    } finally {
+      setPosting(false);
+    }
+  };
+
   // ---- Student: send / withdraw a request ----
   const handleSubmitRequest = async () => {
     if (!reqType) {
@@ -247,7 +307,7 @@ export default function ClassDetailScreen() {
     }
     setSubmitting(true);
     try {
-      await createAccommodationRequest(Number(id), {
+      await createAccommodationRequest(classId, {
         type: reqType,
         note: reqNote.trim() || undefined,
       });
@@ -366,6 +426,17 @@ export default function ClassDetailScreen() {
     );
   }
 
+  // ---- shared styles ----
+  const body = {
+    fontFamily: typography.body.fontFamily,
+    fontSize: typography.body.fontSize,
+    color: colors.text,
+  };
+  const caption = {
+    fontFamily: typography.caption.fontFamily,
+    fontSize: typography.caption.fontSize,
+    color: colors.textSecondary,
+  };
   const inputStyle = {
     backgroundColor: colors.secondaryBackground,
     borderColor: colors.border,
@@ -373,13 +444,72 @@ export default function ClassDetailScreen() {
     borderRadius: radius.sm,
     padding: spacing.sm,
     marginBottom: spacing.sm,
-    fontFamily: typography.body.fontFamily,
-    fontSize: typography.body.fontSize,
-    color: colors.text,
+    ...body,
+  };
+  const cardStyle = {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  };
+
+  const bigButton = (
+    label: string,
+    icon: keyof typeof Ionicons.glyphMap,
+    onPress: () => void,
+    opts: { color?: string; busy?: boolean; outline?: boolean } = {},
+  ) => {
+    const bg = opts.color ?? colors.primary;
+    return (
+      <TouchableOpacity
+        onPress={onPress}
+        disabled={opts.busy}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: 52,
+          borderRadius: radius.md,
+          backgroundColor: opts.outline ? "transparent" : bg,
+          borderWidth: opts.outline ? 1 : 0,
+          borderColor: bg,
+          opacity: opts.busy ? 0.6 : 1,
+          marginBottom: spacing.lg,
+        }}
+      >
+        {opts.busy ? (
+          <ActivityIndicator color={opts.outline ? bg : "#FFFFFF"} />
+        ) : (
+          <>
+            <Ionicons
+              name={icon}
+              size={20}
+              color={opts.outline ? bg : "#FFFFFF"}
+            />
+            <Text
+              style={{
+                marginLeft: spacing.sm,
+                fontFamily: typography.button.fontFamily,
+                fontSize: typography.button.fontSize,
+                fontWeight: "700",
+                color: opts.outline ? bg : "#FFFFFF",
+              }}
+            >
+              {label}
+            </Text>
+          </>
+        )}
+      </TouchableOpacity>
+    );
   };
 
   const tabButton = (key: Tab, label: string) => (
     <TouchableOpacity
+      key={key}
       style={[
         styles.tabButton,
         tab === key && {
@@ -433,7 +563,6 @@ export default function ClassDetailScreen() {
 
   const isOpen = (s: AccommodationStatus) => s === "pending" || s === "discuss";
 
-  // Teacher: open requests first, then the answered ones.
   const sortedRequests = [...requests].sort((a, b) => {
     const ao = isOpen(a.status) ? 0 : 1;
     const bo = isOpen(b.status) ? 0 : 1;
@@ -442,19 +571,36 @@ export default function ClassDetailScreen() {
   });
 
   const pendingCount = requests.filter((r) => r.status === "pending").length;
-
   const supportLabel = isTeacher
     ? `Requests (${pendingCount})`
     : `Support${requests.some((r) => isOpen(r.status)) ? " •" : ""}`;
 
-  const requestCardStyle = {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-  };
+  // Next scheduled meeting (not live, not ended)
+  const nextMeeting = sessions
+    .filter(
+      (s) =>
+        s.status === "active" &&
+        !s.isLive &&
+        s.scheduledStart &&
+        new Date(s.scheduledStart).getTime() > Date.now(),
+    )
+    .sort(
+      (a, b) =>
+        new Date(a.scheduledStart as string).getTime() -
+        new Date(b.scheduledStart as string).getTime(),
+    )[0];
+
+  const nextMeetingText = nextMeeting
+    ? new Date(nextMeeting.scheduledStart as string).toLocaleString([], {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : null;
+
+  const archived = cls.status !== "active";
 
   return (
     <SafeAreaView
@@ -488,19 +634,12 @@ export default function ClassDetailScreen() {
             hitSlop={8}
           >
             <Ionicons name="arrow-back" size={20} color={colors.primary} />
-            <Text
-              style={{
-                fontFamily: typography.body.fontFamily,
-                color: colors.primary,
-                fontSize: typography.body.fontSize,
-                marginLeft: 6,
-              }}
-            >
+            <Text style={[body, { color: colors.primary, marginLeft: 6 }]}>
               Back
             </Text>
           </TouchableOpacity>
 
-          {/* Banner */}
+          {/* Banner: name, code, students */}
           <View
             style={{
               backgroundColor: colors.surface,
@@ -511,40 +650,74 @@ export default function ClassDetailScreen() {
               marginBottom: spacing.lg,
             }}
           >
-            <Text
-              style={{
-                fontFamily: typography.h2.fontFamily,
-                fontSize: typography.h2.fontSize,
-                lineHeight: typography.h2.lineHeight,
-                fontWeight: typography.h2.fontWeight,
-                color: colors.text,
-              }}
-              accessibilityRole="header"
-            >
-              {cls.title}
-            </Text>
-            {cls.description ? (
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
               <Text
                 style={{
-                  fontFamily: typography.body.fontFamily,
-                  fontSize: typography.body.fontSize,
-                  color: colors.textSecondary,
-                  marginTop: 4,
+                  flex: 1,
+                  fontFamily: typography.h2.fontFamily,
+                  fontSize: typography.h2.fontSize,
+                  lineHeight: typography.h2.lineHeight,
+                  fontWeight: typography.h2.fontWeight,
+                  color: colors.text,
                 }}
+                accessibilityRole="header"
+              >
+                {cls.title}
+              </Text>
+              {cls.isLive && (
+                <View
+                  style={{
+                    backgroundColor: colors.success,
+                    borderRadius: radius.sm,
+                    paddingHorizontal: 8,
+                    paddingVertical: 3,
+                    marginLeft: 8,
+                  }}
+                >
+                  <Text style={styles.badgeText}>● LIVE</Text>
+                </View>
+              )}
+            </View>
+
+            {cls.description ? (
+              <Text
+                style={[body, { color: colors.textSecondary, marginTop: 4 }]}
               >
                 {cls.description}
               </Text>
             ) : null}
             {!isTeacher && cls.teacherName ? (
-              <Text
+              <Text style={[caption, { marginTop: 4 }]}>
+                Teacher: {cls.teacherName}
+              </Text>
+            ) : null}
+
+            {cls.schedule ? (
+              <View
                 style={{
-                  fontFamily: typography.caption.fontFamily,
-                  fontSize: typography.caption.fontSize,
-                  color: colors.textSecondary,
-                  marginTop: 4,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  marginTop: spacing.sm,
                 }}
               >
-                Teacher: {cls.teacherName}
+                <Ionicons
+                  name="repeat-outline"
+                  size={16}
+                  color={colors.primary}
+                />
+                <Text
+                  style={[
+                    caption,
+                    { color: colors.primary, fontWeight: "700", marginLeft: 6 },
+                  ]}
+                >
+                  {formatMeetingSchedule(cls.schedule)}
+                </Text>
+              </View>
+            ) : null}
+            {nextMeetingText ? (
+              <Text style={[caption, { marginTop: 4 }]}>
+                Next meeting: {nextMeetingText}
               </Text>
             ) : null}
 
@@ -588,9 +761,31 @@ export default function ClassDetailScreen() {
             </View>
           </View>
 
-          {/* Class Experience check-in (students). Shows itself only when the
-              server says a before/after check-in is due; otherwise renders
-              nothing. */}
+          {/* Go Live (teacher) / Join live (student) */}
+          {!archived &&
+            isTeacher &&
+            bigButton(
+              cls.isLive ? "Return to live class" : "Go Live",
+              "mic-outline",
+              handleGoLive,
+              { busy: goingLive },
+            )}
+          {!archived &&
+            !isTeacher &&
+            cls.isLive &&
+            cls.liveSessionId &&
+            bigButton("Join live class", "mic-outline", handleJoinLive, {
+              color: colors.success,
+              busy: goingLive,
+            })}
+
+          {archived && (
+            <View style={[cardStyle, { marginBottom: spacing.lg }]}>
+              <Text style={caption}>This class is archived.</Text>
+            </View>
+          )}
+
+          {/* Class Experience check-in (students). Renders nothing unless due. */}
           {!isTeacher && (
             <ClassPulse
               classId={id}
@@ -598,7 +793,7 @@ export default function ClassDetailScreen() {
             />
           )}
 
-          {/* Tabs (scroll sideways on narrow screens) */}
+          {/* Tabs */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -609,292 +804,174 @@ export default function ClassDetailScreen() {
               marginBottom: spacing.md,
             }}
           >
-            {tabButton("sessions", `Sessions (${sessions.length})`)}
+            {tabButton("announcements", "Announcements")}
             {tabButton("people", `People (${members.length})`)}
             {tabButton("support", supportLabel)}
             {isTeacher && tabButton("experience", "Experience")}
+            {tabButton("documents", "Documents")}
+            {isTeacher && tabButton("classwork", "Exams & assignments")}
           </ScrollView>
 
-          {/* Sessions tab */}
-          {tab === "sessions" && (
+          {/* Announcements */}
+          {tab === "announcements" && (
             <View>
-              {isTeacher && (
-                <View style={{ marginBottom: spacing.lg }}>
-                  {!showForm ? (
+              {isTeacher && !archived && (
+                <View style={[cardStyle, { marginBottom: spacing.lg }]}>
+                  <TextInput
+                    style={inputStyle}
+                    value={annTitle}
+                    onChangeText={setAnnTitle}
+                    placeholder="Announcement title"
+                    placeholderTextColor={colors.placeholder}
+                    maxLength={TITLE_MAX}
+                    accessibilityLabel="Announcement title"
+                  />
+                  <TextInput
+                    style={[inputStyle, { minHeight: 100 }]}
+                    value={annBody}
+                    onChangeText={setAnnBody}
+                    placeholder="Write an announcement to this class..."
+                    placeholderTextColor={colors.placeholder}
+                    multiline
+                    maxLength={BODY_MAX}
+                    textAlignVertical="top"
+                    accessibilityLabel="Announcement message"
+                  />
+
+                  <Text
+                    style={[
+                      caption,
+                      { fontWeight: "700", marginBottom: spacing.xs },
+                    ]}
+                  >
+                    DEADLINE (OPTIONAL)
+                  </Text>
+                  <Text
+                    style={[
+                      caption,
+                      { fontSize: 11, marginBottom: spacing.sm },
+                    ]}
+                  >
+                    If you set one, it appears on every student's calendar.
+                  </Text>
+                  <DateField
+                    value={annDate}
+                    onChange={setAnnDate}
+                    label="Deadline date"
+                    placeholder="Pick a date (optional)"
+                    minDate={todayString()}
+                  />
+                  <TimeField
+                    value={annTime}
+                    onChange={setAnnTime}
+                    label="Deadline time"
+                    placeholder="Pick a time (optional)"
+                  />
+                  {!!(annDate || annTime) && (
                     <TouchableOpacity
-                      onPress={() => setShowForm(true)}
+                      onPress={() => {
+                        setAnnDate("");
+                        setAnnTime("");
+                      }}
                       accessibilityRole="button"
-                      accessibilityLabel="Add a session"
+                      accessibilityLabel="Clear deadline"
                       style={{
-                        backgroundColor: colors.primary,
-                        borderRadius: radius.md,
-                        padding: spacing.md,
-                        alignItems: "center",
+                        alignSelf: "flex-start",
+                        minHeight: 44,
+                        justifyContent: "center",
                       }}
                     >
                       <Text
-                        style={{
-                          fontFamily: typography.button.fontFamily,
-                          fontSize: typography.button.fontSize,
-                          fontWeight: typography.button.fontWeight,
-                          color: "#FFFFFF",
-                        }}
+                        style={[
+                          body,
+                          { fontWeight: "700", color: colors.primary },
+                        ]}
                       >
-                        + Add Session
+                        Clear deadline
                       </Text>
                     </TouchableOpacity>
-                  ) : (
-                    <View
-                      style={{
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                        borderWidth: 1,
-                        borderRadius: radius.md,
-                        padding: spacing.md,
-                      }}
-                    >
-                      <TextInput
-                        style={inputStyle}
-                        value={sTitle}
-                        onChangeText={setSTitle}
-                        placeholder="Session title (optional)"
-                        placeholderTextColor={colors.placeholder}
-                        accessibilityLabel="Session title"
-                      />
-                      <DateField
-                        value={sDate}
-                        onChange={setSDate}
-                        label="Session date"
-                        placeholder="Pick a date (optional)"
-                        minDate={todayString()}
-                      />
-                      <View style={{ flexDirection: "row", gap: 8 }}>
-                        <TimeField
-                          style={{ flex: 1 }}
-                          value={sStart}
-                          onChange={setSStart}
-                          label="Start time"
-                          placeholder="Start time"
-                        />
-                        <TimeField
-                          style={{ flex: 1 }}
-                          value={sEnd}
-                          onChange={setSEnd}
-                          label="End time"
-                          placeholder="End time"
-                        />
-                      </View>
-                      <Text
-                        style={{
-                          fontFamily: typography.caption.fontFamily,
-                          fontSize: 11,
-                          color: colors.textSecondary,
-                          marginBottom: spacing.sm,
-                        }}
-                      >
-                        Students are asked how they feel at the start time and
-                        again at the end time, so set both.
-                      </Text>
-                      <View style={{ flexDirection: "row", gap: 8 }}>
-                        <TouchableOpacity
-                          onPress={() => setShowForm(false)}
-                          disabled={creating}
-                          accessibilityRole="button"
-                          style={{
-                            flex: 1,
-                            alignItems: "center",
-                            padding: spacing.sm + 2,
-                            borderRadius: radius.sm,
-                            borderWidth: 1,
-                            borderColor: colors.border,
-                          }}
-                        >
-                          <Text
-                            style={{
-                              fontFamily: typography.body.fontFamily,
-                              fontWeight: "700",
-                              color: colors.textSecondary,
-                            }}
-                          >
-                            Cancel
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={handleCreateSession}
-                          disabled={creating}
-                          accessibilityRole="button"
-                          style={{
-                            flex: 1,
-                            alignItems: "center",
-                            padding: spacing.sm + 2,
-                            borderRadius: radius.sm,
-                            backgroundColor: colors.primary,
-                            opacity: creating ? 0.6 : 1,
-                          }}
-                        >
-                          {creating ? (
-                            <ActivityIndicator color="#FFFFFF" />
-                          ) : (
-                            <Text
-                              style={{
-                                fontFamily: typography.body.fontFamily,
-                                fontWeight: "700",
-                                color: "#FFFFFF",
-                              }}
-                            >
-                              Add
-                            </Text>
-                          )}
-                        </TouchableOpacity>
-                      </View>
-                    </View>
                   )}
+
+                  <TouchableOpacity
+                    onPress={handlePostAnnouncement}
+                    disabled={posting}
+                    accessibilityRole="button"
+                    accessibilityLabel="Post announcement to this class"
+                    accessibilityState={{ disabled: posting }}
+                    style={{
+                      backgroundColor: colors.primary,
+                      borderRadius: radius.sm,
+                      minHeight: 44,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginTop: spacing.sm,
+                      opacity: posting ? 0.6 : 1,
+                    }}
+                  >
+                    {posting ? (
+                      <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                      <Text
+                        style={[body, { fontWeight: "700", color: "#FFFFFF" }]}
+                      >
+                        Post to class
+                      </Text>
+                    )}
+                  </TouchableOpacity>
                 </View>
               )}
 
-              {isTeacher && (
-                <TouchableOpacity
-                  onPress={() => router.push(`/class-calendar/${id}` as any)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Post exams and assignments"
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    borderColor: colors.primary,
-                    borderWidth: 1,
-                    borderRadius: radius.md,
-                    padding: spacing.md,
-                    marginBottom: spacing.lg,
-                  }}
-                >
-                  <Ionicons
-                    name="calendar-outline"
-                    size={20}
-                    color={colors.primary}
-                  />
-                  <Text
-                    style={{
-                      marginLeft: 8,
-                      fontFamily: typography.button.fontFamily,
-                      fontSize: typography.button.fontSize,
-                      fontWeight: "700",
-                      color: colors.primary,
-                    }}
-                  >
-                    Exams & assignments
-                  </Text>
-                </TouchableOpacity>
-              )}
-
-              {sessions.length === 0 ? (
-                <Text
-                  style={{
-                    fontFamily: typography.body.fontFamily,
-                    fontSize: typography.body.fontSize,
-                    color: colors.textSecondary,
-                  }}
-                >
+              {announcements.length === 0 ? (
+                <Text style={[body, { color: colors.textSecondary }]}>
                   {isTeacher
-                    ? "No sessions yet. Add one for your next meeting."
-                    : "No sessions yet. Your teacher will add one soon."}
+                    ? "You haven't posted any announcements to this class yet."
+                    : "No announcements yet."}
                 </Text>
               ) : (
-                sessions.map((s) => {
-                  const ended = s.status === "ended";
-                  return (
-                    <TouchableOpacity
-                      key={s.id}
-                      onPress={() => router.push(`/session/${s.id}` as any)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${s.title}, ${formatSchedule(s)}, ${
-                        ended ? "ended" : s.isLive ? "live" : "open"
-                      }`}
-                      style={{
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                        borderWidth: 1,
-                        borderRadius: radius.md,
-                        padding: spacing.md,
-                        marginBottom: spacing.sm,
-                        opacity: ended ? 0.8 : 1,
-                      }}
-                    >
-                      <View style={styles.sessionHeader}>
-                        <Text
-                          style={{
-                            flex: 1,
-                            fontFamily: typography.body.fontFamily,
-                            fontSize: 16,
-                            fontWeight: "600",
-                            color: colors.text,
-                          }}
-                          numberOfLines={1}
-                        >
-                          {s.title}
-                        </Text>
-                        <View
-                          style={{
-                            backgroundColor: ended
-                              ? colors.disabled
-                              : s.isLive
-                                ? colors.success
-                                : colors.primary,
-                            borderRadius: radius.sm,
-                            paddingHorizontal: 8,
-                            paddingVertical: 2,
-                            marginLeft: 8,
-                          }}
-                        >
-                          <Text style={styles.badgeText}>
-                            {ended ? "ENDED" : s.isLive ? "● LIVE" : "OPEN"}
-                          </Text>
-                        </View>
-                      </View>
+                announcements.map((a) => (
+                  <View key={a.id} style={cardStyle}>
+                    <Text style={[body, { fontWeight: "700" }]}>{a.title}</Text>
+                    <Text style={[caption, { fontSize: 11, marginTop: 2 }]}>
+                      {new Date(a.createdAt).toLocaleString()}
+                    </Text>
+                    {a.deadline ? (
                       <Text
-                        style={{
-                          fontFamily: typography.caption.fontFamily,
-                          fontSize: typography.caption.fontSize,
-                          color: colors.textSecondary,
-                          marginTop: 4,
-                        }}
+                        style={[
+                          caption,
+                          {
+                            fontSize: 11,
+                            fontWeight: "700",
+                            color: colors.primary,
+                            marginTop: 2,
+                          },
+                        ]}
                       >
-                        {formatSchedule(s)} · {s.participantCount} present
+                        Deadline: {new Date(a.deadline).toLocaleString()}
                       </Text>
-                    </TouchableOpacity>
-                  );
-                })
+                    ) : null}
+                    <Text style={[body, { marginTop: 6 }]}>{a.body}</Text>
+                  </View>
+                ))
               )}
             </View>
           )}
 
-          {/* People tab */}
+          {/* People */}
           {tab === "people" && (
             <View>
               {members.length === 0 ? (
-                <Text
-                  style={{
-                    fontFamily: typography.body.fontFamily,
-                    fontSize: typography.body.fontSize,
-                    color: colors.textSecondary,
-                  }}
-                >
-                  No students have joined this class yet.
+                <Text style={[body, { color: colors.textSecondary }]}>
+                  No students have joined this class yet. Share the class code{" "}
+                  {cls.code}.
                 </Text>
               ) : (
                 members.map((m) => (
                   <View
                     key={m.id}
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                      borderWidth: 1,
-                      borderRadius: radius.md,
-                      padding: spacing.md,
-                      marginBottom: spacing.sm,
-                    }}
+                    style={[
+                      cardStyle,
+                      { flexDirection: "row", alignItems: "center" },
+                    ]}
                   >
                     <View
                       style={{
@@ -912,24 +989,11 @@ export default function ClassDetailScreen() {
                       </Text>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text
-                        style={{
-                          fontFamily: typography.body.fontFamily,
-                          fontSize: typography.body.fontSize,
-                          fontWeight: "600",
-                          color: colors.text,
-                        }}
-                      >
+                      <Text style={[body, { fontWeight: "600" }]}>
                         {m.displayName}
                         {m.id === user?.id ? " (You)" : ""}
                       </Text>
-                      <Text
-                        style={{
-                          fontFamily: typography.caption.fontFamily,
-                          fontSize: typography.caption.fontSize,
-                          color: colors.textSecondary,
-                        }}
-                      >
+                      <Text style={caption}>
                         Joined {new Date(m.joinedAt).toLocaleDateString()}
                       </Text>
                     </View>
@@ -939,64 +1003,25 @@ export default function ClassDetailScreen() {
             </View>
           )}
 
-          {/* Support tab — student: request support. teacher: answer requests */}
+          {/* Support — student: request support */}
           {tab === "support" && !isTeacher && (
             <View>
-              <Text
-                style={{
-                  fontFamily: typography.caption.fontFamily,
-                  fontSize: typography.caption.fontSize,
-                  color: colors.textSecondary,
-                  marginBottom: spacing.md,
-                }}
-              >
+              <Text style={[caption, { marginBottom: spacing.md }]}>
                 Ask your teacher for support in this class. Only your teacher
                 sees your request. They never see your support needs.
               </Text>
 
               {!showRequestForm ? (
-                <TouchableOpacity
-                  onPress={() => setShowRequestForm(true)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Request support"
-                  style={{
-                    backgroundColor: colors.primary,
-                    borderRadius: radius.md,
-                    padding: spacing.md,
-                    alignItems: "center",
-                    marginBottom: spacing.lg,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontFamily: typography.button.fontFamily,
-                      fontSize: typography.button.fontSize,
-                      fontWeight: typography.button.fontWeight,
-                      color: "#FFFFFF",
-                    }}
-                  >
-                    + Request Support
-                  </Text>
-                </TouchableOpacity>
+                bigButton("+ Request Support", "hand-left-outline", () =>
+                  setShowRequestForm(true),
+                )
               ) : (
-                <View
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    borderWidth: 1,
-                    borderRadius: radius.md,
-                    padding: spacing.md,
-                    marginBottom: spacing.lg,
-                  }}
-                >
+                <View style={[cardStyle, { marginBottom: spacing.lg }]}>
                   <Text
-                    style={{
-                      fontFamily: typography.body.fontFamily,
-                      fontSize: typography.body.fontSize,
-                      fontWeight: "700",
-                      color: colors.text,
-                      marginBottom: spacing.sm,
-                    }}
+                    style={[
+                      body,
+                      { fontWeight: "700", marginBottom: spacing.sm },
+                    ]}
                   >
                     What kind of support do you need?
                   </Text>
@@ -1029,12 +1054,13 @@ export default function ClassDetailScreen() {
                           }}
                         >
                           <Text
-                            style={{
-                              fontFamily: typography.body.fontFamily,
-                              fontSize: typography.body.fontSize,
-                              fontWeight: "600",
-                              color: selected ? "#FFFFFF" : colors.text,
-                            }}
+                            style={[
+                              body,
+                              {
+                                fontWeight: "600",
+                                color: selected ? "#FFFFFF" : colors.text,
+                              },
+                            ]}
                           >
                             {opt.label}
                           </Text>
@@ -1074,21 +1100,16 @@ export default function ClassDetailScreen() {
                       }}
                       disabled={submitting}
                       accessibilityRole="button"
-                      style={{
-                        flex: 1,
-                        alignItems: "center",
-                        padding: spacing.sm + 2,
-                        borderRadius: radius.sm,
-                        borderWidth: 1,
-                        borderColor: colors.border,
-                      }}
+                      style={[
+                        styles.halfButton,
+                        { borderColor: colors.border, borderWidth: 1 },
+                      ]}
                     >
                       <Text
-                        style={{
-                          fontFamily: typography.body.fontFamily,
-                          fontWeight: "700",
-                          color: colors.textSecondary,
-                        }}
+                        style={[
+                          body,
+                          { fontWeight: "700", color: colors.textSecondary },
+                        ]}
                       >
                         Cancel
                       </Text>
@@ -1098,24 +1119,22 @@ export default function ClassDetailScreen() {
                       disabled={submitting}
                       accessibilityRole="button"
                       accessibilityLabel="Send request"
-                      style={{
-                        flex: 1,
-                        alignItems: "center",
-                        padding: spacing.sm + 2,
-                        borderRadius: radius.sm,
-                        backgroundColor: colors.primary,
-                        opacity: submitting ? 0.6 : 1,
-                      }}
+                      style={[
+                        styles.halfButton,
+                        {
+                          backgroundColor: colors.primary,
+                          opacity: submitting ? 0.6 : 1,
+                        },
+                      ]}
                     >
                       {submitting ? (
                         <ActivityIndicator color="#FFFFFF" />
                       ) : (
                         <Text
-                          style={{
-                            fontFamily: typography.body.fontFamily,
-                            fontWeight: "700",
-                            color: "#FFFFFF",
-                          }}
+                          style={[
+                            body,
+                            { fontWeight: "700", color: "#FFFFFF" },
+                          ]}
                         >
                           Send
                         </Text>
@@ -1126,52 +1145,22 @@ export default function ClassDetailScreen() {
               )}
 
               {requests.length === 0 ? (
-                <Text
-                  style={{
-                    fontFamily: typography.body.fontFamily,
-                    fontSize: typography.body.fontSize,
-                    color: colors.textSecondary,
-                  }}
-                >
+                <Text style={[body, { color: colors.textSecondary }]}>
                   You haven't asked for any support in this class yet.
                 </Text>
               ) : (
                 requests.map((r) => (
-                  <View key={r.id} style={requestCardStyle}>
-                    <View style={styles.sessionHeader}>
-                      <Text
-                        style={{
-                          flex: 1,
-                          fontFamily: typography.body.fontFamily,
-                          fontSize: 16,
-                          fontWeight: "700",
-                          color: colors.text,
-                        }}
-                      >
+                  <View key={r.id} style={cardStyle}>
+                    <View style={styles.rowCenter}>
+                      <Text style={[body, { flex: 1, fontWeight: "700" }]}>
                         {r.typeLabel}
                       </Text>
                       {statusBadge(r.status)}
                     </View>
                     {r.note ? (
-                      <Text
-                        style={{
-                          fontFamily: typography.body.fontFamily,
-                          fontSize: typography.body.fontSize,
-                          color: colors.text,
-                          marginTop: 6,
-                        }}
-                      >
-                        {r.note}
-                      </Text>
+                      <Text style={[body, { marginTop: 6 }]}>{r.note}</Text>
                     ) : null}
-                    <Text
-                      style={{
-                        fontFamily: typography.caption.fontFamily,
-                        fontSize: 11,
-                        color: colors.textSecondary,
-                        marginTop: 4,
-                      }}
-                    >
+                    <Text style={[caption, { fontSize: 11, marginTop: 4 }]}>
                       Sent {new Date(r.createdAt).toLocaleString()}
                     </Text>
 
@@ -1185,24 +1174,11 @@ export default function ClassDetailScreen() {
                         }}
                       >
                         <Text
-                          style={{
-                            fontFamily: typography.caption.fontFamily,
-                            fontSize: 11,
-                            color: colors.textSecondary,
-                            marginBottom: 2,
-                          }}
+                          style={[caption, { fontSize: 11, marginBottom: 2 }]}
                         >
                           Your teacher said
                         </Text>
-                        <Text
-                          style={{
-                            fontFamily: typography.body.fontFamily,
-                            fontSize: typography.body.fontSize,
-                            color: colors.text,
-                          }}
-                        >
-                          {r.teacherResponse}
-                        </Text>
+                        <Text style={body}>{r.teacherResponse}</Text>
                       </View>
                     ) : null}
 
@@ -1219,11 +1195,10 @@ export default function ClassDetailScreen() {
                         }}
                       >
                         <Text
-                          style={{
-                            fontFamily: typography.body.fontFamily,
-                            fontWeight: "700",
-                            color: colors.danger,
-                          }}
+                          style={[
+                            body,
+                            { fontWeight: "700", color: colors.danger },
+                          ]}
                         >
                           Withdraw request
                         </Text>
@@ -1235,29 +1210,17 @@ export default function ClassDetailScreen() {
             </View>
           )}
 
+          {/* Requests — teacher: answer */}
           {tab === "support" && isTeacher && (
             <View>
-              <Text
-                style={{
-                  fontFamily: typography.caption.fontFamily,
-                  fontSize: typography.caption.fontSize,
-                  color: colors.textSecondary,
-                  marginBottom: spacing.md,
-                }}
-              >
+              <Text style={[caption, { marginBottom: spacing.md }]}>
                 Students ask for support here. You see the request only, never a
                 student's support needs. Your reply is sent to them as a
                 notification.
               </Text>
 
               {sortedRequests.length === 0 ? (
-                <Text
-                  style={{
-                    fontFamily: typography.body.fontFamily,
-                    fontSize: typography.body.fontSize,
-                    color: colors.textSecondary,
-                  }}
-                >
+                <Text style={[body, { color: colors.textSecondary }]}>
                   No requests yet.
                 </Text>
               ) : (
@@ -1268,60 +1231,28 @@ export default function ClassDetailScreen() {
                     <View
                       key={r.id}
                       style={[
-                        requestCardStyle,
+                        cardStyle,
                         {
                           opacity: open ? 1 : 0.85,
                           borderColor: open ? colors.primary : colors.border,
                         },
                       ]}
                     >
-                      <View style={styles.sessionHeader}>
-                        <Text
-                          style={{
-                            flex: 1,
-                            fontFamily: typography.body.fontFamily,
-                            fontSize: 16,
-                            fontWeight: "700",
-                            color: colors.text,
-                          }}
-                        >
+                      <View style={styles.rowCenter}>
+                        <Text style={[body, { flex: 1, fontWeight: "700" }]}>
                           {r.typeLabel}
                         </Text>
                         {statusBadge(r.status)}
                       </View>
-                      <Text
-                        style={{
-                          fontFamily: typography.caption.fontFamily,
-                          fontSize: typography.caption.fontSize,
-                          color: colors.textSecondary,
-                          marginTop: 2,
-                        }}
-                      >
+                      <Text style={[caption, { marginTop: 2 }]}>
                         {r.studentName} ·{" "}
                         {new Date(r.createdAt).toLocaleString()}
                       </Text>
                       {r.note ? (
-                        <Text
-                          style={{
-                            fontFamily: typography.body.fontFamily,
-                            fontSize: typography.body.fontSize,
-                            color: colors.text,
-                            marginTop: 6,
-                          }}
-                        >
-                          {r.note}
-                        </Text>
+                        <Text style={[body, { marginTop: 6 }]}>{r.note}</Text>
                       ) : null}
-
                       {r.teacherResponse ? (
-                        <Text
-                          style={{
-                            fontFamily: typography.caption.fontFamily,
-                            fontSize: typography.caption.fontSize,
-                            color: colors.textSecondary,
-                            marginTop: 6,
-                          }}
-                        >
+                        <Text style={[caption, { marginTop: 6 }]}>
                           Your reply: {r.teacherResponse}
                         </Text>
                       ) : null}
@@ -1340,61 +1271,32 @@ export default function ClassDetailScreen() {
                             accessibilityLabel="Reason for your answer"
                           />
                           <View style={{ flexDirection: "row", gap: 8 }}>
-                            <TouchableOpacity
-                              onPress={() => handleRespond(r, "approved")}
-                              disabled={busy}
-                              accessibilityRole="button"
-                              accessibilityLabel="Approve request"
-                              style={{
-                                flex: 1,
-                                alignItems: "center",
-                                justifyContent: "center",
-                                minHeight: 44,
-                                borderRadius: radius.sm,
-                                backgroundColor: colors.success,
-                                opacity: busy ? 0.6 : 1,
-                              }}
-                            >
-                              <Text style={styles.actionText}>Approve</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              onPress={() => handleRespond(r, "discuss")}
-                              disabled={busy}
-                              accessibilityRole="button"
-                              accessibilityLabel="Discuss request"
-                              style={{
-                                flex: 1,
-                                alignItems: "center",
-                                justifyContent: "center",
-                                minHeight: 44,
-                                borderRadius: radius.sm,
-                                backgroundColor: colors.primary,
-                                opacity: busy ? 0.6 : 1,
-                              }}
-                            >
-                              <Text style={styles.actionText}>Discuss</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              onPress={() => handleRespond(r, "declined")}
-                              disabled={busy}
-                              accessibilityRole="button"
-                              accessibilityLabel="Decline request"
-                              style={{
-                                flex: 1,
-                                alignItems: "center",
-                                justifyContent: "center",
-                                minHeight: 44,
-                                borderRadius: radius.sm,
-                                backgroundColor: colors.danger,
-                                opacity: busy ? 0.6 : 1,
-                              }}
-                            >
-                              {busy ? (
-                                <ActivityIndicator color="#FFFFFF" />
-                              ) : (
-                                <Text style={styles.actionText}>Decline</Text>
-                              )}
-                            </TouchableOpacity>
+                            {(
+                              [
+                                ["Approve", "approved", colors.success],
+                                ["Discuss", "discuss", colors.primary],
+                                ["Decline", "declined", colors.danger],
+                              ] as [string, AccommodationDecision, string][]
+                            ).map(([label, decision, bg]) => (
+                              <TouchableOpacity
+                                key={decision}
+                                onPress={() => handleRespond(r, decision)}
+                                disabled={busy}
+                                accessibilityRole="button"
+                                accessibilityLabel={`${label} request`}
+                                style={{
+                                  flex: 1,
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  minHeight: 44,
+                                  borderRadius: radius.sm,
+                                  backgroundColor: bg,
+                                  opacity: busy ? 0.6 : 1,
+                                }}
+                              >
+                                <Text style={styles.actionText}>{label}</Text>
+                              </TouchableOpacity>
+                            ))}
                           </View>
                         </View>
                       )}
@@ -1405,9 +1307,27 @@ export default function ClassDetailScreen() {
             </View>
           )}
 
-          {/* Experience tab — teacher only: aggregate class experience */}
+          {/* Experience — teacher */}
           {tab === "experience" && isTeacher && (
-            <ClassExperienceInsights classId={Number(id)} />
+            <ClassExperienceInsights classId={classId} />
+          )}
+
+          {/* Documents — class level */}
+          {tab === "documents" && (
+            <SessionDocuments classId={classId} isTeacher={isTeacher} />
+          )}
+
+          {/* Exams & assignments — teacher */}
+          {tab === "classwork" && isTeacher && (
+            <View>
+              <Text style={[caption, { marginBottom: spacing.md }]}>
+                Post an exam or assignment. It lands on every enrolled student's
+                calendar and sends them a notification.
+              </Text>
+              {bigButton("Post exam or assignment", "create-outline", () =>
+                router.push(`/class-calendar/${id}` as any),
+              )}
+            </View>
           )}
 
           {!isTeacher && (
@@ -1454,8 +1374,15 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   tabButton: { paddingVertical: 10, paddingHorizontal: 4, marginRight: 18 },
-  sessionHeader: { flexDirection: "row", alignItems: "center" },
+  rowCenter: { flexDirection: "row", alignItems: "center" },
   badgeText: { color: "#FFFFFF", fontSize: 10, fontWeight: "bold" },
   chipWrap: { flexDirection: "row", flexWrap: "wrap" },
+  halfButton: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+    borderRadius: 8,
+  },
   actionText: { color: "#FFFFFF", fontWeight: "700", fontSize: 14 },
 });

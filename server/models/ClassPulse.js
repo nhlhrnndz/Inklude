@@ -7,7 +7,7 @@ const crypto = require("crypto");
 // Stored values. 1 = Difficult, 2 = Okay, 3 = Good.
 const MOOD = { SAD: 1, OKAY: 2, HAPPY: 3 };
 const PHASES = ["before", "after"];
-const MIN_RESPONSES = 5; // a breakdown stays hidden below this
+const MIN_RESPONSES = 2; // a breakdown stays hidden below this
 const LOW_MOOD_STREAK = 3;
 
 function moodKey(mood) {

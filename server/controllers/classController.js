@@ -1,6 +1,9 @@
 // server/controllers/classController.js
 const {
   createClass,
+  generateClassSessions,
+  getOrCreateTodaySession,
+  getClassDocuments,
   getClassById,
   getClassByCode,
   getTeacherClasses,
@@ -41,9 +44,22 @@ function mapClass(c, includeAccommodations = false) {
     memberCount: Number(c.member_count) || 0,
     sessionCount: Number(c.session_count) || 0,
     isLive: Number(c.live_count) > 0,
+    liveSessionId: c.live_session_id ? Number(c.live_session_id) : null,
     accommodationCount: includeAccommodations
       ? Number(c.accommodation_count) || 0
       : 0,
+    schedule:
+      c.start_date_str && c.start_time_str && c.end_time_str
+        ? {
+            days: c.meeting_days
+              ? String(c.meeting_days).split(",").map(Number)
+              : [],
+            startTime: c.start_time_str,
+            endTime: c.end_time_str,
+            startDate: c.start_date_str,
+            endDate: c.end_date_str || c.start_date_str,
+          }
+        : null,
   };
 }
 
@@ -62,15 +78,44 @@ function mapSession(s) {
   };
 }
 
-// Accepts "YYYY-MM-DD HH:MM[:SS]" (or with "T"); returns normalized string
-// or null if empty. Throws on bad format.
-function parseDateTime(value) {
-  if (value === undefined || value === null || value === "") return null;
-  const m = String(value)
-    .trim()
-    .match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})(?::(\d{2}))?$/);
-  if (!m) throw new Error("Invalid date/time format.");
-  return `${m[1]} ${m[2]}:${m[3] || "00"}`;
+function mapDoc(d) {
+  return {
+    id: d.id,
+    filename: d.filename,
+    mimeType: d.mime_type,
+    sessionId: d.session_id,
+    sessionTitle: null,
+    teacherName: null,
+    createdAt: d.created_at,
+    textLength: d.text_length ?? null,
+  };
+}
+
+const TIME_RE = /^\d{2}:\d{2}$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Validates the single date + time sent by Schedule Class.
+// Returns the shape classModel already stores (one meeting = one day,
+// first date and last date the same).
+function parseSchedule(s) {
+  if (!DATE_RE.test(s.startDate || "")) {
+    throw new Error("Pick the class date.");
+  }
+  if (!TIME_RE.test(s.startTime || "") || !TIME_RE.test(s.endTime || "")) {
+    throw new Error("Pick a start and end time.");
+  }
+  if (s.endTime <= s.startTime) {
+    throw new Error("End time must be after the start time.");
+  }
+  const [y, m, d] = s.startDate.split("-").map(Number);
+  const day = new Date(y, m - 1, d).getDay();
+  return {
+    days: [day],
+    startTime: s.startTime,
+    endTime: s.endTime,
+    startDate: s.startDate,
+    endDate: s.startDate,
+  };
 }
 
 async function createClassController(req, res) {
@@ -80,19 +125,40 @@ async function createClassController(req, res) {
         .status(403)
         .json({ message: "Only teachers can schedule classes." });
     }
-    const { title, description } = req.body;
+    const { title, description, schedule } = req.body;
     if (!title || !title.trim()) {
       return res.status(400).json({ message: "Class title is required." });
+    }
+
+    let parsed = null;
+    if (schedule) {
+      try {
+        parsed = parseSchedule(schedule);
+      } catch (e) {
+        return res.status(400).json({ message: e.message });
+      }
     }
 
     const cls = await createClass(
       req.user.id,
       title.trim(),
       (description || "").trim(),
+      parsed,
     );
-    res
-      .status(201)
-      .json({ message: "Class created.", class: mapClass(cls, true) });
+
+    let sessionCount = 0;
+    if (parsed) {
+      sessionCount = await generateClassSessions(cls, parsed, [
+        parsed.startDate,
+      ]);
+    }
+
+    const fresh = await getClassById(cls.id);
+    res.status(201).json({
+      message: "Class created.",
+      class: mapClass(fresh, true),
+      sessionCount,
+    });
   } catch (err) {
     console.error("createClass error:", err);
     res.status(500).json({ message: "Server error while creating class." });
@@ -196,6 +262,42 @@ async function getClassMembersController(req, res) {
   }
 }
 
+// POST /api/classes/:id/open-session  (teacher) -> { sessionId }
+// The Go Live button on the class front.
+async function openClassSessionController(req, res) {
+  try {
+    if (req.user.role !== "teacher") {
+      return res.status(403).json({ message: "Only teachers can go live." });
+    }
+    const cls = await getClassById(req.params.id);
+    if (!cls) return res.status(404).json({ message: "Class not found." });
+    if (cls.teacher_id !== req.user.id) {
+      return res.status(403).json({ message: "Access denied." });
+    }
+    if (cls.status !== "active") {
+      return res.status(400).json({ message: "This class is archived." });
+    }
+    const sessionId = await getOrCreateTodaySession(cls);
+    res.json({ sessionId });
+  } catch (err) {
+    console.error("openClassSession error:", err);
+    res.status(500).json({ message: "Server error while opening the class." });
+  }
+}
+
+// GET /api/classes/:id/documents
+async function getClassDocumentsController(req, res) {
+  try {
+    const cls = await loadClassWithAccess(req, res);
+    if (!cls) return;
+    const rows = await getClassDocuments(cls.id);
+    res.json({ documents: rows.map(mapDoc) });
+  } catch (err) {
+    console.error("getClassDocuments error:", err);
+    res.status(500).json({ message: "Server error while loading documents." });
+  }
+}
+
 async function createClassSessionController(req, res) {
   try {
     if (req.user.role !== "teacher") {
@@ -212,10 +314,19 @@ async function createClassSessionController(req, res) {
       return res.status(400).json({ message: "This class is archived." });
     }
 
+    const parse = (value) => {
+      if (value === undefined || value === null || value === "") return null;
+      const m = String(value)
+        .trim()
+        .match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})(?::(\d{2}))?$/);
+      if (!m) throw new Error("Invalid date/time format.");
+      return `${m[1]} ${m[2]}:${m[3] || "00"}`;
+    };
+
     let scheduledStart, scheduledEnd;
     try {
-      scheduledStart = parseDateTime(req.body.scheduledStart);
-      scheduledEnd = parseDateTime(req.body.scheduledEnd);
+      scheduledStart = parse(req.body.scheduledStart);
+      scheduledEnd = parse(req.body.scheduledEnd);
     } catch (e) {
       return res
         .status(400)
@@ -238,7 +349,6 @@ async function createClassSessionController(req, res) {
       scheduledEnd,
     });
 
-    // A scheduled session lands on every enrolled student's calendar.
     if (scheduledStart) {
       await safeCalendar("session", () => syncSessionForMembers(session.id));
     }
@@ -281,6 +391,8 @@ module.exports = {
   joinClassController,
   getClassController,
   getClassMembersController,
+  openClassSessionController,
+  getClassDocumentsController,
   createClassSessionController,
   leaveClassController,
 };

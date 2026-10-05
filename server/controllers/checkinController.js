@@ -20,7 +20,7 @@ const {
 const { notifyUser, notifyUsers } = require("../services/notificationService");
 
 // 1 = flag anyone quiet in this run; 2 = only quiet 2+ runs in a row
-const MIN_QUIET_STREAK = 1;
+const MIN_QUIET_STREAK = 0;
 
 const MESSAGE_MAX = 500;
 const REPLY_MAX = 200;

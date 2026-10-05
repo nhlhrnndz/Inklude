@@ -5,13 +5,15 @@
 // own (the notifications list then just expands it to show the full text).
 //
 // A notification's destination is its sourceType + sourceId:
-//   class           -> /class/:id            (teacher + accommodation -> Requests tab)
-//   session         -> /session/:id
-//   appointment     -> /guidance/appointments
-//   message_thread  -> student: /messages, guidance: /guidance/message/:id
-//   schedule_item   -> /schedule (that exact item highlighted)
-//   class_post      -> /schedule (the exam/assignment highlighted)
-//   sis             -> /sis
+//   class                -> /class/:id            (teacher + accommodation -> Requests tab)
+//   session              -> /session/:id
+//   appointment          -> /guidance/appointments
+//   message_thread       -> student: /messages, guidance: /guidance/message/:id
+//   schedule_item        -> /schedule (that exact item highlighted)
+//   class_post           -> /schedule (the exam/assignment highlighted)
+//   accessibility_report -> student: /my-reports, guidance: /guidance/accessibility-reports
+//   campus_event         -> /events (that event highlighted)
+//   sis                  -> /sis
 
 export type NotificationLike = {
   type: string;
@@ -61,6 +63,17 @@ export function resolveNotificationRoute(
         ? `/schedule?sourceType=class_post&sourceId=${id}`
         : "/schedule";
 
+    case "accessibility_report":
+      if (role === "guidance" || role === "admin") {
+        return id
+          ? `/guidance/accessibility-reports?highlight=${id}`
+          : "/guidance/accessibility-reports";
+      }
+      return id ? `/my-reports?highlight=${id}` : "/my-reports";
+
+    case "campus_event":
+      return id ? `/events?highlight=${id}` : "/events";
+
     default:
       return null;
   }
@@ -88,6 +101,10 @@ export function getNotificationActionLabel(
     case "schedule_item":
     case "class_post":
       return "Open schedule";
+    case "accessibility_report":
+      return "Open report";
+    case "campus_event":
+      return "Open event";
     default:
       return null;
   }

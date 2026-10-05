@@ -1,8 +1,9 @@
 // app/(app)/student.tsx
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,6 +17,7 @@ import { useAccessibility } from "../../context/AccessibilityContext";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
 import { useWantsLiveCaptions } from "../../hooks/useWantsLiveCaptions";
+import { ScheduleItem, getTodaySchedule } from "../../utils/scheduleApi";
 
 type CardKey =
   | "myClasses"
@@ -24,8 +26,9 @@ type CardKey =
   | "tts"
   | "calendar"
   | "guidance"
-  | "preferences"
-  | "profile";
+  | "reportIssue"
+  | "events"
+  | "accessibilityMap";
 
 interface DashboardCard {
   key: CardKey;
@@ -67,8 +70,8 @@ const CARD_DEFS: Record<CardKey, DashboardCard> = {
   calendar: {
     key: "calendar",
     icon: "calendar-outline",
-    title: "My Schedule",
-    description: "See your classes and what is next",
+    title: "My Calendar",
+    description: "See your classes, exams and what is next",
     route: "/schedule",
   },
   guidance: {
@@ -78,21 +81,38 @@ const CARD_DEFS: Record<CardKey, DashboardCard> = {
     description: "Message the Guidance Office or book an appointment",
     route: "/guidance-hub",
   },
-  preferences: {
-    key: "preferences",
-    icon: "options-outline",
-    title: "Accessibility Preferences",
-    description: "Change text size, contrast, captions and more",
-    route: "/accessibility",
+  reportIssue: {
+    key: "reportIssue",
+    icon: "alert-circle-outline",
+    title: "Report an Issue",
+    description: "Tell Guidance about an accessibility barrier on campus",
+    route: "/report-issue",
   },
-  profile: {
-    key: "profile",
-    icon: "person-circle-outline",
-    title: "My Profile",
-    description: "Your account and information",
-    route: "/profile",
+  events: {
+    key: "events",
+    icon: "calendar-number-outline",
+    title: "Campus Events",
+    description: "See upcoming events and how accessible they are",
+    route: "/events",
+  },
+  accessibilityMap: {
+    key: "accessibilityMap",
+    icon: "map-outline",
+    title: "Accessibility Map",
+    description: "Find ramps, PWD restrooms and elevators on campus",
+    route: "/accessibility-map",
   },
 };
+
+const TYPE_LABEL: Record<string, string> = {
+  exam: "Exam",
+  assignment: "Due",
+  appointment: "Guidance",
+  event: "Event",
+  reminder: "Reminder",
+};
+
+const WIDGET_MAX_ITEMS = 4;
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -101,6 +121,9 @@ function getGreeting() {
   return "Good evening";
 }
 
+const fmtTime = (iso: string) =>
+  new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
 export default function StudentDashboard() {
   const router = useRouter();
   const { user } = useAuth();
@@ -108,31 +131,46 @@ export default function StudentDashboard() {
   const { needs, preferences, displayUsername } = useAccessibility();
 
   const [showMore, setShowMore] = useState(false);
+  const [today, setToday] = useState<ScheduleItem[]>([]);
+  const [loadingToday, setLoadingToday] = useState(true);
+
+  const loadToday = useCallback(async () => {
+    try {
+      const res = await getTodaySchedule();
+      setToday(res.items || []);
+    } catch {
+      setToday([]);
+    } finally {
+      setLoadingToday(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadToday();
+    }, [loadToday]),
+  );
 
   const needsHearing =
     needs.includes("Deaf") || needs.includes("Hard of Hearing");
   const nonVerbal = needs.includes("Non-Verbal");
-  // Deaf / Hard of Hearing, or the live captions toggle in Accessibility
-  // Preferences. Same rule the session screen uses for its Join Session button.
   const wantsCaptions = useWantsLiveCaptions();
   const wantsTTS = !!preferences.text_to_speech || nonVerbal;
-  const needsVisualHelp =
-    needs.includes("Low Vision") || needs.includes("Color Blindness");
 
-  // Which tools are available to this student at all.
-  // Everyone gets My Classes and Join Class (join by code).
   const available: CardKey[] = ["myClasses", "joinClass"];
   if (wantsCaptions || nonVerbal || wantsTTS) available.push("quickTalk");
   if (wantsTTS) available.push("tts");
-  available.push("calendar", "guidance", "preferences", "profile");
+  available.push(
+    "calendar",
+    "events",
+    "accessibilityMap",
+    "guidance",
+    "reportIssue",
+  );
 
-  // Recommended: My Classes is always first, then up to 2 picks driven by
-  // needs and enabled preferences.
   const pickedKeys: CardKey[] = [];
   if (wantsCaptions || nonVerbal) pickedKeys.push("quickTalk");
-  // Deaf + Non-Verbal already gets Quick Talk; TTS is optional.
   if (wantsTTS && !(needsHearing && nonVerbal)) pickedKeys.push("tts");
-  if (needsVisualHelp) pickedKeys.push("preferences");
 
   const recommendedKeys: CardKey[] = [
     "myClasses",
@@ -142,7 +180,6 @@ export default function StudentDashboard() {
   ];
 
   const recommended = recommendedKeys.map((k) => CARD_DEFS[k]);
-
   const recommendedSet = new Set(recommended.map((c) => c.key));
   const moreTools = available
     .filter((k) => !recommendedSet.has(k))
@@ -219,6 +256,154 @@ export default function StudentDashboard() {
     </Text>
   );
 
+  // Today's schedule widget: shows the day right here, no navigation.
+  const renderTodayWidget = () => {
+    const nowMs = Date.now();
+    const shown = today.slice(0, WIDGET_MAX_ITEMS);
+    const extra = today.length - shown.length;
+
+    return (
+      <View
+        style={{
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderWidth: 1,
+          borderRadius: radius.lg,
+          padding: spacing.md,
+          marginBottom: spacing.xl,
+        }}
+      >
+        {loadingToday ? (
+          <ActivityIndicator color={colors.primary} />
+        ) : today.length === 0 ? (
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Ionicons
+              name="checkmark-circle-outline"
+              size={26}
+              color={colors.textSecondary}
+              style={{ marginRight: spacing.sm }}
+            />
+            <Text
+              style={{
+                flex: 1,
+                fontFamily: typography.body.fontFamily,
+                fontSize: typography.body.fontSize,
+                color: colors.textSecondary,
+              }}
+            >
+              Nothing on your schedule today.
+            </Text>
+          </View>
+        ) : (
+          <>
+            {shown.map((item, i) => {
+              const start = new Date(item.startTime).getTime();
+              const end = new Date(item.endTime).getTime();
+              const isNow = start <= nowMs && nowMs < end;
+              const isPast = end <= nowMs;
+              const single =
+                item.type === "assignment" || item.type === "reminder";
+              const time =
+                item.type === "assignment"
+                  ? `Due ${fmtTime(item.startTime)}`
+                  : single
+                    ? fmtTime(item.startTime)
+                    : `${fmtTime(item.startTime)} – ${fmtTime(item.endTime)}`;
+              const tag = TYPE_LABEL[item.type];
+
+              return (
+                <View
+                  key={item.id}
+                  accessible
+                  accessibilityLabel={`${time}, ${item.title}${isNow ? ", happening now" : ""}`}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    paddingVertical: spacing.sm,
+                    borderTopWidth: i === 0 ? 0 : StyleSheet.hairlineWidth,
+                    borderTopColor: colors.divider,
+                    opacity: isPast ? 0.55 : 1,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 4,
+                      alignSelf: "stretch",
+                      borderRadius: 2,
+                      marginRight: spacing.sm + 2,
+                      backgroundColor: isNow ? colors.success : colors.primary,
+                    }}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={{
+                        fontFamily: typography.caption.fontFamily,
+                        fontSize: typography.caption.fontSize,
+                        fontWeight: "700",
+                        color: colors.primary,
+                      }}
+                    >
+                      {time}
+                      {isNow ? "  ·  Now" : ""}
+                    </Text>
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        fontFamily: typography.body.fontFamily,
+                        fontSize: typography.body.fontSize,
+                        fontWeight: "700",
+                        color: colors.text,
+                        marginTop: 1,
+                      }}
+                    >
+                      {item.title}
+                    </Text>
+                    {item.location ? (
+                      <Text
+                        numberOfLines={1}
+                        style={{
+                          fontFamily: typography.caption.fontFamily,
+                          fontSize: typography.caption.fontSize,
+                          color: colors.textSecondary,
+                        }}
+                      >
+                        {item.location}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {tag ? (
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontWeight: "700",
+                        color:
+                          item.type === "exam" ? colors.error : colors.primary,
+                      }}
+                    >
+                      {tag}
+                    </Text>
+                  ) : null}
+                </View>
+              );
+            })}
+            {extra > 0 && (
+              <Text
+                style={{
+                  fontFamily: typography.caption.fontFamily,
+                  fontSize: typography.caption.fontSize,
+                  color: colors.textSecondary,
+                  marginTop: spacing.xs,
+                }}
+              >
+                +{extra} more today
+              </Text>
+            )}
+          </>
+        )}
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView
       style={[styles.safeArea, { backgroundColor: colors.background }]}
@@ -227,7 +412,6 @@ export default function StudentDashboard() {
         contentContainerStyle={[styles.scrollContent, { padding: spacing.lg }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Greeting */}
         <Text
           style={{
             fontFamily: typography.h2.fontFamily,
@@ -253,64 +437,11 @@ export default function StudentDashboard() {
           Here is what you can do today.
         </Text>
 
-        {/* What's active (shows once, during onboarding) */}
         <WhatsActiveBanner />
 
-        {/* Today */}
         {sectionTitle("Today")}
-        <TouchableOpacity
-          style={[
-            styles.card,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              borderWidth: 1,
-              borderRadius: radius.lg,
-              padding: spacing.md,
-              minHeight: cardMinHeight,
-              marginBottom: spacing.xl,
-            },
-          ]}
-          onPress={() => router.push("/schedule" as any)}
-          accessibilityRole="button"
-          accessibilityLabel="Today's schedule. Open your schedule to see today's classes."
-        >
-          <Ionicons
-            name="time-outline"
-            size={a11y.largerButtons ? 34 : 28}
-            color={colors.primary}
-            style={{ marginRight: spacing.md }}
-          />
-          <View style={{ flex: 1 }}>
-            <Text
-              style={{
-                fontFamily: typography.title.fontFamily,
-                fontSize: typography.title.fontSize,
-                fontWeight: "700",
-                color: colors.text,
-              }}
-            >
-              Today's schedule
-            </Text>
-            <Text
-              style={{
-                fontFamily: typography.caption.fontFamily,
-                fontSize: typography.caption.fontSize,
-                color: colors.textSecondary,
-                marginTop: 2,
-              }}
-            >
-              Open your schedule to see today's classes.
-            </Text>
-          </View>
-          <Ionicons
-            name="chevron-forward"
-            size={20}
-            color={colors.textSecondary}
-          />
-        </TouchableOpacity>
+        {renderTodayWidget()}
 
-        {/* Recommended */}
         {recommended.length > 0 && (
           <>
             {sectionTitle("Recommended for you")}
@@ -320,7 +451,6 @@ export default function StudentDashboard() {
           </>
         )}
 
-        {/* More tools (collapsed when reduced clutter is on) */}
         {moreTools.length > 0 && (
           <>
             {sectionTitle("More tools")}
@@ -367,7 +497,6 @@ export default function StudentDashboard() {
           </>
         )}
 
-        {/* Upcoming (hidden when reduced clutter is on) */}
         {!a11y.reducedClutter && (
           <>
             {sectionTitle("Upcoming")}
@@ -399,15 +528,7 @@ export default function StudentDashboard() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 48,
-  },
-  card: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
+  safeArea: { flex: 1 },
+  scrollContent: { flexGrow: 1, paddingBottom: 48 },
+  card: { flexDirection: "row", alignItems: "center" },
 });

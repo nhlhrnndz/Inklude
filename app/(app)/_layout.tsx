@@ -22,37 +22,34 @@ const ROUTES_BY_ROLE: Record<UserRole, RouteMap> = {
     dashboard: "/student",
     mySessions: "/my-classes",
     joinSession: "/join",
-    notifications: "/notifications",
     guidance: "/guidance-hub",
-    profile: "/profile",
+    reportIssue: "/report-issue",
+    events: "/events",
+    accessibilityMap: "/accessibility-map",
     settings: "/settings",
     accessibility: "/accessibility",
     sis: "/sis",
     appointments: "/guidance/appointments",
   },
-
   teacher: {
     dashboard: "/teacher",
     createSession: "/create-session",
     mySessions: "/my-classes",
     announcements: "/announcements",
     referrals: "/referrals",
-    notifications: "/notifications",
-    students: null,
     profile: "/profile",
     settings: null,
   },
-
   guidance: {
     dashboard: "/guidance-dashboard",
     students: "/guidance/students",
     appointments: "/guidance/appointments",
-    belonging: "/belonging",
     messages: "/guidance/messages",
-    sessions: null,
-    reports: null,
+    accessibilityReports: "/guidance/accessibility-reports",
+    events: "/events",
+    accessibilityMap: "/accessibility-map",
+    reports: "/guidance/reports",
     announcements: "/announcements",
-    notifications: "/notifications",
     profile: "/profile",
     settings: null,
   },
@@ -71,9 +68,19 @@ function findActiveKey(role: UserRole, pathname: string): string {
   ) {
     return "guidance";
   }
+  if (role === "student" && pathname === "/my-reports") return "reportIssue";
+
+  // Profile screens now live under Settings for students
+  if (
+    role === "student" &&
+    ["/profile", "/edit-profile", "/change-password", "/display-name"].includes(
+      pathname,
+    )
+  ) {
+    return "settings";
+  }
 
   const match = Object.entries(routes).find(([, path]) => path === pathname);
-
   return match ? match[0] : "dashboard";
 }
 

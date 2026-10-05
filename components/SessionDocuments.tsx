@@ -2,6 +2,11 @@
 //
 // "Documents" tab of a classroom. Teachers can upload and delete handouts;
 // everyone in the classroom can open one in the Document Reader.
+//
+// Works two ways:
+//   • Inside a specific session  → pass sessionId
+//   • At the class level        → pass classId
+// Exactly one of the two should be provided.
 
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
@@ -14,10 +19,12 @@ import { useTheme } from "../context/ThemeContext";
 import { useFeatures } from "../hooks/useFeatures";
 import { crossAlert } from "../utils/crossAlert";
 import {
-    DocumentMeta,
-    deleteDocument,
-    getSessionDocuments,
-    uploadDocument,
+  DocumentMeta,
+  deleteDocument,
+  getClassDocuments,
+  getSessionDocuments,
+  uploadClassDocument,
+  uploadDocument,
 } from "../utils/documentApi";
 import { speakPrompt } from "../utils/speakPrompt";
 
@@ -32,9 +39,11 @@ const MAX_BYTES = 15 * 1024 * 1024;
 
 export default function SessionDocuments({
   sessionId,
+  classId,
   isTeacher,
 }: {
-  sessionId: number;
+  sessionId?: number;
+  classId?: number;
   isTeacher: boolean;
 }) {
   const router = useRouter();
@@ -48,14 +57,16 @@ export default function SessionDocuments({
 
   const load = useCallback(async () => {
     try {
-      const data = await getSessionDocuments(sessionId);
+      const data = classId
+        ? await getClassDocuments(classId)
+        : await getSessionDocuments(sessionId as number);
       setDocs(data.documents || []);
     } catch (error) {
       console.error("Error loading documents:", error);
     } finally {
       setLoading(false);
     }
-  }, [sessionId]);
+  }, [sessionId, classId]);
 
   useEffect(() => {
     load();
@@ -84,12 +95,14 @@ export default function SessionDocuments({
       setUploading(true);
       speakPrompt(wantsVoicePrompts, "Uploading document. Please wait.");
 
-      await uploadDocument(sessionId, {
+      const payload = {
         uri: asset.uri,
         name: asset.name,
         mimeType: asset.mimeType,
         webFile: (asset as any).file ?? null,
-      });
+      };
+      if (classId) await uploadClassDocument(classId, payload);
+      else await uploadDocument(sessionId as number, payload);
 
       Toast.show({
         type: "success",
