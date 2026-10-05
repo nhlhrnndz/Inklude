@@ -4,6 +4,7 @@ import { useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Toast from "react-native-toast-message";
 
+
 import AuthFooter from "../components/auth/AuthFooter";
 import AuthHeader from "../components/auth/AuthHeader";
 import AuthInput from "../components/auth/AuthInput";
@@ -11,8 +12,10 @@ import PasswordInput from "../components/auth/PasswordInput";
 import PrimaryButton from "../components/auth/PrimaryButton";
 import ScreenContainer from "../components/common/ScreenContainer";
 
+
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
+
 
 import {
   flushPendingSupportNeeds,
@@ -21,11 +24,13 @@ import {
 import { getMyBasicInfo, getMyProfile } from "../utils/api";
 import { validateEmail, validatePassword } from "../utils/validators/auth";
 
+
 const ROLE_LABEL: Record<string, string> = {
   teacher: "Faculty",
   guidance: "Guidance",
   student: "Student",
 };
+
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -33,22 +38,29 @@ export default function LoginScreen() {
   const { colors, typography, spacing, radius } = useTheme();
   const { role } = useLocalSearchParams<{ role: string }>();
 
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
 
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
 
+
   const [loading, setLoading] = useState(false);
+
 
   const roleLabel = ROLE_LABEL[role as string] ?? "Student";
   const isStaffRole = role === "teacher" || role === "guidance";
+
 
   const handleLogin = async () => {
     setEmailError("");
     setPasswordError("");
 
+
     let valid = true;
+
 
     if (!email.trim()) {
       setEmailError("Please enter your university email.");
@@ -58,6 +70,7 @@ export default function LoginScreen() {
       valid = false;
     }
 
+
     if (!password) {
       setPasswordError("Please enter your password.");
       valid = false;
@@ -66,12 +79,16 @@ export default function LoginScreen() {
       valid = false;
     }
 
+
     if (!valid) return;
+
 
     try {
       setLoading(true);
 
+
       const loggedInUser = await login(email.trim(), password);
+
 
       Toast.show({
         type: "success",
@@ -79,19 +96,23 @@ export default function LoginScreen() {
         text2: "Signing you in...",
       });
 
+
       if (loggedInUser.role === "teacher") {
         router.replace("/teacher");
         return;
       }
+
 
       if (loggedInUser.role === "guidance") {
         router.replace("/guidance-dashboard");
         return;
       }
 
+
       // ---------- Student onboarding chain ----------
       // Support Needs -> Accessibility Preferences -> Display Name
       // -> Basic Information -> SIS -> Dashboard
+
 
       // 0) Apply the support needs chosen before registration (if any).
       try {
@@ -101,11 +122,13 @@ export default function LoginScreen() {
         console.warn("Could not apply pending support needs:", flushErr);
       }
 
+
       // 1) Not onboarded yet?
       //    (Accounts that existed before Phase 4 are flagged onboarded in
       //    the database and skip these steps.)
       try {
         const accessibility = await getMyAccessibility();
+
 
         if (!accessibility.isOnboarded) {
           if (accessibility.needs.length === 0) {
@@ -125,6 +148,7 @@ export default function LoginScreen() {
         console.warn("Could not check onboarding status:", accErr);
       }
 
+
       // 2) Old-profile check (kept so existing accounts still work)
       try {
         await getMyProfile();
@@ -139,6 +163,7 @@ export default function LoginScreen() {
         router.replace("/student");
         return;
       }
+
 
       // 3) Basic Information must exist (mandatory, no skip)
       try {
@@ -165,6 +190,7 @@ export default function LoginScreen() {
     }
   };
 
+
   const handleCreateAccount = () => {
     if (isStaffRole) {
       // Faculty / Guidance register with an invite code.
@@ -175,12 +201,14 @@ export default function LoginScreen() {
     }
   };
 
+
   return (
     <ScreenContainer>
       <AuthHeader
         title="Welcome Back"
         subtitle="Sign in to continue using IncluEd"
       />
+
 
       <View
         style={[
@@ -209,6 +237,7 @@ export default function LoginScreen() {
         </Text>
       </View>
 
+
       <AuthInput
         label="University Email"
         icon="mail-outline"
@@ -225,6 +254,7 @@ export default function LoginScreen() {
         error={emailError}
       />
 
+
       <PasswordInput
         label="Password"
         placeholder="Enter your password"
@@ -237,6 +267,7 @@ export default function LoginScreen() {
         onSubmitEditing={handleLogin}
         error={passwordError}
       />
+
 
       <TouchableOpacity
         style={[styles.forgotContainer, { marginBottom: spacing.lg }]}
@@ -263,12 +294,14 @@ export default function LoginScreen() {
         </Text>
       </TouchableOpacity>
 
+
       <PrimaryButton
         title={loading ? "Signing In..." : "Sign In"}
         onPress={handleLogin}
         loading={loading}
         disabled={loading}
       />
+
 
       <AuthFooter
         question="Don't have an account?"
@@ -279,10 +312,12 @@ export default function LoginScreen() {
   );
 }
 
+
 const styles = StyleSheet.create({
   roleBadge: {
     alignSelf: "center",
   },
+
 
   forgotContainer: {
     alignItems: "flex-end",

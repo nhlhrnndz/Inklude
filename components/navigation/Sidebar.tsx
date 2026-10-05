@@ -145,9 +145,11 @@ export default function Sidebar({
   const initial = displayName.charAt(0).toUpperCase();
 
   const handleLogout = async () => {
-    await logout();
-    router.dismissTo("/");
-  };
+  // Read the role BEFORE logout clears the user
+  const wasStaff = role === "teacher" || role === "guidance";
+  await logout();
+  router.dismissTo((wasStaff ? "/staff-login" : "/") as any);
+};
 
   return (
     <SafeAreaView
