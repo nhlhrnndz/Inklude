@@ -14,7 +14,12 @@ const {
   getClassSessions,
   getClassMembers,
   createClassSession,
+  getTeacherStudents,
 } = require("../models/classModel");
+const {
+  resolveDisplayInfo,
+  avatarColorForId,
+} = require("../models/sessionModel");
 const {
   syncSessionForMembers,
   syncClassForUser,
@@ -385,6 +390,49 @@ async function leaveClassController(req, res) {
   }
 }
 
+// GET /api/classes/my-students  (teacher)
+// Students enrolled in this teacher's classes, grouped per student.
+async function listMyStudentsController(req, res) {
+  try {
+    if (req.user.role !== "teacher") {
+      return res.status(403).json({ message: "Only teachers can view this." });
+    }
+
+    const rows = await getTeacherStudents(req.user.id);
+    const byStudent = new Map();
+
+    rows.forEach((r) => {
+      if (!byStudent.has(r.id)) {
+        const { displayName, initials } = resolveDisplayInfo(
+          { name: r.name, display_username: r.display_username },
+          "teacher",
+        );
+        byStudent.set(r.id, {
+          id: r.id,
+          displayName,
+          initials,
+          avatarColor: avatarColorForId(r.id),
+          classes: [],
+          openRequestCount: 0,
+        });
+      }
+      const s = byStudent.get(r.id);
+      s.classes.push({ id: r.class_id, title: r.class_title });
+      s.openRequestCount += Number(r.open_requests) || 0;
+    });
+
+    const students = [...byStudent.values()].map((s) => ({
+      ...s,
+      hasAccommodationRequest: s.openRequestCount > 0,
+    }));
+
+    res.json({ students });
+  } catch (err) {
+    console.error("listMyStudents error:", err);
+    res.status(500).json({ message: "Server error while loading students." });
+  }
+}
+
 module.exports = {
   createClassController,
   listMyClasses,
@@ -395,4 +443,5 @@ module.exports = {
   getClassDocumentsController,
   createClassSessionController,
   leaveClassController,
+  listMyStudentsController,
 };

@@ -244,7 +244,7 @@ export default function SessionSummaryScreen() {
           </View>
         )}
 
-        {/* Class pulse (aggregate only) */}
+        {/* Class Experience (aggregate only) */}
         <Text
           style={[
             styles.sectionTitle,
@@ -257,7 +257,7 @@ export default function SessionSummaryScreen() {
           ]}
           accessibilityRole="header"
         >
-          Class Pulse
+          Class Experience
         </Text>
 
         <View
@@ -297,9 +297,16 @@ export default function SessionSummaryScreen() {
           ) : (
             <View style={styles.pulseRow}>
               {[
-                { emoji: "😀", label: "Good", n: pulse.counts.happy },
+                { emoji: "🤩", label: "Great", n: pulse.counts.great },
+                { emoji: "🙂", label: "Good", n: pulse.counts.good },
                 { emoji: "😐", label: "Okay", n: pulse.counts.okay },
-                { emoji: "😞", label: "Difficult", n: pulse.counts.sad },
+                { emoji: "😴", label: "Tired", n: pulse.counts.tired },
+                { emoji: "😕", label: "Confused", n: pulse.counts.confused },
+                {
+                  emoji: "😣",
+                  label: "Overwhelmed",
+                  n: pulse.counts.overwhelmed,
+                },
               ].map((p) => (
                 <View
                   key={p.label}
@@ -630,8 +637,8 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontWeight: "700" },
   card: { borderWidth: 1 },
-  pulseRow: { flexDirection: "row", justifyContent: "space-around" },
-  pulseItem: { alignItems: "center" },
+  pulseRow: { flexDirection: "row", flexWrap: "wrap" },
+  pulseItem: { alignItems: "center", width: "33.33%", marginBottom: 12 },
   studentRow: { flexDirection: "row", alignItems: "center", borderWidth: 1 },
   sentBadge: { flexDirection: "row", alignItems: "center" },
   modalWrap: {

@@ -1,20 +1,42 @@
 // server/models/ClassPulse.js
-// Class Experience: an anonymous Good / Okay / Difficult check-in that a
-// student answers once BEFORE and once AFTER each class session.
+// Class Experience: an anonymous check-in that a student answers once BEFORE
+// and once AFTER each class session. Six plain, non-clinical reactions.
 const pool = require("../config/db");
 const crypto = require("crypto");
 
-// Stored values. 1 = Difficult, 2 = Okay, 3 = Good.
-const MOOD = { SAD: 1, OKAY: 2, HAPPY: 3 };
+// Stored values (tinyint). 1-3 keep their old numbers so old rows stay valid:
+// the old "Difficult" (1) is now "Overwhelmed".
+const MOOD = {
+  OVERWHELMED: 1,
+  OKAY: 2,
+  GOOD: 3,
+  GREAT: 4,
+  TIRED: 5,
+  CONFUSED: 6,
+};
+
+// Keys used in API responses, in display order.
+const MOOD_KEYS = ["great", "good", "okay", "tired", "confused", "overwhelmed"];
+
+const MOOD_TO_KEY = {
+  [MOOD.GREAT]: "great",
+  [MOOD.GOOD]: "good",
+  [MOOD.OKAY]: "okay",
+  [MOOD.TIRED]: "tired",
+  [MOOD.CONFUSED]: "confused",
+  [MOOD.OVERWHELMED]: "overwhelmed",
+};
+
+// Moods that count as "class felt hard" for the Guidance repeated-difficulty flag.
+const DIFFICULT_MOODS = [MOOD.OVERWHELMED, MOOD.CONFUSED];
+
 const PHASES = ["before", "after"];
-const MIN_RESPONSES = 2; // a breakdown stays hidden below this
+// A breakdown stays hidden below this. Set CLASS_PULSE_MIN_RESPONSES=2 in .env for demos.
+const MIN_RESPONSES = Number(process.env.CLASS_PULSE_MIN_RESPONSES) || 5;
 const LOW_MOOD_STREAK = 3;
 
 function moodKey(mood) {
-  if (mood === MOOD.SAD) return "sad";
-  if (mood === MOOD.OKAY) return "okay";
-  if (mood === MOOD.HAPPY) return "happy";
-  return null;
+  return MOOD_TO_KEY[mood] || null;
 }
 
 // One hash per (session, phase, student). It can't be reversed to a user id
@@ -141,11 +163,19 @@ async function recordExperience(sessionId, phase, userId, mood) {
 }
 
 function emptyCounts() {
-  return { sad: 0, okay: 0, happy: 0 };
+  const counts = {};
+  MOOD_KEYS.forEach((k) => {
+    counts[k] = 0;
+  });
+  return counts;
+}
+
+function sumCounts(counts) {
+  return MOOD_KEYS.reduce((sum, k) => sum + counts[k], 0);
 }
 
 function toPhaseSummary(counts) {
-  const responded = counts.sad + counts.okay + counts.happy;
+  const responded = sumCounts(counts);
   const hidden = responded < MIN_RESPONSES;
   return { responded, hidden, counts: hidden ? null : { ...counts } };
 }
@@ -220,9 +250,9 @@ async function getClassExperience(classId) {
       totals[p] += summaries[p].responded;
       if (!summaries[p].hidden) {
         qualifying[p] += 1;
-        pooled[p].sad += summaries[p].counts.sad;
-        pooled[p].okay += summaries[p].counts.okay;
-        pooled[p].happy += summaries[p].counts.happy;
+        MOOD_KEYS.forEach((k) => {
+          pooled[p][k] += summaries[p].counts[k];
+        });
       }
     });
 
@@ -238,7 +268,7 @@ async function getClassExperience(classId) {
   const overviewFor = (p) =>
     qualifying[p] > 0
       ? {
-          responded: pooled[p].sad + pooled[p].okay + pooled[p].happy,
+          responded: sumCounts(pooled[p]),
           hidden: false,
           counts: pooled[p],
         }
@@ -251,8 +281,9 @@ async function getClassExperience(classId) {
   };
 }
 
-// True when the student answered "Difficult" after each of their last N
-// finished sessions. (Kept so existing Guidance code that calls it still works.)
+// True when the student answered a "difficult" mood (Overwhelmed or Confused)
+// after each of their last N finished sessions. (Kept so existing Guidance
+// code that calls it still works.)
 async function hasLowMoodStreak(userId) {
   const [sessions] = await pool.query(
     `SELECT s.id
@@ -275,12 +306,15 @@ async function hasLowMoodStreak(userId) {
   );
 
   return (
-    rows.length === LOW_MOOD_STREAK && rows.every((r) => r.mood === MOOD.SAD)
+    rows.length === LOW_MOOD_STREAK &&
+    rows.every((r) => DIFFICULT_MOODS.includes(Number(r.mood)))
   );
 }
 
 module.exports = {
   MOOD,
+  MOOD_KEYS,
+  DIFFICULT_MOODS,
   PHASES,
   MIN_RESPONSES,
   getTiming,

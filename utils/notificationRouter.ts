@@ -14,6 +14,7 @@
 //   accessibility_report -> student: /my-reports, guidance: /guidance/accessibility-reports
 //   campus_event         -> /events (that event highlighted)
 //   sis                  -> /sis
+//   support_referral     -> teacher: /referrals, guidance/admin: /guidance-dashboard
 
 export type NotificationLike = {
   type: string;
@@ -74,6 +75,11 @@ export function resolveNotificationRoute(
     case "campus_event":
       return id ? `/events?highlight=${id}` : "/events";
 
+    case "support_referral":
+      if (role === "teacher") return "/referrals";
+      if (role === "guidance" || role === "admin") return "/guidance-dashboard";
+      return null;
+
     default:
       return null;
   }
@@ -105,6 +111,8 @@ export function getNotificationActionLabel(
       return "Open report";
     case "campus_event":
       return "Open event";
+    case "support_referral":
+      return "Open referral";
     default:
       return null;
   }

@@ -7,6 +7,7 @@ const {
 } = require("../models/followupModel");
 const {
   MOOD,
+  DIFFICULT_MOODS,
   PHASES,
   MIN_RESPONSES,
   getTiming,
@@ -20,7 +21,7 @@ const {
   hasLowMoodStreak,
 } = require("../models/ClassPulse");
 
-const VALID_MOODS = [MOOD.SAD, MOOD.OKAY, MOOD.HAPPY];
+const VALID_MOODS = Object.values(MOOD);
 
 // Matches one of the reasons in followupController's REASONS list.
 const REPEATED_DIFFICULTY_REASON = "Repeated class difficulty";
@@ -32,9 +33,10 @@ async function studentCanAccess(timing, userId) {
   return wasParticipant(timing.id, userId);
 }
 
-// When a student answers "Difficult" after class and has done so after each of
-// their last few finished classes, open one "Repeated class difficulty"
-// follow-up for Guidance. It never blocks or fails the student's answer.
+// When a student answers a "difficult" mood (Overwhelmed or Confused) after
+// class and has done so after each of their last few finished classes, open
+// one "Repeated class difficulty" follow-up for Guidance. It never blocks or
+// fails the student's answer.
 async function flagRepeatedDifficulty(studentId) {
   try {
     if (!(await hasLowMoodStreak(studentId))) return;
@@ -44,7 +46,7 @@ async function flagRepeatedDifficulty(studentId) {
       studentId,
       createdBy: null,
       reason: REPEATED_DIFFICULTY_REASON,
-      note: "Added automatically: the student answered Difficult after each of their most recent classes.",
+      note: "Added automatically: the student answered Overwhelmed or Confused after each of their most recent classes.",
     });
   } catch (err) {
     console.error("flagRepeatedDifficulty error:", err);
@@ -186,8 +188,9 @@ async function submitExperienceController(req, res) {
         .json({ message: "You already answered this one." });
     }
 
-    // Difficult after class: check for a repeated pattern (never blocks the answer)
-    if (phase === "after" && mood === MOOD.SAD) {
+    // Overwhelmed/Confused after class: check for a repeated pattern
+    // (never blocks the answer)
+    if (phase === "after" && DIFFICULT_MOODS.includes(mood)) {
       await flagRepeatedDifficulty(req.user.id);
     }
 

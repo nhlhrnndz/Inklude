@@ -306,6 +306,29 @@ async function createClassSession(
   });
 }
 
+// Every student enrolled in one of THIS teacher's active classes, one row per
+// (student, class). Only the data a teacher may see: name, class, and whether
+// the student has an open accommodation request. Never disability type,
+// support needs or SIS.
+async function getTeacherStudents(teacherId) {
+  const [rows] = await pool.query(
+    `SELECT u.id, u.name, u.display_username,
+            c.id AS class_id, c.title AS class_title,
+            (SELECT COUNT(*) FROM accommodation_requests ar
+               WHERE ar.class_id = c.id
+                 AND ar.student_id = u.id
+                 AND ar.status IN ('pending', 'approved', 'discuss')
+            ) AS open_requests
+     FROM classes c
+     JOIN class_members cm ON cm.class_id = c.id AND cm.left_at IS NULL
+     JOIN users u ON u.id = cm.user_id
+     WHERE c.teacher_id = ? AND c.status = 'active'
+     ORDER BY u.name ASC, c.title ASC`,
+    [teacherId],
+  );
+  return rows;
+}
+
 module.exports = {
   buildMeetingDates,
   createClass,
