@@ -12,6 +12,7 @@ const {
 const REASONS = [
   "Accessibility concern",
   "Repeated class difficulty",
+  "Teacher referral",
   "Academic concern",
   "Adjustment",
   "Personal concern",

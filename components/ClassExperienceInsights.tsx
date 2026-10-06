@@ -7,6 +7,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { useTheme } from "../context/ThemeContext";
 import {
   ClassInsights,
+  PulseCounts,
   PulsePhaseSummary,
   getClassInsights,
 } from "../utils/checkinApi";
@@ -40,30 +41,52 @@ export default function ClassExperienceInsights({ classId }: Props) {
 
   const min = data?.minResponses ?? 5;
 
-  const rows = [
+  // Each row has an icon and a text label, so colour is never the only cue.
+  const rows: {
+    key: keyof PulseCounts;
+    emoji: string;
+    label: string;
+    color: string;
+  }[] = [
+    { key: "great", emoji: "🤩", label: "Great", color: colors.success },
+    { key: "good", emoji: "🙂", label: "Good", color: colors.success },
+    { key: "okay", emoji: "😐", label: "Okay", color: colors.warning },
+    { key: "tired", emoji: "😴", label: "Tired", color: colors.textSecondary },
+    { key: "confused", emoji: "😕", label: "Confused", color: colors.warning },
     {
-      key: "happy" as const,
-      emoji: "😀",
-      label: "Good",
-      color: colors.success,
-    },
-    { key: "okay" as const, emoji: "😐", label: "Okay", color: colors.warning },
-    {
-      key: "sad" as const,
-      emoji: "😟",
-      label: "Difficult",
+      key: "overwhelmed",
+      emoji: "😣",
+      label: "Overwhelmed",
       color: colors.danger,
     },
   ];
 
+  // One-line summary: positive = Great + Good, neutral = Okay + Tired,
+  // difficult = Confused + Overwhelmed
+  const summaryLine = (counts: PulseCounts, total: number) => {
+    if (total <= 0) return "";
+    const pct = (n: number) => Math.round((n / total) * 100);
+    const positive = counts.great + counts.good;
+    const neutral = counts.okay + counts.tired;
+    const difficult = counts.confused + counts.overwhelmed;
+    return `${pct(positive)}% positive · ${pct(neutral)}% neutral · ${pct(difficult)}% difficult`;
+  };
+
   const phaseBlock = (label: string, phase: PulsePhaseSummary) => {
     const visible = !phase.hidden && !!phase.counts;
-    const total = visible
-      ? phase.counts!.happy + phase.counts!.okay + phase.counts!.sad
-      : 0;
+    const counts = phase.counts;
+    const total =
+      visible && counts
+        ? counts.great +
+          counts.good +
+          counts.okay +
+          counts.tired +
+          counts.confused +
+          counts.overwhelmed
+        : 0;
 
     return (
-      <View style={{ flex: 1, minWidth: 140 }}>
+      <View style={{ flex: 1, minWidth: 160 }}>
         <Text
           style={{
             fontFamily: typography.caption.fontFamily,
@@ -78,7 +101,7 @@ export default function ClassExperienceInsights({ classId }: Props) {
           {label}
         </Text>
 
-        {!visible ? (
+        {!visible || !counts ? (
           <Text
             style={{
               fontFamily: typography.body.fontFamily,
@@ -90,56 +113,69 @@ export default function ClassExperienceInsights({ classId }: Props) {
             Not enough responses yet
           </Text>
         ) : (
-          rows.map((r) => {
-            const n = phase.counts![r.key];
-            const pct = total > 0 ? Math.round((n / total) * 100) : 0;
-            return (
-              <View
-                key={r.key}
-                style={{ marginBottom: 8 }}
-                accessibilityLabel={`${r.label}: ${n} of ${total}`}
-              >
-                <View style={styles.rowTop}>
-                  <Text
-                    style={{
-                      fontFamily: typography.body.fontFamily,
-                      fontSize: typography.caption.fontSize,
-                      color: colors.text,
-                    }}
-                  >
-                    {r.emoji} {r.label}
-                  </Text>
-                  <Text
-                    style={{
-                      fontFamily: typography.body.fontFamily,
-                      fontSize: typography.caption.fontSize,
-                      fontWeight: "700",
-                      color: colors.text,
-                    }}
-                  >
-                    {n}
-                  </Text>
-                </View>
+          <View>
+            <Text
+              style={{
+                fontFamily: typography.caption.fontFamily,
+                fontSize: typography.caption.fontSize,
+                color: colors.text,
+                marginBottom: 8,
+              }}
+            >
+              {summaryLine(counts, total)}
+            </Text>
+
+            {rows.map((r) => {
+              const n = counts[r.key];
+              const pct = total > 0 ? Math.round((n / total) * 100) : 0;
+              return (
                 <View
-                  style={{
-                    height: 8,
-                    borderRadius: 4,
-                    backgroundColor: colors.secondaryBackground,
-                    overflow: "hidden",
-                    marginTop: 3,
-                  }}
+                  key={r.key}
+                  style={{ marginBottom: 8 }}
+                  accessibilityLabel={`${r.label}: ${n} of ${total}`}
                 >
+                  <View style={styles.rowTop}>
+                    <Text
+                      style={{
+                        fontFamily: typography.body.fontFamily,
+                        fontSize: typography.caption.fontSize,
+                        color: colors.text,
+                      }}
+                    >
+                      {r.emoji} {r.label}
+                    </Text>
+                    <Text
+                      style={{
+                        fontFamily: typography.body.fontFamily,
+                        fontSize: typography.caption.fontSize,
+                        fontWeight: "700",
+                        color: colors.text,
+                      }}
+                    >
+                      {n}
+                    </Text>
+                  </View>
                   <View
                     style={{
-                      width: `${pct}%`,
                       height: 8,
-                      backgroundColor: r.color,
+                      borderRadius: 4,
+                      backgroundColor: colors.secondaryBackground,
+                      overflow: "hidden",
+                      marginTop: 3,
                     }}
-                  />
+                  >
+                    <View
+                      style={{
+                        width: `${pct}%`,
+                        height: 8,
+                        backgroundColor: r.color,
+                      }}
+                    />
+                  </View>
                 </View>
-              </View>
-            );
-          })
+              );
+            })}
+          </View>
         )}
       </View>
     );

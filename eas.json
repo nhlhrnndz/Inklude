@@ -9,9 +9,13 @@
       "distribution": "internal"
     },
     "preview": {
+      "node": "24.17.0",
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "cache": {
+        "disabled": true
       }
     },
     "production": {

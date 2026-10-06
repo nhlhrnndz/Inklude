@@ -75,6 +75,7 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
       icon: "add-circle-outline",
     },
     { key: "mySessions", label: "My Classes", icon: "albums-outline" },
+    { key: "students", label: "Students", icon: "people-outline" },
     { key: "checkins", label: "Check-ins", icon: "chatbubbles-outline" },
     { key: "referrals", label: "Guidance Referrals", icon: "school-outline" },
     { key: "profile", label: "Profile", icon: "person-outline" },
@@ -145,11 +146,11 @@ export default function Sidebar({
   const initial = displayName.charAt(0).toUpperCase();
 
   const handleLogout = async () => {
-  // Read the role BEFORE logout clears the user
-  const wasStaff = role === "teacher" || role === "guidance";
-  await logout();
-  router.dismissTo((wasStaff ? "/staff-login" : "/") as any);
-};
+    // Read the role BEFORE logout clears the user
+    const wasStaff = role === "teacher" || role === "guidance";
+    await logout();
+    router.dismissTo((wasStaff ? "/staff-login" : "/") as any);
+  };
 
   return (
     <SafeAreaView

@@ -13,8 +13,9 @@
     "android": {
       "package": "com.inclued.app",
       "adaptiveIcon": {
-        "backgroundColor": "#F5EFE0",
-        "foregroundImage": "./assets/images/icon.png"
+        "backgroundColor": "#0B2E4F",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "permissions": [
         "android.permission.RECORD_AUDIO",
@@ -36,9 +37,9 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#F5EFE0",
+          "backgroundColor": "#0B2E4F",
           "dark": {
-            "backgroundColor": "#1A1A1A"
+            "backgroundColor": "#0B2E4F"
           }
         }
       ],

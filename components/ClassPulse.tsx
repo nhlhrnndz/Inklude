@@ -26,15 +26,23 @@ import {
 
 const POLL_MS = 30000;
 
+// Every option has an icon AND a text label (never colour alone).
+// Order = how it appears in the 2 x 3 grid.
 const OPTIONS: { mood: PulseMood; emoji: string; label: string }[] = [
-  { mood: 3, emoji: "😀", label: "Good" },
+  { mood: 4, emoji: "🤩", label: "Great" },
+  { mood: 3, emoji: "🙂", label: "Good" },
   { mood: 2, emoji: "😐", label: "Okay" },
-  { mood: 1, emoji: "😟", label: "Difficult" },
+  { mood: 5, emoji: "😴", label: "Tired" },
+  { mood: 6, emoji: "😕", label: "Confused" },
+  { mood: 1, emoji: "😣", label: "Overwhelmed" },
 ];
 
+// Two buttons per row, three rows
+const ROWS = [OPTIONS.slice(0, 2), OPTIONS.slice(2, 4), OPTIONS.slice(4, 6)];
+
 const TITLES: Record<ExperiencePhase, string> = {
-  before: "How are you feeling about class?",
-  after: "How did class feel?",
+  before: "How are you today?",
+  after: "How was the class?",
 };
 
 const THANKS: Record<ExperiencePhase, string> = {
@@ -211,37 +219,43 @@ export default function ClassPulse({
         may check in with you.
       </Text>
 
-      <View style={[styles.row, { marginTop: spacing.md, gap: 10 }]}>
-        {OPTIONS.map((o) => (
-          <TouchableOpacity
-            key={o.mood}
-            onPress={() => handlePick(o.mood)}
-            disabled={submitting}
-            accessibilityRole="button"
-            accessibilityLabel={o.label}
-            style={[
-              styles.option,
-              {
-                backgroundColor: colors.secondaryBackground,
-                borderColor: colors.border,
-                borderRadius: radius.md,
-                opacity: submitting ? 0.6 : 1,
-              },
-            ]}
-          >
-            <Text style={styles.emoji}>{o.emoji}</Text>
-            <Text
-              style={{
-                fontFamily: typography.caption.fontFamily,
-                fontSize: typography.caption.fontSize,
-                fontWeight: "600",
-                color: colors.text,
-                marginTop: 4,
-              }}
-            >
-              {o.label}
-            </Text>
-          </TouchableOpacity>
+      <View style={{ marginTop: spacing.md, gap: 10 }}>
+        {ROWS.map((row, rowIndex) => (
+          <View key={rowIndex} style={[styles.row, { gap: 10 }]}>
+            {row.map((o) => (
+              <TouchableOpacity
+                key={o.mood}
+                onPress={() => handlePick(o.mood)}
+                disabled={submitting}
+                accessibilityRole="button"
+                accessibilityLabel={o.label}
+                style={[
+                  styles.option,
+                  {
+                    backgroundColor: colors.secondaryBackground,
+                    borderColor: colors.border,
+                    borderRadius: radius.md,
+                    opacity: submitting ? 0.6 : 1,
+                  },
+                ]}
+              >
+                <Text style={styles.emoji} importantForAccessibility="no">
+                  {o.emoji}
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: typography.caption.fontFamily,
+                    fontSize: typography.caption.fontSize,
+                    fontWeight: "600",
+                    color: colors.text,
+                    marginTop: 4,
+                  }}
+                >
+                  {o.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         ))}
       </View>
 
@@ -281,6 +295,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     paddingVertical: 12,
+    paddingHorizontal: 6,
   },
   emoji: { fontSize: 32 },
 });

@@ -37,6 +37,7 @@ const ROUTES_BY_ROLE: Record<UserRole, RouteMap> = {
     dashboard: "/teacher",
     createSession: "/create-session",
     mySessions: "/my-classes",
+    students: "/my-students",
     checkins: "/checkins",
     announcements: "/announcements",
     referrals: "/referrals",

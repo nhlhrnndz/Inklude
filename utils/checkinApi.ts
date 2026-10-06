@@ -78,15 +78,19 @@ export const replyToCheckin = async (
 
 // ===== Class Experience (before / after class check-in) =====
 
-// 1 = Difficult, 2 = Okay, 3 = Good
-export type PulseMood = 1 | 2 | 3;
+// 1 = Overwhelmed (the old "Difficult"), 2 = Okay, 3 = Good,
+// 4 = Great, 5 = Tired, 6 = Confused
+export type PulseMood = 1 | 2 | 3 | 4 | 5 | 6;
 
 export type ExperiencePhase = "before" | "after";
 
 export interface PulseCounts {
-  sad: number; // Difficult
+  great: number;
+  good: number;
   okay: number;
-  happy: number; // Good
+  tired: number;
+  confused: number;
+  overwhelmed: number;
 }
 
 export interface PulsePhaseSummary {

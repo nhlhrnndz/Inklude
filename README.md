@@ -36,6 +36,7 @@ IncluEd
 │  │  ├─ my-classes.tsx
 │  │  ├─ my-reports.tsx
 │  │  ├─ my-sessions.tsx
+│  │  ├─ my-students.tsx
 │  │  ├─ notifications.tsx
 │  │  ├─ profile.tsx
 │  │  ├─ quick-talk.tsx
@@ -82,6 +83,7 @@ IncluEd
 │  └─ images
 │     ├─ campus-map.jpg
 │     ├─ favicon.png
+│     ├─ icon-source.jpg
 │     ├─ icon.png
 │     ├─ partial-react-logo.png
 │     ├─ react-logo.png
@@ -145,6 +147,7 @@ IncluEd
 │  ├─ AuthContext.tsx
 │  ├─ NotificationContext.tsx
 │  └─ ThemeContext.tsx
+├─ eas.json
 ├─ eslint.config.js
 ├─ hooks
 │  ├─ use-color-scheme.ts
@@ -167,6 +170,7 @@ IncluEd
 ├─ package.json
 ├─ README.md
 ├─ scripts
+│  ├─ build-icons.js
 │  └─ reset-project.js
 ├─ server
 │  ├─ config
@@ -307,6 +311,7 @@ IncluEd
 │  ├─ belongingApi.ts
 │  ├─ campusApi.ts
 │  ├─ checkinApi.ts
+│  ├─ classApi.ts
 │  ├─ classSchedule.ts
 │  ├─ crossAlert.ts
 │  ├─ documentApi.ts

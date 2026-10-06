@@ -3,26 +3,26 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import {
-    SafeAreaView,
-    useSafeAreaInsets,
+  SafeAreaView,
+  useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 
 import { useTheme } from "../../context/ThemeContext";
 import {
-    AUTO_PAUSE_MS,
-    useQuickTalkListener,
+  AUTO_PAUSE_MS,
+  useQuickTalkListener,
 } from "../../hooks/useQuickTalkListener";
 import { useQuickTalkSpeech } from "../../hooks/useQuickTalkSpeech";
 
@@ -34,6 +34,19 @@ interface Entry {
   text: string;
   at: number;
 }
+
+// All user-facing wording for the mic button lives here. Change it in one place.
+const LABELS = {
+  start: "Start Talking",
+  stop: "Stop Talking",
+  startA11yHint:
+    "Turns the microphone on to show what the other person says as captions",
+  stopA11yHint: "Turns the microphone off",
+  statusActive: "Capturing speech…",
+  statusPaused: "Microphone paused",
+  statusOff: "Captions off",
+  subtitle: "Read what the other person says, and reply out loud.",
+};
 
 const QUICK_PHRASES = [
   "Yes",
@@ -241,18 +254,18 @@ export default function QuickTalkScreen() {
   const statusText = isBusy
     ? "Speaking your reply…"
     : status === "listening"
-      ? "Listening…"
+      ? LABELS.statusActive
       : status === "holding"
-        ? "Microphone paused"
-        : "Not listening";
+        ? LABELS.statusPaused
+        : LABELS.statusOff;
 
   const stopNotice =
     !isListening && stopReason === "silence"
       ? `Paused because no speech was heard for ${Math.round(
           AUTO_PAUSE_MS / 1000,
-        )} seconds. Tap Start Listening to continue.`
+        )} seconds. Tap ${LABELS.start} to continue.`
       : !isListening && stopReason === "background"
-        ? "Listening stopped because the app went to the background."
+        ? "Captions stopped because the app went to the background."
         : null;
 
   // Starting the mic while the phone is talking would caption its own voice
@@ -295,7 +308,7 @@ export default function QuickTalkScreen() {
                   marginTop: 2,
                 }}
               >
-                Follow a nearby conversation and reply out loud.
+                {LABELS.subtitle}
               </Text>
             </View>
 
@@ -457,8 +470,8 @@ export default function QuickTalkScreen() {
                   }}
                 >
                   {isListening
-                    ? "Listening… what the other person says will appear here."
-                    : "Tap Start Listening and let the other person talk. Their words appear here as large captions. Type below or tap a phrase to reply out loud."}
+                    ? "Capturing speech… what the other person says will appear here."
+                    : `Tap ${LABELS.start} and let the other person talk. Their words appear here as large captions. Type below or tap a phrase to reply out loud.`}
                 </Text>
               </View>
             ) : (
@@ -691,7 +704,7 @@ export default function QuickTalkScreen() {
             </Text>
           )}
 
-          {/* Start / Stop listening */}
+          {/* Start / Stop captions */}
           <TouchableOpacity
             style={[
               styles.mainButton,
@@ -708,13 +721,9 @@ export default function QuickTalkScreen() {
             disabled={micDisabled}
             activeOpacity={0.85}
             accessibilityRole="button"
-            accessibilityLabel={
-              isListening ? "Stop listening" : "Start listening"
-            }
+            accessibilityLabel={isListening ? LABELS.stop : LABELS.start}
             accessibilityHint={
-              isListening
-                ? "Turns the microphone off"
-                : "Turns the microphone on to show live captions"
+              isListening ? LABELS.stopA11yHint : LABELS.startA11yHint
             }
             accessibilityState={{ disabled: micDisabled }}
           >
@@ -732,7 +741,7 @@ export default function QuickTalkScreen() {
                 fontWeight: "700",
               }}
             >
-              {isListening ? "Stop Listening" : "Start Listening"}
+              {isListening ? LABELS.stop : LABELS.start}
             </Text>
           </TouchableOpacity>
         </View>

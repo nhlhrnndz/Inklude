@@ -5,6 +5,7 @@ const { verifyToken, requireRole } = require("../middleware/authMiddleware");
 const {
   createClassController,
   listMyClasses,
+  listMyStudentsController,
   joinClassController,
   getClassController,
   getClassMembersController,
@@ -16,6 +17,15 @@ const {
 
 router.post("/", verifyToken, requireRole("teacher"), createClassController);
 router.get("/", verifyToken, listMyClasses);
+
+// Must stay above "/:id"
+router.get(
+  "/my-students",
+  verifyToken,
+  requireRole("teacher"),
+  listMyStudentsController,
+);
+
 router.post("/join", verifyToken, requireRole("student"), joinClassController);
 router.get("/:id", verifyToken, getClassController);
 router.get("/:id/members", verifyToken, getClassMembersController);
