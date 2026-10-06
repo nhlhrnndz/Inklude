@@ -1,4 +1,3 @@
-//guidanceController.js
 const {
   getAllStudents,
   getStudentById,
@@ -13,24 +12,30 @@ const {
   getTopReportLocations,
   getWeeklyActivity,
 } = require("../models/guidanceModel");
+
 const {
   getNeedsHelpInfo,
   getNeedsHelpStudentIds,
 } = require("../models/Checkin");
+
 const { getNeedsHelpStudents } = require("../models/needsHelpModel");
 const { getAppointmentsForStudent } = require("../models/appointmentModel");
 const { getGuidanceThreads } = require("../models/messageModel");
 const { getAnnouncementsByAuthor } = require("../models/announcementModel");
 const { getAllStudentSIS } = require("../models/sisModel");
+
 const {
   getStats: getReportStats,
 } = require("../models/accessibilityReportModel");
+
 const {
   toDto: followupToDto,
   getFollowupsForStudent,
   getActiveFollowups,
   countActiveFollowups,
 } = require("../models/followupModel");
+
+const { getPwdStats } = require("../models/pwdStatsModel");
 
 function isGuidance(req) {
   return req.user.role === "guidance" || req.user.role === "admin";
@@ -42,11 +47,25 @@ function preview(text, max = 100) {
   const clean = String(text || "")
     .replace(/\s+/g, " ")
     .trim();
+
   return clean.length > max ? clean.slice(0, max - 1) + "…" : clean;
 }
 
-// Same shape as the appointment controller's format() so the
-// frontend `Appointment` type works for both.
+function parseJson(value, fallback) {
+  if (!value) return fallback;
+
+  if (typeof value === "object") {
+    return value;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+// Same shape as the appointment controller's format().
 function mapAppointment(a) {
   return {
     id: a.id,
@@ -83,50 +102,199 @@ function currentMonthBounds() {
   };
 }
 
-// GET /api/guidance/students?disability=Autism&course=BS%20Information%20Technology&search=juan
+// GET /api/guidance/students
+//
+// Phase 4 query parameters:
+// ?college=CICS
+// ?q=juan
+// ?year=3rd Year
+// ?need=Deaf
+// ?sis=complete|incomplete
+// ?followup=true|false
+// ?sort=name_asc
+//
+// Older parameters remain supported:
+// ?disability=Deaf
+// ?search=juan
+// ?course=BS%20Information%20Technology
 async function getStudentsController(req, res) {
   try {
     if (!isGuidance(req)) {
       return res.status(403).json(FORBIDDEN);
     }
 
-    const { disability, search, course } = req.query;
+    const {
+      college,
+      q,
+      year,
+      need,
+      sis,
+      followup,
+      sort = "name_asc",
 
-    const students = await getAllStudents(disability, search, course);
+      // Backward compatibility
+      disability,
+      search,
+      course,
+    } = req.query;
 
-    // Yes/no only: the student told a teacher "I need help" in the last
-    // 14 days. It never exposes the underlying check-in.
+    /*
+     * Main student query.
+     *
+     * College, year, support category, search, and sorting are
+     * handled by guidanceModel on the server.
+     */
+    const students = await getAllStudents({
+      college,
+      q,
+      year,
+      need,
+      sort,
+
+      disability,
+      search,
+      course,
+    });
+
+    /*
+     * Existing "Needs Help" functionality.
+     */
     const needsHelpIds = await getNeedsHelpStudentIds();
 
+    /*
+     * SIS completion status.
+     *
+     * We use the existing SIS model instead of introducing a
+     * second SIS query/table definition here.
+     *
+     * Existing SIS statuses:
+     * completed
+     * in_progress
+     * not_started
+     */
+    let sisStatusByStudent = new Map();
+
+    try {
+      const allSIS = await getAllStudentSIS();
+
+      sisStatusByStudent = new Map(
+        allSIS.map((row) => [
+          Number(row.user_id),
+          row.status || "not_started",
+        ]),
+      );
+    } catch (sisError) {
+      console.error(
+        "getStudentsController SIS lookup error:",
+        sisError,
+      );
+    }
+
+    /*
+     * Students without an SIS record are considered not_started.
+     */
+    const getSisStatus = (studentId) => {
+      return sisStatusByStudent.get(Number(studentId)) || "not_started";
+    };
+
+    /*
+     * Follow-up information.
+     *
+     * Existing active follow-ups are already exposed through the
+     * followup model, so we reuse that instead of introducing
+     * another database schema/query.
+     */
+    let followupStudentIds = new Set();
+
+    try {
+      const activeFollowups = await getActiveFollowups();
+
+      followupStudentIds = new Set(
+        activeFollowups
+          .map((item) => {
+            return Number(
+              item.studentId ??
+                item.student_id ??
+                item.student?.id ??
+                0,
+            );
+          })
+          .filter((id) => id > 0),
+      );
+    } catch (followupError) {
+      console.error(
+        "getStudentsController follow-up lookup error:",
+        followupError,
+      );
+    }
+
+    /*
+     * Apply SIS and follow-up filters on the server.
+     *
+     * These are intentionally applied here rather than inside
+     * React Native so the client never performs the actual filtering.
+     */
+    let filteredStudents = students;
+
+    if (sis === "complete") {
+      filteredStudents = filteredStudents.filter(
+        (student) => getSisStatus(student.id) === "completed",
+      );
+    }
+
+    if (sis === "incomplete") {
+      filteredStudents = filteredStudents.filter(
+        (student) => getSisStatus(student.id) !== "completed",
+      );
+    }
+
+    if (followup === "needed") {
+      filteredStudents = filteredStudents.filter((student) =>
+        followupStudentIds.has(Number(student.id)),
+      );
+    }
+
     res.json({
-      students: students.map((s) => ({
+      students: filteredStudents.map((s) => ({
         id: s.id,
         name: s.name,
         email: s.email,
         createdAt: s.created_at,
+
         disabilityTypes: s.disability_types
-          ? JSON.parse(s.disability_types)
+          ? typeof s.disability_types === "string"
+            ? JSON.parse(s.disability_types)
+            : s.disability_types
           : [],
+
         accessibilityPreferences: s.accessibility_preferences
-          ? JSON.parse(s.accessibility_preferences)
+          ? typeof s.accessibility_preferences === "string"
+            ? JSON.parse(s.accessibility_preferences)
+            : s.accessibility_preferences
           : {},
+
         course: s.course ?? null,
         yearLevel: s.year_level ?? null,
         section: s.section ?? null,
+
+        sisStatus: getSisStatus(s.id),
+
         flags: {
           needsHelp: needsHelpIds.has(s.id),
+          followupNeeded: followupStudentIds.has(Number(s.id)),
         },
       })),
     });
   } catch (err) {
     console.error("getStudentsController error:", err);
-    res.status(500).json({ message: "Server error while fetching students." });
+
+    res.status(500).json({
+      message: "Server error while fetching students.",
+    });
   }
 }
 
 // GET /api/guidance/students/:id
-// Student Support Profile: identity, needs/preferences, SIS lives in its own
-// endpoint, plus appointments, follow-ups and the message thread summary.
 async function getStudentDetailController(req, res) {
   try {
     const studentId = req.params.id;
@@ -163,12 +331,11 @@ async function getStudentDetailController(req, res) {
         name: student.name,
         email: student.email,
         createdAt: student.created_at,
-        disabilityTypes: student.disability_types
-          ? JSON.parse(student.disability_types)
-          : [],
-        accessibilityPreferences: student.accessibility_preferences
-          ? JSON.parse(student.accessibility_preferences)
-          : {},
+        disabilityTypes: parseJson(student.disability_types, []),
+        accessibilityPreferences: parseJson(
+          student.accessibility_preferences,
+          {},
+        ),
         course: student.course ?? null,
         yearLevel: student.year_level ?? null,
         section: student.section ?? null,
@@ -209,9 +376,9 @@ async function getStudentDetailController(req, res) {
     });
   } catch (err) {
     console.error("getStudentDetailController error:", err);
-    res
-      .status(500)
-      .json({ message: "Server error while fetching student detail." });
+    res.status(500).json({
+      message: "Server error while fetching student detail.",
+    });
   }
 }
 
@@ -226,12 +393,13 @@ async function getStatsController(req, res) {
     res.json({ stats });
   } catch (err) {
     console.error("getStatsController error:", err);
-    res.status(500).json({ message: "Server error while fetching stats." });
+    res.status(500).json({
+      message: "Server error while fetching stats.",
+    });
   }
 }
 
 // GET /api/guidance/dashboard
-// One call for every card on the redesigned Guidance dashboard.
 async function getDashboardSummaryController(req, res) {
   try {
     if (!isGuidance(req)) {
@@ -272,14 +440,13 @@ async function getDashboardSummaryController(req, res) {
       getNeedsHelpStudents(),
     ]);
 
-    // Messages: only threads that actually have a message
     const liveThreads = threads.filter((t) => t.last_message);
+
     const unreadTotal = liveThreads.reduce(
       (sum, t) => sum + Number(t.unread_count || 0),
       0,
     );
 
-    // SIS: anything that isn't "completed" counts as incomplete
     let completed = 0;
     let inProgress = 0;
     let notStarted = 0;
@@ -290,13 +457,19 @@ async function getDashboardSummaryController(req, res) {
         completed += 1;
         return;
       }
+
       if (row.status === "in_progress") inProgress += 1;
       else notStarted += 1;
+
       incompleteStudentIds.push(row.user_id);
     });
 
-    // Accessibility reports for this month
-    const byStatus = { pending: 0, in_progress: 0, resolved: 0 };
+    const byStatus = {
+      pending: 0,
+      in_progress: 0,
+      resolved: 0,
+    };
+
     reportStats.statusRows.forEach((row) => {
       byStatus[row.status] = Number(row.count);
     });
@@ -305,6 +478,7 @@ async function getDashboardSummaryController(req, res) {
 
     res.json({
       totalStudents: stats.totalStudents,
+
       appointments: {
         pendingCount: apptSummary.pendingCount,
         upcomingCount: apptSummary.upcomingCount,
@@ -320,10 +494,12 @@ async function getDashboardSummaryController(req, res) {
             }
           : null,
       },
+
       followups: {
         activeCount: activeCount,
         items: activeItems.map(followupToDto),
       },
+
       messages: {
         unreadTotal,
         threads: liveThreads.slice(0, 4).map((t) => ({
@@ -335,12 +511,14 @@ async function getDashboardSummaryController(req, res) {
           unreadCount: Number(t.unread_count) || 0,
         })),
       },
+
       announcements: announcements.slice(0, 3).map((a) => ({
         id: a.id,
         title: a.title,
         audience: a.audience,
         createdAt: a.created_at,
       })),
+
       sis: {
         total: sisRows.length,
         completed,
@@ -349,7 +527,6 @@ async function getDashboardSummaryController(req, res) {
         incompleteStudentIds,
       },
 
-      // ---- redesigned dashboard ----
       supportStatus: {
         total: supportStatus.total,
         followUp: supportStatus.followUp,
@@ -357,6 +534,7 @@ async function getDashboardSummaryController(req, res) {
         awaitingReply: supportStatus.awaitingReply,
         noOpenItems: supportStatus.noOpenItems,
       },
+
       needsAttention: {
         followups: activeCount,
         pendingAppointments: apptSummary.pendingCount,
@@ -365,7 +543,9 @@ async function getDashboardSummaryController(req, res) {
         appointmentsToday: todayRows.length,
         needsHelp: needsHelpStudents.length,
       },
+
       needsHelpStudents: needsHelpStudents.slice(0, 5),
+
       today: todayRows.map((a) => ({
         id: a.id,
         studentId: a.student_id,
@@ -374,27 +554,52 @@ async function getDashboardSummaryController(req, res) {
         status: a.status,
         time: a.confirmed_time,
       })),
+
       accessibility: {
         month,
-        total: byStatus.pending + byStatus.in_progress + byStatus.resolved,
+        total:
+          byStatus.pending +
+          byStatus.in_progress +
+          byStatus.resolved,
         pending: byStatus.pending,
         inProgress: byStatus.in_progress,
         resolved: byStatus.resolved,
         topLocations,
-        topCategories: reportStats.categoryRows.slice(0, 5).map((row) => ({
-          category: row.category,
-          count: Number(row.count),
-        })),
+        topCategories: reportStats.categoryRows
+          .slice(0, 5)
+          .map((row) => ({
+            category: row.category,
+            count: Number(row.count),
+          })),
       },
+
       activity: {
         weeks: weeklyActivity,
       },
     });
   } catch (err) {
     console.error("getDashboardSummaryController error:", err);
-    res
-      .status(500)
-      .json({ message: "Server error while loading the dashboard." });
+    res.status(500).json({
+      message: "Server error while loading the dashboard.",
+    });
+  }
+}
+
+// GET /api/guidance/pwd-stats
+async function getPwdStatsController(req, res) {
+  try {
+    if (!isGuidance(req)) {
+      return res.status(403).json(FORBIDDEN);
+    }
+
+    const stats = await getPwdStats();
+
+    res.json(stats);
+  } catch (err) {
+    console.error("getPwdStatsController error:", err);
+    res.status(500).json({
+      message: "Server error while fetching PWD stats.",
+    });
   }
 }
 
@@ -402,5 +607,6 @@ module.exports = {
   getStudentsController,
   getStudentDetailController,
   getStatsController,
+  getPwdStatsController,
   getDashboardSummaryController,
 };

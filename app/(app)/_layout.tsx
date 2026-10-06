@@ -53,7 +53,6 @@ const ROUTES_BY_ROLE: Record<UserRole, RouteMap> = {
     reports: "/guidance/reports",
     announcements: "/announcements",
     profile: "/profile",
-    settings: null,
   },
 };
 

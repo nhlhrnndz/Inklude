@@ -1,38 +1,223 @@
-//guidanceModel.js
 const pool = require("../config/db");
 
-// Get all students with their disability profiles and basic info
-// (course/year level/section), with optional filters (disability, course) + search
-async function getAllStudents(disabilityFilter, searchTerm, courseFilter) {
+const COLLEGE_COURSES = {
+  CABEIHM: [
+    "BS Accountancy",
+    "BS Management Accounting",
+    "BS Business Administration - Financial Management",
+    "BS Business Administration - HR Management",
+    "BS Business Administration - Marketing Management",
+    "BS Hospitality Management",
+    "BS Tourism Management",
+  ],
+  CAS: [
+    "BA Communication",
+    "BS Psychology",
+    "BS Fisheries and Aquatic Sciences",
+    "BS Food Technology",
+  ],
+  CCJE: ["BS Criminology"],
+  CHS: ["BS Nursing", "BS Nutrition and Dietetics"],
+  CICS: ["BS Information Technology"],
+  CTE: [
+    "BEEd",
+    "BPEd",
+    "BSEd - English",
+    "BSEd - Science",
+    "BSEd - Mathematics",
+    "BSEd - Filipino",
+    "BSEd - Social Studies",
+  ],
+};
+
+// Get all students with optional server-side filters.
+// Supported filters:
+// - disability / need
+// - search / q
+// - course
+// - college
+// - year / yearLevel
+// - followup
+// - sort
+//
+// The older positional arguments are still supported so existing callers
+// do not break.
+async function getAllStudents(filters = {}) {
+  const {
+    college,
+    q,
+    year,
+    need,
+    sort = "name_asc",
+
+    // Backward-compatible filters
+    disability,
+    search,
+    course,
+  } = filters;
+
   let query = `
-    SELECT u.id, u.name, u.email, u.created_at,
-           dp.disability_types, dp.accessibility_preferences,
-           bi.course, bi.year_level, bi.section
+    SELECT
+      u.id,
+      u.name,
+      u.email,
+      u.created_at,
+      dp.disability_types,
+      dp.accessibility_preferences,
+      bi.course,
+      bi.year_level,
+      bi.section
     FROM users u
-    LEFT JOIN disability_profiles dp ON dp.user_id = u.id
-    LEFT JOIN student_basic_info bi ON bi.user_id = u.id
+    LEFT JOIN disability_profiles dp
+      ON dp.user_id = u.id
+    LEFT JOIN student_basic_info bi
+      ON bi.user_id = u.id
     WHERE u.role = 'student'
   `;
+
   const params = [];
 
-  if (disabilityFilter) {
-    query += " AND JSON_CONTAINS(dp.disability_types, JSON_QUOTE(?))";
-    params.push(disabilityFilter);
+  /*
+   * College filtering
+   *
+   * The frontend sends the college code:
+   * CABEIHM, CAS, CCJE, CHS, CICS, CTE
+   *
+   * The database stores the actual course name, so we translate
+   * the selected college into its course list here.
+   */
+  const collegeCourses = {
+    CABEIHM: [
+      "BS Accountancy",
+      "BS Management Accounting",
+      "BS Business Administration - Financial Management",
+      "BS Business Administration - HR Management",
+      "BS Business Administration - Marketing Management",
+      "BS Hospitality Management",
+      "BS Tourism Management",
+    ],
+
+    CAS: [
+      "BA Communication",
+      "BS Psychology",
+      "BS Fisheries and Aquatic Sciences",
+      "BS Food Technology",
+    ],
+
+    CCJE: [
+      "BS Criminology",
+    ],
+
+    CHS: [
+      "BS Nursing",
+      "BS Nutrition and Dietetics",
+    ],
+
+    CICS: [
+      "BS Information Technology",
+    ],
+
+    CTE: [
+      "BEEd",
+      "BPEd",
+      "BSEd - English",
+      "BSEd - Science",
+      "BSEd - Mathematics",
+      "BSEd - Filipino",
+      "BSEd - Social Studies",
+    ],
+  };
+
+  if (college && collegeCourses[college]) {
+    const courses = collegeCourses[college];
+
+    query += `
+      AND bi.course IN (${courses.map(() => "?").join(", ")})
+    `;
+
+    params.push(...courses);
   }
 
-  if (courseFilter) {
-    query += " AND bi.course = ?";
-    params.push(courseFilter);
+  /*
+   * Year-level filter.
+   */
+  if (year) {
+    query += `
+      AND bi.year_level = ?
+    `;
+
+    params.push(year);
   }
+
+  /*
+   * Support category / disability type.
+   */
+  const needFilter = need || disability;
+
+  if (needFilter) {
+    query += `
+      AND JSON_CONTAINS(
+        COALESCE(dp.disability_types, JSON_ARRAY()),
+        JSON_QUOTE(?)
+      )
+    `;
+
+    params.push(needFilter);
+  }
+
+  /*
+   * Global/student search.
+   *
+   * q is the new Phase 4 search parameter.
+   * search remains supported for compatibility.
+   *
+   * Search is intentionally performed against the student's
+   * name and email on the server.
+   */
+  const searchTerm = q || search;
 
   if (searchTerm) {
-    query += " AND (u.name LIKE ? OR u.email LIKE ?)";
-    params.push(`%${searchTerm}%`, `%${searchTerm}%`);
+    query += `
+      AND (
+        u.name LIKE ?
+        OR u.email LIKE ?
+      )
+    `;
+
+    const pattern = `%${searchTerm}%`;
+
+    params.push(pattern, pattern);
   }
 
-  query += " ORDER BY bi.course ASC, u.name ASC";
+  /*
+   * Backward-compatible exact course filter.
+   */
+  if (course) {
+    query += `
+      AND bi.course = ?
+    `;
+
+    params.push(course);
+  }
+
+  /*
+   * Server-side sorting.
+   *
+   * Only allow known sort values so a query parameter can never
+   * become arbitrary SQL.
+   */
+  if (sort === "name_asc") {
+    query += `
+      ORDER BY u.name ASC
+    `;
+  } else {
+    query += `
+      ORDER BY u.name ASC
+    `;
+  }
 
   const [rows] = await pool.query(query, params);
+
   return rows;
 }
 
@@ -66,7 +251,7 @@ async function getStudentAttendance(studentId) {
   return rows;
 }
 
-// Get a student's transcript history (things said/captioned for them)
+// Get a student's transcript history
 async function getStudentTranscripts(studentId) {
   const [rows] = await pool.query(
     `SELECT t.id, t.text, t.created_at, s.title AS session_title, s.session_code
@@ -116,7 +301,6 @@ async function getDashboardStats() {
 }
 
 // Week 7: numbers for the dashboard's Appointments card.
-// Dates/times are formatted in SQL so they never shift by timezone.
 async function getAppointmentSummary() {
   const [[counts]] = await pool.query(
     `SELECT
@@ -153,7 +337,6 @@ async function getAppointmentSummary() {
 }
 
 // Week 7: one-line picture of a student's thread with Guidance.
-// Returns null when the student has never messaged.
 async function getStudentMessageSummary(studentId) {
   const [rows] = await pool.query(
     `SELECT
@@ -179,13 +362,9 @@ async function getStudentMessageSummary(studentId) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Dashboard redesign: visual summary helpers                          */
+/* Dashboard redesign                                                 */
 /* ------------------------------------------------------------------ */
 
-// Each student is counted once, by priority:
-// follow-up needed > appointment pending > awaiting reply > no open items.
-// awaitingReplyTotal counts every student whose last message is unanswered,
-// regardless of priority (used by the "Needs attention" box).
 async function getSupportStatusBreakdown() {
   const [rows] = await pool.query(
     `SELECT u.id,
@@ -234,7 +413,6 @@ async function getSupportStatusBreakdown() {
   return result;
 }
 
-// Confirmed / rescheduled appointments happening today.
 async function getTodayAppointments() {
   const [rows] = await pool.query(
     `SELECT a.id, a.student_id, a.reason, a.status,
@@ -249,7 +427,6 @@ async function getTodayAppointments() {
   return rows;
 }
 
-// Accessibility reports still waiting for Guidance (all time, not just this month).
 async function getPendingReportCount() {
   const [rows] = await pool.query(
     "SELECT COUNT(*) AS count FROM accessibility_reports WHERE status = 'pending'",
@@ -257,8 +434,6 @@ async function getPendingReportCount() {
   return Number(rows[0].count) || 0;
 }
 
-// Most reported locations for one month. Location is free text, so
-// "Library" and "library " are grouped together.
 async function getTopReportLocations(start, end, limit = 5) {
   const [rows] = await pool.query(
     `SELECT MIN(TRIM(location)) AS location, COUNT(*) AS count
@@ -269,14 +444,13 @@ async function getTopReportLocations(start, end, limit = 5) {
      LIMIT ?`,
     [start, end, limit],
   );
+
   return rows.map((r) => ({
     location: r.location,
     count: Number(r.count),
   }));
 }
 
-// Support activity over the last `weeks` rolling 7-day windows:
-// appointment requests + messages from students + accessibility reports.
 async function getWeeklyActivity(weeks = 4) {
   const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
   const now = Date.now();
@@ -311,8 +485,10 @@ async function getWeeklyActivity(weeks = 4) {
     rows.forEach((row) => {
       const t = new Date(row.created_at).getTime();
       let idx = Math.floor((t - origin) / WEEK_MS);
+
       if (Number.isNaN(idx) || idx < 0) return;
       if (idx >= weeks) idx = weeks - 1;
+
       buckets[idx][key] += 1;
       buckets[idx].total += 1;
     });

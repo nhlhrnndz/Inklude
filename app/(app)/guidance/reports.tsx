@@ -13,20 +13,26 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 
+import PwdBarChart from "../../../components/PwdBarChart";
+import { useAuth } from "../../../context/AuthContext";
 import { useTheme } from "../../../context/ThemeContext";
 import {
     AccessibilityReportExport,
     getAccessibilityReportData,
 } from "../../../utils/guidanceReportApi";
+import { getPwdStats, PwdStats } from "../../../utils/guidanceDashboardApi";
 import {
     REPORT_STATUS_LABEL,
     reportStatusColor,
 } from "../../../utils/reportApi";
 import {
+    downloadPwdCsv,
     formatDate,
     formatDuration,
     formatMonthLabel,
     printAccessibilityReport,
+    printPwdReport,
+    PwdReportKind,
 } from "../../../utils/reportPdf";
 
 const PREVIEW_ROWS = 10;
@@ -165,6 +171,56 @@ function BarRow({
   );
 }
 
+function ExportButton({
+  icon,
+  label,
+  onPress,
+  disabled,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  const { colors, typography, spacing, radius } = useTheme();
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!disabled }}
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        borderWidth: 1,
+        borderColor: colors.primary,
+        borderRadius: radius.md,
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.md,
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      <Ionicons
+        name={icon}
+        size={16}
+        color={colors.primary}
+        style={{ marginRight: 6 }}
+      />
+      <Text
+        style={{
+          fontFamily: typography.caption.fontFamily,
+          fontSize: typography.caption.fontSize,
+          fontWeight: "700",
+          color: colors.primary,
+        }}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 export default function GuidanceReportsScreen() {
   const { colors, typography, spacing, radius } = useTheme();
 
@@ -174,6 +230,43 @@ export default function GuidanceReportsScreen() {
   const [error, setError] = useState(false);
   const [includeNames, setIncludeNames] = useState(false);
   const reqRef = useRef(0);
+
+    const { user } = useAuth();
+  const [pwd, setPwd] = useState<PwdStats | null>(null);
+  const [pwdError, setPwdError] = useState(false);
+
+  useEffect(() => {
+    getPwdStats()
+      .then(setPwd)
+      .catch(() => setPwdError(true));
+  }, []);
+
+  const handlePwdExport = (kind: PwdReportKind, format: "pdf" | "csv") => {
+    if (!pwd) return;
+
+    if (Platform.OS !== "web") {
+      Toast.show({
+        type: "info",
+        text1: "Open on the web",
+        text2: "Exports are available in the web version.",
+      });
+      return;
+    }
+
+    const role = user?.role === "admin" ? "Admin" : "Guidance";
+    const ok =
+      format === "pdf"
+        ? printPwdReport(pwd, kind, user?.name || "Guidance Office", role)
+        : downloadPwdCsv(pwd, kind);
+
+    if (!ok) {
+      Toast.show({
+        type: "error",
+        text1: "Couldn't export",
+        text2: "Try again in a desktop browser.",
+      });
+    }
+  };
 
   const isCurrentMonth = month >= currentMonth();
 
@@ -621,6 +714,110 @@ export default function GuidanceReportsScreen() {
               {renderPreview()}
             </View>
           )}
+
+                    {/* ---------------- PWD statistics export ---------------- */}
+          <View style={{ marginTop: spacing.xl }}>
+            <Text
+              style={{
+                fontFamily: typography.title.fontFamily,
+                fontSize: typography.body.fontSize + 4,
+                fontWeight: "700",
+                color: colors.text,
+              }}
+              accessibilityRole="header"
+            >
+              PWD Statistics
+            </Text>
+            <Text
+              style={[captionStyle, { marginTop: 2, marginBottom: spacing.md }]}
+            >
+              Confidential. Exports show counts below 3 as "&lt;3".
+            </Text>
+
+            {pwdError ? (
+              <Text style={[captionStyle, { fontStyle: "italic" }]}>
+                Couldn't load PWD statistics.
+              </Text>
+            ) : !pwd ? (
+              <ActivityIndicator
+                color={colors.primary}
+                accessibilityLabel="Loading PWD statistics"
+              />
+            ) : (
+              <View
+                style={{
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  gap: spacing.md,
+                }}
+              >
+                {(
+                  [
+                    {
+                      kind: "college" as PwdReportKind,
+                      title: "PWD Students per College",
+                      color: colors.primary,
+                      data: pwd.byCollege.map((c) => ({
+                        label: c.college,
+                        value: c.total,
+                      })),
+                    },
+                    {
+                      kind: "category" as PwdReportKind,
+                      title: "PWD Students per Support Category",
+                      color: colors.primaryLight,
+                      data: pwd.byCategory.map((c) => ({
+                        label: c.need,
+                        value: c.count,
+                      })),
+                    },
+                  ] as const
+                ).map((p) => (
+                  <View
+                    key={p.kind}
+                    style={[
+                      panelStyle,
+                      {
+                        flexGrow: 1,
+                        flexShrink: 1,
+                        flexBasis: 320,
+                        minWidth: 260,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        bodyStyle,
+                        { fontWeight: "700", marginBottom: spacing.sm },
+                      ]}
+                    >
+                      {p.title}
+                    </Text>
+                    <PwdBarChart data={[...p.data]} color={p.color} />
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        flexWrap: "wrap",
+                        gap: spacing.sm,
+                        marginTop: spacing.sm,
+                      }}
+                    >
+                      <ExportButton
+                        icon="download-outline"
+                        label="Export PDF"
+                        onPress={() => handlePwdExport(p.kind, "pdf")}
+                      />
+                      <ExportButton
+                        icon="document-text-outline"
+                        label="Export CSV"
+                        onPress={() => handlePwdExport(p.kind, "csv")}
+                      />
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>

@@ -1,8 +1,8 @@
-// utils/guidanceDashboardApi.ts
 import api from "./api";
 
 export interface GuidanceDashboardData {
   totalStudents: number;
+
   appointments: {
     pendingCount: number;
     upcomingCount: number;
@@ -16,6 +16,7 @@ export interface GuidanceDashboardData {
       time: string;
     } | null;
   };
+
   followups: {
     activeCount: number;
     items: {
@@ -26,9 +27,11 @@ export interface GuidanceDashboardData {
       createdAt: string;
     }[];
   };
+
   messages: {
     unreadTotal: number;
   };
+
   supportStatus: {
     total: number;
     followUp: number;
@@ -36,6 +39,7 @@ export interface GuidanceDashboardData {
     awaitingReply: number;
     noOpenItems: number;
   };
+
   needsAttention: {
     followups: number;
     pendingAppointments: number;
@@ -44,12 +48,14 @@ export interface GuidanceDashboardData {
     appointmentsToday: number;
     needsHelp: number;
   };
+
   needsHelpStudents: {
     id: number;
     name: string;
     count: number;
     latestAt: string | null;
   }[];
+
   today: {
     id: number;
     studentId: number;
@@ -58,18 +64,26 @@ export interface GuidanceDashboardData {
     status: string;
     time: string;
   }[];
+
   accessibility: {
-    month: string; // YYYY-MM
+    month: string;
     total: number;
     pending: number;
     inProgress: number;
     resolved: number;
-    topLocations: { location: string; count: number }[];
-    topCategories: { category: string; count: number }[];
+    topLocations: {
+      location: string;
+      count: number;
+    }[];
+    topCategories: {
+      category: string;
+      count: number;
+    }[];
   };
+
   activity: {
     weeks: {
-      start: string; // ISO date
+      start: string;
       appointments: number;
       messages: number;
       reports: number;
@@ -80,5 +94,26 @@ export interface GuidanceDashboardData {
 
 export const getGuidanceDashboardData = async () => {
   const response = await api.get("/api/guidance/dashboard");
+
   return response.data as GuidanceDashboardData;
+};
+
+export interface PwdStats {
+  totalPwd: number;
+
+  byCollege: {
+    college: string;
+    total: number;
+  }[];
+
+  byCategory: {
+    need: string;
+    count: number;
+  }[];
+}
+
+export const getPwdStats = async () => {
+  const response = await api.get("/api/guidance/pwd-stats");
+
+  return response.data as PwdStats;
 };

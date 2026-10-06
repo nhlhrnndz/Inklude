@@ -206,16 +206,30 @@ export const getDashboardStats = async () => {
   return response.data;
 };
 
-export const getStudents = async (filters?: {
+export type StudentDirectoryFilters = {
+  college?: string;
+  q?: string;
+  year?: string;
+  need?: string;
+  sis?: "complete" | "incomplete";
+  followup?: "needed";
+  sort?: "name_asc";
+
+  // Backward-compatible parameters
   disability?: string;
   search?: string;
   course?: string;
   section?: string;
   yearLevel?: string;
-}) => {
+};
+
+export const getStudents = async (
+  filters?: StudentDirectoryFilters,
+) => {
   const response = await api.get("/api/guidance/students", {
     params: filters,
   });
+
   return response.data;
 };
 
