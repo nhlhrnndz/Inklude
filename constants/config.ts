@@ -3,7 +3,7 @@ import { Platform } from "react-native";
 // 1) After you get your ngrok static domain, put it here:
 export const PUBLIC_URL = "https://custodian-flock-viewless.ngrok-free.dev";
 // 2) Your laptop's Wi-Fi address (only for Expo Go testing)
-const LOCAL_URL = "http://192.168.1.10:5000";
+const LOCAL_URL = "http://10.249.5.61:5000";
 
 function pickApiUrl() {
   if (Platform.OS === "web" && typeof window !== "undefined") {

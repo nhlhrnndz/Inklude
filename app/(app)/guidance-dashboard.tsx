@@ -1,3 +1,4 @@
+//guidance-dashboard.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { ReactNode, useCallback, useRef, useState } from "react";
@@ -14,10 +15,10 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 
+import PwdBarChart from "../../components/PwdBarChart";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
 import { useLiveRefresh } from "../../hooks/useLiveRefresh";
-import PwdBarChart from "../../components/PwdBarChart";
 import {
   getGuidanceDashboardData,
   getPwdStats,
@@ -137,11 +138,7 @@ function Panel({
             justifyContent: "center",
           }}
         >
-          <Ionicons
-            name={icon}
-            size={19}
-            color={colors.primary}
-          />
+          <Ionicons name={icon} size={19} color={colors.primary} />
         </View>
 
         <Text
@@ -190,9 +187,7 @@ function Panel({
         )}
       </View>
 
-      <View style={{ marginTop: spacing.md }}>
-        {children}
-      </View>
+      <View style={{ marginTop: spacing.md }}>{children}</View>
     </View>
   );
 }
@@ -219,9 +214,7 @@ function KpiCard({
       onPress={onPress}
       activeOpacity={0.85}
       accessibilityRole="button"
-      accessibilityLabel={`${value} ${label}${
-        hint ? `, ${hint}` : ""
-      }`}
+      accessibilityLabel={`${value} ${label}${hint ? `, ${hint}` : ""}`}
       style={{
         flexGrow: 1,
         flexShrink: 1,
@@ -251,11 +244,7 @@ function KpiCard({
             justifyContent: "center",
           }}
         >
-          <Ionicons
-            name={icon}
-            size={20}
-            color={tint}
-          />
+          <Ionicons name={icon} size={20} color={tint} />
         </View>
 
         <Ionicons
@@ -337,9 +326,7 @@ function AttentionRow({
           paddingHorizontal: 8,
           paddingVertical: 4,
           borderRadius: radius.md,
-          backgroundColor: active
-            ? color + "22"
-            : colors.secondaryBackground,
+          backgroundColor: active ? color + "22" : colors.secondaryBackground,
           borderWidth: 1,
           borderColor: active ? color : colors.border,
           alignItems: "center",
@@ -351,9 +338,7 @@ function AttentionRow({
             fontFamily: typography.body.fontFamily,
             fontSize: typography.body.fontSize,
             fontWeight: "700",
-            color: active
-              ? colors.text
-              : colors.textSecondary,
+            color: active ? colors.text : colors.textSecondary,
           }}
         >
           {count}
@@ -365,19 +350,13 @@ function AttentionRow({
           flex: 1,
           fontFamily: typography.body.fontFamily,
           fontSize: typography.body.fontSize,
-          color: active
-            ? colors.text
-            : colors.textSecondary,
+          color: active ? colors.text : colors.textSecondary,
         }}
       >
         {label}
       </Text>
 
-      <Ionicons
-        name="chevron-forward"
-        size={18}
-        color={colors.textSecondary}
-      />
+      <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
     </TouchableOpacity>
   );
 }
@@ -396,9 +375,7 @@ function BarRow({
   const { colors, typography, radius } = useTheme();
 
   const pct =
-    max > 0 && value > 0
-      ? Math.max(4, Math.round((value / max) * 100))
-      : 0;
+    max > 0 && value > 0 ? Math.max(4, Math.round((value / max) * 100)) : 0;
 
   return (
     <View
@@ -488,8 +465,7 @@ export default function GuidanceDashboard() {
   const { user } = useAuth();
   const { colors, typography, spacing, radius } = useTheme();
 
-  const [data, setData] =
-    useState<GuidanceDashboardData | null>(null);
+  const [data, setData] = useState<GuidanceDashboardData | null>(null);
 
   const [error, setError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -524,9 +500,7 @@ export default function GuidanceDashboard() {
         Toast.show({
           type: "error",
           text1: "Failed to load dashboard",
-          text2:
-            err.response?.data?.message ??
-            "Please try again.",
+          text2: err.response?.data?.message ?? "Please try again.",
         });
       }
     }
@@ -633,21 +607,13 @@ export default function GuidanceDashboard() {
       },
     ];
 
-    const locationMax =
-      accessibility.topLocations[0]?.count ?? 0;
+    const locationMax = accessibility.topLocations[0]?.count ?? 0;
 
-    const categoryMax =
-      accessibility.topCategories[0]?.count ?? 0;
+    const categoryMax = accessibility.topCategories[0]?.count ?? 0;
 
-    const weekMax = Math.max(
-      1,
-      ...activity.weeks.map((w) => w.total),
-    );
+    const weekMax = Math.max(1, ...activity.weeks.map((w) => w.total));
 
-    const weeksTotal = activity.weeks.reduce(
-      (sum, w) => sum + w.total,
-      0,
-    );
+    const weeksTotal = activity.weeks.reduce((sum, w) => sum + w.total, 0);
 
     const BAR_AREA = 110;
 
@@ -678,9 +644,7 @@ export default function GuidanceDashboard() {
             hint={
               appointments.pendingCount > 0
                 ? `${appointments.pendingCount} pending request${
-                    appointments.pendingCount === 1
-                      ? ""
-                      : "s"
+                    appointments.pendingCount === 1 ? "" : "s"
                   }`
                 : "No pending requests"
             }
@@ -705,10 +669,7 @@ export default function GuidanceDashboard() {
             tint={colors.danger}
             onPress={() =>
               scrollRef.current?.scrollTo({
-                y: Math.max(
-                  0,
-                  attentionYRef.current - 8,
-                ),
+                y: Math.max(0, attentionYRef.current - 8),
                 animated: true,
               })
             }
@@ -754,8 +715,7 @@ export default function GuidanceDashboard() {
                     },
                   ]}
                 >
-                  {pwd.totalPwd} students with support needs in
-                  total
+                  {pwd.totalPwd} students with support needs in total
                 </Text>
               </>
             )}
@@ -789,8 +749,8 @@ export default function GuidanceDashboard() {
                     },
                   ]}
                 >
-                  A student can select more than one need, so these
-                  counts may add up to more than the total.
+                  A student can select more than one need, so these counts may
+                  add up to more than the total.
                 </Text>
               </>
             )}
@@ -801,8 +761,7 @@ export default function GuidanceDashboard() {
 
         <View
           onLayout={(e) => {
-            attentionYRef.current =
-              e.nativeEvent.layout.y;
+            attentionYRef.current = e.nativeEvent.layout.y;
           }}
           style={{
             flexDirection: "row",
@@ -822,9 +781,7 @@ export default function GuidanceDashboard() {
               label="Follow-ups needed"
               onPress={() =>
                 followups.items[0]
-                  ? go(
-                      `/guidance/student/${followups.items[0].studentId}`,
-                    )
+                  ? go(`/guidance/student/${followups.items[0].studentId}`)
                   : go("/guidance/students")
               }
             />
@@ -833,36 +790,28 @@ export default function GuidanceDashboard() {
               color={colors.warning}
               count={needsAttention.pendingAppointments}
               label="Pending appointment requests"
-              onPress={() =>
-                go("/guidance/appointments")
-              }
+              onPress={() => go("/guidance/appointments")}
             />
 
             <AttentionRow
               color={colors.warning}
               count={needsAttention.unansweredMessages}
               label="Messages waiting for a reply"
-              onPress={() =>
-                go("/guidance/messages")
-              }
+              onPress={() => go("/guidance/messages")}
             />
 
             <AttentionRow
               color={colors.warning}
               count={needsAttention.pendingReports}
               label="Pending accessibility reports"
-              onPress={() =>
-                go("/guidance/accessibility-reports")
-              }
+              onPress={() => go("/guidance/accessibility-reports")}
             />
 
             <AttentionRow
               color={colors.primary}
               count={needsAttention.appointmentsToday}
               label="Appointments today"
-              onPress={() =>
-                go("/guidance/appointments")
-              }
+              onPress={() => go("/guidance/appointments")}
             />
 
             <AttentionRow
@@ -871,9 +820,7 @@ export default function GuidanceDashboard() {
               label="Students who asked for help"
               onPress={() =>
                 data.needsHelpStudents[0]
-                  ? go(
-                      `/guidance/student/${data.needsHelpStudents[0].id}`,
-                    )
+                  ? go(`/guidance/student/${data.needsHelpStudents[0].id}`)
                   : go("/guidance/students")
               }
             />
@@ -885,11 +832,7 @@ export default function GuidanceDashboard() {
                 {data.needsHelpStudents.map((student) => (
                   <TouchableOpacity
                     key={student.id}
-                    onPress={() =>
-                      go(
-                        `/guidance/student/${student.id}`,
-                      )
-                    }
+                    onPress={() => go(`/guidance/student/${student.id}`)}
                     accessibilityRole="button"
                     accessibilityLabel={`${student.name} asked for help. Open profile.`}
                     style={{
@@ -915,32 +858,22 @@ export default function GuidanceDashboard() {
                           fontWeight: "700",
                         }}
                       >
-                        {student.name
-                          .charAt(0)
-                          .toUpperCase()}
+                        {student.name.charAt(0).toUpperCase()}
                       </Text>
                     </View>
 
                     <View style={{ flex: 1 }}>
                       <Text
-                        style={[
-                          bodyStyle,
-                          { fontWeight: "600" },
-                        ]}
+                        style={[bodyStyle, { fontWeight: "600" }]}
                         numberOfLines={1}
                       >
                         {student.name}
                       </Text>
 
-                      <Text
-                        style={captionStyle}
-                        numberOfLines={1}
-                      >
+                      <Text style={captionStyle} numberOfLines={1}>
                         Replied "I need help"
                         {student.latestAt
-                          ? ` • ${formatShortDay(
-                              student.latestAt,
-                            )}`
+                          ? ` • ${formatShortDay(student.latestAt)}`
                           : ""}
                       </Text>
                     </View>
@@ -962,11 +895,7 @@ export default function GuidanceDashboard() {
                 {followups.items.map((item) => (
                   <TouchableOpacity
                     key={item.id}
-                    onPress={() =>
-                      go(
-                        `/guidance/student/${item.studentId}`,
-                      )
-                    }
+                    onPress={() => go(`/guidance/student/${item.studentId}`)}
                     accessibilityRole="button"
                     accessibilityLabel={`${item.studentName}, ${item.reason}. Open profile.`}
                     style={{
@@ -992,29 +921,20 @@ export default function GuidanceDashboard() {
                           fontWeight: "700",
                         }}
                       >
-                        {item.studentName
-                          .charAt(0)
-                          .toUpperCase()}
+                        {item.studentName.charAt(0).toUpperCase()}
                       </Text>
                     </View>
 
                     <View style={{ flex: 1 }}>
                       <Text
-                        style={[
-                          bodyStyle,
-                          { fontWeight: "600" },
-                        ]}
+                        style={[bodyStyle, { fontWeight: "600" }]}
                         numberOfLines={1}
                       >
                         {item.studentName}
                       </Text>
 
-                      <Text
-                        style={captionStyle}
-                        numberOfLines={1}
-                      >
-                        {item.reason} • since{" "}
-                        {formatShortDay(item.createdAt)}
+                      <Text style={captionStyle} numberOfLines={1}>
+                        {item.reason} • since {formatShortDay(item.createdAt)}
                       </Text>
                     </View>
 
@@ -1026,18 +946,9 @@ export default function GuidanceDashboard() {
                   </TouchableOpacity>
                 ))}
 
-                {followups.activeCount >
-                  followups.items.length && (
-                  <Text
-                    style={[
-                      captionStyle,
-                      { marginTop: 4 },
-                    ]}
-                  >
-                    and{" "}
-                    {followups.activeCount -
-                      followups.items.length}{" "}
-                    more
+                {followups.activeCount > followups.items.length && (
+                  <Text style={[captionStyle, { marginTop: 4 }]}>
+                    and {followups.activeCount - followups.items.length} more
                   </Text>
                 )}
               </View>
@@ -1048,9 +959,7 @@ export default function GuidanceDashboard() {
             title="Student Support"
             icon="pie-chart-outline"
             actionLabel="View students"
-            onAction={() =>
-              go("/guidance/students")
-            }
+            onAction={() => go("/guidance/students")}
             style={panelFlex}
           >
             <View
@@ -1071,9 +980,7 @@ export default function GuidanceDashboard() {
                 {supportStatus.total}
               </Text>
 
-              <Text style={captionStyle}>
-                students in total
-              </Text>
+              <Text style={captionStyle}>students in total</Text>
             </View>
 
             <View
@@ -1083,14 +990,10 @@ export default function GuidanceDashboard() {
                 marginTop: spacing.sm,
                 borderRadius: radius.round,
                 overflow: "hidden",
-                backgroundColor:
-                  colors.secondaryBackground,
+                backgroundColor: colors.secondaryBackground,
               }}
               accessibilityLabel={statusSegments
-                .map(
-                  (segment) =>
-                    `${segment.label}: ${segment.value}`,
-                )
+                .map((segment) => `${segment.label}: ${segment.value}`)
                 .join(", ")}
             >
               {statusSegments
@@ -1126,35 +1029,17 @@ export default function GuidanceDashboard() {
                     }}
                   />
 
-                  <Text
-                    style={[
-                      bodyStyle,
-                      { flex: 1 },
-                    ]}
-                  >
-                    {segment.label}
-                  </Text>
+                  <Text style={[bodyStyle, { flex: 1 }]}>{segment.label}</Text>
 
-                  <Text
-                    style={[
-                      bodyStyle,
-                      { fontWeight: "700" },
-                    ]}
-                  >
+                  <Text style={[bodyStyle, { fontWeight: "700" }]}>
                     {segment.value}
                   </Text>
                 </View>
               ))}
             </View>
 
-            <Text
-              style={[
-                captionStyle,
-                { marginTop: spacing.sm },
-              ]}
-            >
-              Each student is counted once, by the most
-              urgent item.
+            <Text style={[captionStyle, { marginTop: spacing.sm }]}>
+              Each student is counted once, by the most urgent item.
             </Text>
           </Panel>
         </View>
@@ -1162,20 +1047,14 @@ export default function GuidanceDashboard() {
         {/* ---------------- Accessibility activity ---------------- */}
 
         <Panel
-          title={`Accessibility Activity · ${formatMonth(
-            accessibility.month,
-          )}`}
+          title={`Accessibility Activity · ${formatMonth(accessibility.month)}`}
           icon="accessibility-outline"
           actionLabel="Manage reports"
-          onAction={() =>
-            go("/guidance/accessibility-reports")
-          }
+          onAction={() => go("/guidance/accessibility-reports")}
           style={{ marginTop: spacing.md }}
         >
           {accessibility.total === 0 ? (
-            emptyText(
-              "No accessibility reports this month yet.",
-            )
+            emptyText("No accessibility reports this month yet.")
           ) : (
             <View
               style={{
@@ -1194,8 +1073,7 @@ export default function GuidanceDashboard() {
                 >
                   <Text
                     style={{
-                      fontFamily:
-                        typography.title.fontFamily,
+                      fontFamily: typography.title.fontFamily,
                       fontSize: 34,
                       fontWeight: "700",
                       color: colors.text,
@@ -1204,14 +1082,10 @@ export default function GuidanceDashboard() {
                     {accessibility.total}
                   </Text>
 
-                  <Text style={captionStyle}>
-                    reports this month
-                  </Text>
+                  <Text style={captionStyle}>reports this month</Text>
                 </View>
 
-                <View
-                  style={{ marginTop: spacing.sm }}
-                >
+                <View style={{ marginTop: spacing.sm }}>
                   <BarRow
                     label="Resolved"
                     value={accessibility.resolved}
@@ -1238,33 +1112,29 @@ export default function GuidanceDashboard() {
               <View style={panelFlex}>
                 <SubHeading text="Most reported locations" />
 
-                {accessibility.topLocations.map(
-                  (location) => (
-                    <BarRow
-                      key={location.location}
-                      label={location.location}
-                      value={location.count}
-                      max={locationMax}
-                      color={colors.primary}
-                    />
-                  ),
-                )}
+                {accessibility.topLocations.map((location) => (
+                  <BarRow
+                    key={location.location}
+                    label={location.location}
+                    value={location.count}
+                    max={locationMax}
+                    color={colors.primary}
+                  />
+                ))}
               </View>
 
               <View style={panelFlex}>
                 <SubHeading text="Top issue types" />
 
-                {accessibility.topCategories.map(
-                  (category) => (
-                    <BarRow
-                      key={category.category}
-                      label={category.category}
-                      value={category.count}
-                      max={categoryMax}
-                      color={colors.primary}
-                    />
-                  ),
-                )}
+                {accessibility.topCategories.map((category) => (
+                  <BarRow
+                    key={category.category}
+                    label={category.category}
+                    value={category.count}
+                    max={categoryMax}
+                    color={colors.primary}
+                  />
+                ))}
               </View>
             </View>
           )}
@@ -1285,20 +1155,13 @@ export default function GuidanceDashboard() {
             icon="stats-chart-outline"
             style={panelFlex}
           >
-            <Text
-              style={[
-                captionStyle,
-                { marginBottom: spacing.sm },
-              ]}
-            >
-              Appointment requests, student messages and
-              accessibility reports per week (last 4 weeks)
+            <Text style={[captionStyle, { marginBottom: spacing.sm }]}>
+              Appointment requests, student messages and accessibility reports
+              per week (last 4 weeks)
             </Text>
 
             {weeksTotal === 0 ? (
-              emptyText(
-                "No activity in the last 4 weeks.",
-              )
+              emptyText("No activity in the last 4 weeks.")
             ) : (
               <View
                 style={{
@@ -1310,16 +1173,10 @@ export default function GuidanceDashboard() {
                 {activity.weeks.map((week, index) => {
                   const height =
                     week.total > 0
-                      ? Math.max(
-                          6,
-                          (week.total / weekMax) *
-                            BAR_AREA,
-                        )
+                      ? Math.max(6, (week.total / weekMax) * BAR_AREA)
                       : 3;
 
-                  const isCurrent =
-                    index ===
-                    activity.weeks.length - 1;
+                  const isCurrent = index === activity.weeks.length - 1;
 
                   return (
                     <View
@@ -1331,24 +1188,16 @@ export default function GuidanceDashboard() {
                       accessible
                       accessibilityLabel={`Week of ${formatShortDay(
                         week.start,
-                      )}: ${
-                        week.total
-                      } items. ${
+                      )}: ${week.total} items. ${
                         week.appointments
-                      } appointment requests, ${
-                        week.messages
-                      } messages, ${
+                      } appointment requests, ${week.messages} messages, ${
                         week.reports
                       } reports.`}
                     >
                       <Text
                         style={{
-                          fontFamily:
-                            typography.caption
-                              .fontFamily,
-                          fontSize:
-                            typography.caption
-                              .fontSize,
+                          fontFamily: typography.caption.fontFamily,
+                          fontSize: typography.caption.fontSize,
                           fontWeight: "700",
                           color: colors.text,
                           marginBottom: 4,
@@ -1360,22 +1209,18 @@ export default function GuidanceDashboard() {
                       <View
                         style={{
                           height: BAR_AREA,
-                          justifyContent:
-                            "flex-end",
+                          justifyContent: "flex-end",
                         }}
                       >
                         <View
                           style={{
                             width: 36,
                             height,
-                            borderTopLeftRadius:
-                              radius.sm,
-                            borderTopRightRadius:
-                              radius.sm,
-                            backgroundColor:
-                              isCurrent
-                                ? colors.primary
-                                : colors.primaryLight,
+                            borderTopLeftRadius: radius.sm,
+                            borderTopRightRadius: radius.sm,
+                            backgroundColor: isCurrent
+                              ? colors.primary
+                              : colors.primaryLight,
                           }}
                         />
                       </View>
@@ -1389,9 +1234,7 @@ export default function GuidanceDashboard() {
                           },
                         ]}
                       >
-                        {formatShortDay(
-                          week.start,
-                        )}
+                        {formatShortDay(week.start)}
                       </Text>
                     </View>
                   );
@@ -1404,16 +1247,12 @@ export default function GuidanceDashboard() {
             title="Today"
             icon="today-outline"
             actionLabel="Appointments"
-            onAction={() =>
-              go("/guidance/appointments")
-            }
+            onAction={() => go("/guidance/appointments")}
             style={panelFlex}
           >
             {today.length === 0 ? (
               <View>
-                {emptyText(
-                  "No appointments scheduled for today.",
-                )}
+                {emptyText("No appointments scheduled for today.")}
 
                 {appointments.next && (
                   <View
@@ -1423,24 +1262,14 @@ export default function GuidanceDashboard() {
                   >
                     <SubHeading text="Next appointment" />
 
-                    <Text
-                      style={[
-                        bodyStyle,
-                        { fontWeight: "600" },
-                      ]}
-                    >
+                    <Text style={[bodyStyle, { fontWeight: "600" }]}>
                       {appointments.next.studentName} •{" "}
                       {appointments.next.reason}
                     </Text>
 
                     <Text style={captionStyle}>
-                      {formatShortDay(
-                        appointments.next.date,
-                      )}{" "}
-                      ·{" "}
-                      {formatClock(
-                        appointments.next.time,
-                      )}
+                      {formatShortDay(appointments.next.date)} ·{" "}
+                      {formatClock(appointments.next.time)}
                     </Text>
                   </View>
                 )}
@@ -1450,25 +1279,18 @@ export default function GuidanceDashboard() {
                 <TouchableOpacity
                   key={appointment.id}
                   onPress={() =>
-                    go(
-                      `/guidance/student/${appointment.studentId}`,
-                    )
+                    go(`/guidance/student/${appointment.studentId}`)
                   }
                   accessibilityRole="button"
-                  accessibilityLabel={`${formatClock(
-                    appointment.time,
-                  )}, ${
+                  accessibilityLabel={`${formatClock(appointment.time)}, ${
                     appointment.studentName
-                  }, ${
-                    appointment.reason
-                  }. Open profile.`}
+                  }, ${appointment.reason}. Open profile.`}
                   style={{
                     flexDirection: "row",
                     alignItems: "center",
                     paddingVertical: spacing.sm,
                     borderBottomWidth: 1,
-                    borderBottomColor:
-                      colors.border,
+                    borderBottomColor: colors.border,
                   }}
                 >
                   <Text
@@ -1481,26 +1303,18 @@ export default function GuidanceDashboard() {
                       },
                     ]}
                   >
-                    {formatClock(
-                      appointment.time,
-                    )}
+                    {formatClock(appointment.time)}
                   </Text>
 
                   <View style={{ flex: 1 }}>
                     <Text
-                      style={[
-                        bodyStyle,
-                        { fontWeight: "600" },
-                      ]}
+                      style={[bodyStyle, { fontWeight: "600" }]}
                       numberOfLines={1}
                     >
                       {appointment.studentName}
                     </Text>
 
-                    <Text
-                      style={captionStyle}
-                      numberOfLines={1}
-                    >
+                    <Text style={captionStyle} numberOfLines={1}>
                       {appointment.reason}
                     </Text>
                   </View>
@@ -1593,10 +1407,7 @@ export default function GuidanceDashboard() {
             paddingBottom: 48,
           }}
           refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-            />
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
           }
           showsVerticalScrollIndicator={false}
         >

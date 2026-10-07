@@ -346,4 +346,5 @@ module.exports = {
   getClassSessions,
   getClassMembers,
   createClassSession,
+  getTeacherStudents, // ⬅️ was missing, this caused the 500
 };

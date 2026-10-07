@@ -2,41 +2,49 @@
 //
 // Campus Events.
 //   Student:  upcoming events with accessibility tags, "Add to my calendar".
-//   Guidance: create events (with tags) and cancel them.
+//   Guidance: create events (with tags and a supporting document), view the
+//             document, and cancel events.
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 
 import {
-    DateField,
-    TimeField,
-    todayString,
+  DateField,
+  TimeField,
+  todayString,
 } from "../../components/DateTimePicker";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
 import {
-    CampusEvent,
-    EventTag,
-    addEventToCalendar,
-    cancelEvent,
-    createEvent,
-    getEvents,
-    removeEventFromCalendar,
+  CampusEvent,
+  EventTag,
+  PickedDocument,
+  addEventToCalendar,
+  cancelEvent,
+  createEvent,
+  getEvents,
+  openEventDocument,
+  pickEventDocument,
+  removeEventFromCalendar,
 } from "../../utils/campusApi";
 import { crossAlert } from "../../utils/crossAlert";
+
+// Set to false to make the supporting document optional.
+// (Also change DOCUMENT_REQUIRED in server/controllers/eventController.js.)
+const DOCUMENT_REQUIRED = true;
 
 const TAG_META: Record<
   EventTag,
@@ -81,6 +89,11 @@ function fmtTime(d: Date) {
   return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
+function fmtSize(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export default function EventsScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -94,6 +107,7 @@ export default function EventsScreen() {
   const [events, setEvents] = useState<CampusEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [openingDocId, setOpeningDocId] = useState<number | null>(null);
 
   // Guidance form
   const [showForm, setShowForm] = useState(false);
@@ -104,6 +118,7 @@ export default function EventsScreen() {
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [tags, setTags] = useState<EventTag[]>([]);
+  const [document, setDocument] = useState<PickedDocument | null>(null);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -134,7 +149,37 @@ export default function EventsScreen() {
     setStartTime("");
     setEndTime("");
     setTags([]);
+    setDocument(null);
     setShowForm(false);
+  };
+
+  const handlePickDocument = async () => {
+    try {
+      const picked = await pickEventDocument();
+      if (picked) setDocument(picked);
+    } catch (err: any) {
+      Toast.show({
+        type: "error",
+        text1: "Could not attach the document",
+        text2: err?.message ?? "Please try again.",
+      });
+    }
+  };
+
+  const handleViewDocument = async (ev: CampusEvent) => {
+    setOpeningDocId(ev.id);
+    try {
+      await openEventDocument(ev.id);
+    } catch (err: any) {
+      Toast.show({
+        type: "error",
+        text1: "Could not open the document",
+        text2:
+          err?.response?.data?.message ?? err?.message ?? "Please try again.",
+      });
+    } finally {
+      setOpeningDocId(null);
+    }
   };
 
   const handleCreate = async () => {
@@ -160,6 +205,14 @@ export default function EventsScreen() {
       });
       return;
     }
+    if (DOCUMENT_REQUIRED && !document) {
+      Toast.show({
+        type: "error",
+        text1: "Attach a supporting document.",
+        text2: "A letter or photo that shows the event is legitimate.",
+      });
+      return;
+    }
 
     setSaving(true);
     try {
@@ -171,6 +224,7 @@ export default function EventsScreen() {
         startTime,
         endTime,
         tags,
+        document,
       });
       Toast.show({
         type: "success",
@@ -339,6 +393,106 @@ export default function EventsScreen() {
         placeholder="Pick the end time"
       />
 
+      <Text style={labelStyle}>
+        SUPPORTING DOCUMENT{DOCUMENT_REQUIRED ? " *" : " (OPTIONAL)"}
+      </Text>
+      <Text
+        style={{
+          fontFamily: typography.caption.fontFamily,
+          fontSize: typography.caption.fontSize,
+          color: colors.textSecondary,
+          marginBottom: spacing.sm,
+        }}
+      >
+        A letter or photo that shows the event is legitimate. PDF, JPG or PNG,
+        up to 5 MB. Only Guidance can see it. Students never do.
+      </Text>
+
+      {document ? (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            borderWidth: 1,
+            borderColor: colors.primary,
+            backgroundColor: colors.primaryLight + "1A",
+            borderRadius: radius.md,
+            padding: spacing.sm + 2,
+          }}
+          accessibilityLabel={`Attached document ${document.name}, ${fmtSize(document.size)}`}
+        >
+          <Ionicons
+            name={
+              document.type === "application/pdf"
+                ? "document-text-outline"
+                : "image-outline"
+            }
+            size={22}
+            color={colors.primary}
+          />
+          <View style={{ flex: 1, marginLeft: spacing.sm }}>
+            <Text
+              numberOfLines={1}
+              style={{
+                fontFamily: typography.body.fontFamily,
+                fontSize: typography.body.fontSize,
+                fontWeight: "700",
+                color: colors.text,
+              }}
+            >
+              {document.name}
+            </Text>
+            <Text
+              style={{
+                fontFamily: typography.caption.fontFamily,
+                fontSize: typography.caption.fontSize,
+                color: colors.textSecondary,
+              }}
+            >
+              {fmtSize(document.size)}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => setDocument(null)}
+            accessibilityRole="button"
+            accessibilityLabel="Remove the attached document"
+            hitSlop={8}
+            style={{ minHeight: 44, justifyContent: "center", padding: 6 }}
+          >
+            <Ionicons name="close-circle" size={24} color={colors.error} />
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <TouchableOpacity
+          onPress={handlePickDocument}
+          accessibilityRole="button"
+          accessibilityLabel="Attach a supporting document"
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            minHeight: 48,
+            borderWidth: 1,
+            borderStyle: "dashed",
+            borderColor: colors.primary,
+            borderRadius: radius.md,
+          }}
+        >
+          <Ionicons name="attach-outline" size={20} color={colors.primary} />
+          <Text
+            style={{
+              marginLeft: 8,
+              fontFamily: typography.body.fontFamily,
+              fontSize: typography.body.fontSize,
+              fontWeight: "700",
+              color: colors.primary,
+            }}
+          >
+            Attach document
+          </Text>
+        </TouchableOpacity>
+      )}
+
       <Text style={labelStyle}>ACCESSIBILITY INFORMATION</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {TAG_KEYS.map((k) => {
@@ -434,6 +588,121 @@ export default function EventsScreen() {
       </TouchableOpacity>
     </View>
   );
+
+  const renderDocumentRow = (ev: CampusEvent) => {
+    if (!isGuidance) return null;
+
+    const opening = openingDocId === ev.id;
+
+    return (
+      <View
+        style={{
+          marginTop: spacing.md,
+          paddingTop: spacing.sm,
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
+        }}
+      >
+        <Text
+          style={{
+            fontFamily: typography.caption.fontFamily,
+            fontSize: typography.caption.fontSize,
+            fontWeight: "700",
+            color: colors.textSecondary,
+            marginBottom: 6,
+          }}
+        >
+          SUPPORTING DOCUMENT (GUIDANCE ONLY)
+        </Text>
+
+        {ev.document ? (
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Ionicons
+              name={
+                ev.document.type === "application/pdf"
+                  ? "document-text-outline"
+                  : "image-outline"
+              }
+              size={20}
+              color={colors.primary}
+            />
+            <View style={{ flex: 1, marginLeft: spacing.sm }}>
+              <Text
+                numberOfLines={1}
+                style={{
+                  fontFamily: typography.body.fontFamily,
+                  fontSize: typography.body.fontSize,
+                  color: colors.text,
+                }}
+              >
+                {ev.document.name}
+              </Text>
+              <Text
+                style={{
+                  fontFamily: typography.caption.fontFamily,
+                  fontSize: typography.caption.fontSize,
+                  color: colors.textSecondary,
+                }}
+              >
+                {fmtSize(ev.document.size)}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => handleViewDocument(ev)}
+              disabled={opening}
+              accessibilityRole="button"
+              accessibilityLabel={`View the supporting document for ${ev.title}`}
+              style={{
+                minHeight: 44,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                borderWidth: 1,
+                borderColor: colors.primary,
+                borderRadius: radius.md,
+                paddingHorizontal: spacing.md,
+                opacity: opening ? 0.6 : 1,
+              }}
+            >
+              {opening ? (
+                <ActivityIndicator color={colors.primary} />
+              ) : (
+                <>
+                  <Ionicons
+                    name="eye-outline"
+                    size={18}
+                    color={colors.primary}
+                  />
+                  <Text
+                    style={{
+                      marginLeft: 6,
+                      fontFamily: typography.body.fontFamily,
+                      fontSize: typography.caption.fontSize,
+                      fontWeight: "700",
+                      color: colors.primary,
+                    }}
+                  >
+                    View document
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <Text
+            style={{
+              fontFamily: typography.caption.fontFamily,
+              fontSize: typography.caption.fontSize,
+              fontStyle: "italic",
+              color: colors.textSecondary,
+            }}
+          >
+            No supporting document on file.
+          </Text>
+        )}
+      </View>
+    );
+  };
 
   const renderEvent = (ev: CampusEvent) => {
     const start = parseDate(ev.startTime);
@@ -587,6 +856,8 @@ export default function EventsScreen() {
             No accessibility information listed for this event.
           </Text>
         )}
+
+        {renderDocumentRow(ev)}
 
         {isStudent && !cancelled ? (
           <TouchableOpacity

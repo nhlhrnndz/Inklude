@@ -48,6 +48,7 @@ const ROUTES_BY_ROLE: Record<UserRole, RouteMap> = {
     students: "/guidance/students",
     appointments: "/guidance/appointments",
     messages: "/guidance/messages",
+    teacherReferrals: "/guidance/teacher-referrals",
     accessibilityReports: "/guidance/accessibility-reports",
     events: "/events",
     accessibilityMap: "/accessibility-map",

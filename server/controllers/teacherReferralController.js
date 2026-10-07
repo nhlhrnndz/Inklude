@@ -16,6 +16,7 @@ const {
 const {
   hasActiveFollowup,
   createFollowup,
+  completeActiveFollowupsByReason,
 } = require("../models/followupModel");
 const { notifyUsers, notifyUser } = require("../services/notificationService");
 
@@ -109,7 +110,7 @@ async function createTeacherReferralController(req, res) {
           type: "support_referral",
           title: "New teacher referral",
           body: `A teacher referred a student in ${referral.class_title}: ${concern}.`,
-          sourceType: "support_referral",
+          sourceType: "teacher_referral",
           sourceId: referral.id,
           senderId: req.user.id,
         },
@@ -184,6 +185,33 @@ async function updateGuidanceStatusController(req, res) {
       return res.status(400).json({ message: "Could not update referral." });
     }
 
+    // When the last open teacher referral of a student is completed,
+    // close the follow-up that was added automatically.
+    // The follow-up stays in history (Active -> Completed -> Record).
+    if (status === "completed") {
+      try {
+        const [stillOpen] = await pool.query(
+          `SELECT id FROM support_referrals
+           WHERE student_id = ?
+             AND direction = 'teacher_to_guidance'
+             AND status <> 'completed'
+           LIMIT 1`,
+          [existing.student_id],
+        );
+
+        if (stillOpen.length === 0) {
+          await completeActiveFollowupsByReason(
+            existing.student_id,
+            FOLLOWUP_REASON,
+            req.user.id,
+            "Teacher referral completed.",
+          );
+        }
+      } catch (err) {
+        console.error("referral follow-up close error:", err);
+      }
+    }
+
     // Tell the teacher the status only (never the note)
     try {
       if (status === "acknowledged" || status === "completed") {
@@ -194,7 +222,7 @@ async function updateGuidanceStatusController(req, res) {
             status === "completed"
               ? "Guidance marked your referral as completed."
               : "Guidance acknowledged your referral.",
-          sourceType: "support_referral",
+          sourceType: "teacher_referral",
           sourceId: existing.id,
           senderId: req.user.id,
         });

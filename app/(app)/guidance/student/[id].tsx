@@ -86,6 +86,14 @@ const ROLE_HOME: Record<string, string> = {
   guidance: "/guidance-dashboard",
 };
 
+// Statuses of a teacher -> Guidance referral
+const TEACHER_REFERRAL_LABEL: Record<string, string> = {
+  sent: "New",
+  acknowledged: "Acknowledged",
+  in_progress: "In progress",
+  completed: "Completed",
+};
+
 /* ------------------------------------------------------------------ */
 /* Layout helpers                                                      */
 /* ------------------------------------------------------------------ */
@@ -232,7 +240,7 @@ export default function StudentDetailScreen() {
 
   const [saving, setSaving] = useState(false);
 
-  // Support referrals (Week 7)
+  // Support referrals (both directions)
   const [referrals, setReferrals] = useState<SupportReferral[]>([]);
   const [showReferral, setShowReferral] = useState(false);
   const [referralClasses, setReferralClasses] = useState<ReferralClass[]>([]);
@@ -472,6 +480,19 @@ export default function StudentDetailScreen() {
     }
   };
 
+  const getTeacherReferralColors = (status: string) => {
+    switch (status) {
+      case "sent":
+        return { bg: colors.warning + "22", border: colors.warning };
+      case "acknowledged":
+        return { bg: colors.primaryLight + "1A", border: colors.primary };
+      case "in_progress":
+        return { bg: colors.primary + "22", border: colors.primary };
+      default:
+        return { bg: colors.success + "1A", border: colors.success };
+    }
+  };
+
   const formatDate = (value?: string | null) => {
     if (!value) return "Not provided";
     const parsed = new Date(value);
@@ -697,6 +718,16 @@ export default function StudentDetailScreen() {
   const activeFollowups = followups.filter((f) => f.status === "active");
   const completedFollowups = followups.filter((f) => f.status === "completed");
   const preferenceEntries = Object.entries(student.accessibilityPreferences);
+
+  // Referrals come back for both directions. Older rows have no direction,
+  // so treat a missing direction as Guidance -> teacher.
+  const allReferrals = referrals as any[];
+  const referralsToTeachers = allReferrals.filter(
+    (r) => (r.direction ?? "guidance_to_teacher") === "guidance_to_teacher",
+  );
+  const referralsFromTeachers = allReferrals.filter(
+    (r) => r.direction === "teacher_to_guidance",
+  );
 
   return (
     <SafeAreaView
@@ -1132,14 +1163,131 @@ export default function StudentDetailScreen() {
           )}
         </Section>
 
-        {/* Teacher referrals */}
-        <Section title={`Teacher Referrals (${referrals.length})`}>
-          {referrals.length === 0 ? (
+        {/* Referrals FROM teachers (teacher -> Guidance) */}
+        <Section
+          title={`Referrals from Teachers (${referralsFromTeachers.length})`}
+          right={
+            <TouchableOpacity
+              onPress={() => router.push("/guidance/teacher-referrals" as any)}
+              accessibilityRole="button"
+              accessibilityLabel="Open teacher referrals"
+              hitSlop={8}
+            >
+              <Text
+                style={{
+                  fontSize: typography.caption.fontSize,
+                  fontWeight: "700",
+                  color: colors.primary,
+                }}
+              >
+                Manage
+              </Text>
+            </TouchableOpacity>
+          }
+        >
+          {referralsFromTeachers.length === 0 ? (
+            <Text style={[captionStyle, { fontStyle: "italic" }]}>
+              No teacher has referred this student.
+            </Text>
+          ) : (
+            referralsFromTeachers.map((r) => {
+              const badge = getTeacherReferralColors(r.status);
+              const statusLabel = TEACHER_REFERRAL_LABEL[r.status] ?? r.status;
+
+              return (
+                <View
+                  key={r.id}
+                  style={cardStyle}
+                  accessibilityLabel={`Referral from ${r.teacherName || "a teacher"} for ${r.classTitle}, ${r.concern}, ${statusLabel}`}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <View style={{ flex: 1, paddingRight: spacing.sm }}>
+                      <Text style={[bodyStyle, { fontWeight: "700" }]}>
+                        {r.concern}
+                      </Text>
+                      <Text style={[captionStyle, { marginTop: 1 }]}>
+                        {r.classTitle} • {r.teacherName || "Teacher"} •{" "}
+                        {formatDay(r.createdAt)}
+                      </Text>
+                    </View>
+
+                    <View
+                      style={{
+                        backgroundColor: badge.bg,
+                        borderColor: badge.border,
+                        borderWidth: 1,
+                        borderRadius: radius.sm,
+                        paddingHorizontal: 9,
+                        paddingVertical: 4,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          fontWeight: "700",
+                          color: colors.text,
+                        }}
+                      >
+                        {statusLabel}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {r.alreadySpoke !== null && r.alreadySpoke !== undefined && (
+                    <Text style={[captionStyle, { marginTop: 6 }]}>
+                      {r.alreadySpoke
+                        ? "The teacher already spoke with the student."
+                        : "The teacher has not spoken with the student yet."}
+                    </Text>
+                  )}
+
+                  {!!r.note && (
+                    <Text style={[bodyStyle, { marginTop: 6, lineHeight: 20 }]}>
+                      {r.note}
+                    </Text>
+                  )}
+
+                  {!!r.guidanceNote && (
+                    <View
+                      style={{
+                        backgroundColor: colors.secondaryBackground,
+                        borderRadius: radius.sm,
+                        padding: spacing.sm + 2,
+                        marginTop: spacing.sm,
+                      }}
+                    >
+                      <Text style={[captionStyle, { fontWeight: "700" }]}>
+                        Guidance note (private)
+                      </Text>
+                      <Text
+                        style={[bodyStyle, { marginTop: 3, lineHeight: 20 }]}
+                      >
+                        {r.guidanceNote}
+                      </Text>
+                    </View>
+                  )}
+
+                  {r.status === "completed" && !!r.completedAt && (
+                    <Text style={[captionStyle, { marginTop: 6 }]}>
+                      Completed {formatDay(r.completedAt)}
+                    </Text>
+                  )}
+                </View>
+              );
+            })
+          )}
+        </Section>
+
+        {/* Referrals TO teachers (Guidance -> teacher) */}
+        <Section
+          title={`Referrals to Teachers (${referralsToTeachers.length})`}
+        >
+          {referralsToTeachers.length === 0 ? (
             <Text style={[captionStyle, { fontStyle: "italic" }]}>
               No referrals sent for this student.
             </Text>
           ) : (
-            referrals.map((r) => {
+            referralsToTeachers.map((r) => {
               const badgeColors =
                 r.status === "sent"
                   ? { bg: colors.warning + "22", border: colors.warning }

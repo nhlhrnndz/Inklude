@@ -10,7 +10,37 @@ const {
   acknowledgeController,
   respondController,
 } = require("../controllers/referralController");
+const {
+  createTeacherReferralController,
+  listSentController,
+  listTeacherReferralsController,
+  updateGuidanceStatusController,
+} = require("../controllers/teacherReferralController");
 
+// ===== Teacher -> Guidance (new) =====
+router.post(
+  "/to-guidance",
+  verifyToken,
+  requireRole("teacher"),
+  createTeacherReferralController,
+);
+router.get("/sent", verifyToken, requireRole("teacher"), listSentController);
+
+// ===== Guidance: manage teacher referrals (new) =====
+router.get(
+  "/teacher-referrals",
+  verifyToken,
+  requireRole("guidance", "admin"),
+  listTeacherReferralsController,
+);
+router.patch(
+  "/:id/guidance-status",
+  verifyToken,
+  requireRole("guidance", "admin"),
+  updateGuidanceStatusController,
+);
+
+// ===== Guidance -> Teacher (existing) =====
 // Teacher
 router.get("/mine", verifyToken, requireRole("teacher"), listMineController);
 router.patch(

@@ -49,3 +49,4 @@ server/node_modules
 
 # server downloads (APKs)
 server/downloads/
+server/private_uploads/

@@ -1,254 +1,201 @@
-import { Text, View } from "react-native";
+// components/PwdBarChart.tsx
+// Simple View-based bar chart (no chart library).
+// Every bar shows its label and value as text, not only color.
+// Each bar gets its own color from a colorblind-safe palette (Okabe-Ito).
+import { StyleSheet, Text, View } from "react-native";
 
 import { useTheme } from "../context/ThemeContext";
 
-export type PwdBarDatum = {
+export interface PwdBarDatum {
   label: string;
   value: number;
-};
+}
 
-type PwdBarChartProps = {
+// Okabe-Ito colorblind-safe palette (works in light and dark mode)
+export const PWD_PALETTE = [
+  "#0072B2", // blue
+  "#E69F00", // orange
+  "#009E73", // green
+  "#D55E00", // vermillion
+  "#56B4E9", // sky blue
+  "#CC79A7", // pink
+  "#6A3D9A", // purple
+  "#8C8C8C", // gray
+];
+
+interface PwdBarChartProps {
   data: PwdBarDatum[];
-  color: string;
   orientation?: "vertical" | "horizontal";
+  /** Used only when multiColor is false. */
+  color?: string;
+  /** Give every bar a different color (default: true). */
+  multiColor?: boolean;
   emptyText?: string;
-};
+  barAreaHeight?: number;
+}
 
 export default function PwdBarChart({
   data,
+  orientation = "vertical",
   color,
-  orientation = "horizontal",
+  multiColor = true,
   emptyText = "No data yet",
+  barAreaHeight = 140,
 }: PwdBarChartProps) {
-  const { colors, typography, radius, spacing } = useTheme();
+  const { colors, typography, spacing, radius } = useTheme();
 
-  const rows = data
-    .filter((item) => Number(item.value) > 0)
-    .map((item) => ({
-      ...item,
-      value: Number(item.value),
-    }));
+  const max = Math.max(0, ...data.map((d) => d.value));
+  const isEmpty = data.length === 0 || max === 0;
 
-  const max = Math.max(0, ...rows.map((item) => item.value));
+  const captionStyle = {
+    fontFamily: typography.caption.fontFamily,
+    fontSize: typography.caption.fontSize,
+    color: colors.textSecondary,
+  };
 
-  if (rows.length === 0 || max === 0) {
+  if (isEmpty) {
     return (
-      <View
-        style={{
-          minHeight: 70,
-          alignItems: "center",
-          justifyContent: "center",
-          paddingVertical: spacing.md,
-        }}
-      >
-        <Text
-          style={{
-            fontFamily: typography.caption.fontFamily,
-            fontSize: typography.caption.fontSize,
-            color: colors.textSecondary,
-            fontStyle: "italic",
-            textAlign: "center",
-          }}
-        >
-          {emptyText}
-        </Text>
-      </View>
+      <Text style={[captionStyle, { fontStyle: "italic" }]}>{emptyText}</Text>
     );
   }
 
-  if (orientation === "vertical") {
-    return (
-      <View
-        accessibilityRole="summary"
-        accessibilityLabel={rows
-          .map((item) => `${item.label}: ${item.value}`)
-          .join(", ")}
-      >
-        <View
-          style={{
-            height: 190,
-            flexDirection: "row",
-            alignItems: "flex-end",
-            gap: spacing.sm,
-          }}
-        >
-          {rows.map((item) => {
-            const percentage = item.value / max;
-            const barHeight = Math.max(
-              12,
-              Math.round(percentage * 135),
-            );
+  const summary = data.map((d) => `${d.label}: ${d.value}`).join(", ");
 
-            return (
+  const barColor = (index: number) =>
+    multiColor || !color ? PWD_PALETTE[index % PWD_PALETTE.length] : color;
+
+  if (orientation === "horizontal") {
+    return (
+      <View accessible accessibilityLabel={summary}>
+        {data.map((d, index) => {
+          const pct =
+            d.value > 0 ? Math.max(4, Math.round((d.value / max) * 100)) : 0;
+
+          return (
+            <View key={d.label} style={{ marginBottom: 10 }}>
               <View
-                key={item.label}
                 style={{
-                  flex: 1,
-                  height: 190,
+                  flexDirection: "row",
+                  justifyContent: "space-between",
                   alignItems: "center",
-                  justifyContent: "flex-end",
-                  minWidth: 42,
+                  marginBottom: 4,
                 }}
-                accessible
-                accessibilityLabel={`${item.label}: ${item.value} students`}
               >
+                <View
+                  style={{
+                    flex: 1,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    paddingRight: 8,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 3,
+                      backgroundColor: barColor(index),
+                      marginRight: 6,
+                    }}
+                  />
+                  <Text
+                    numberOfLines={1}
+                    style={{
+                      flex: 1,
+                      fontFamily: typography.caption.fontFamily,
+                      fontSize: typography.caption.fontSize,
+                      color: colors.text,
+                    }}
+                  >
+                    {d.label}
+                  </Text>
+                </View>
                 <Text
                   style={{
                     fontFamily: typography.caption.fontFamily,
                     fontSize: typography.caption.fontSize,
                     fontWeight: "700",
                     color: colors.text,
-                    marginBottom: 5,
                   }}
                 >
-                  {item.value}
-                </Text>
-
-                <View
-                  style={{
-                    width: "70%",
-                    maxWidth: 52,
-                    minWidth: 18,
-                    height: 135,
-                    justifyContent: "flex-end",
-                  }}
-                >
-                  <View
-                    style={{
-                      width: "100%",
-                      height: barHeight,
-                      backgroundColor: color,
-                      borderTopLeftRadius: radius.sm,
-                      borderTopRightRadius: radius.sm,
-                    }}
-                  />
-                </View>
-
-                <Text
-                  numberOfLines={2}
-                  style={{
-                    width: "100%",
-                    minHeight: 34,
-                    marginTop: 7,
-                    fontFamily: typography.caption.fontFamily,
-                    fontSize: Math.max(
-                      10,
-                      typography.caption.fontSize - 1,
-                    ),
-                    lineHeight: 14,
-                    color: colors.textSecondary,
-                    textAlign: "center",
-                  }}
-                >
-                  {item.label}
+                  {d.value}
                 </Text>
               </View>
-            );
-          })}
-        </View>
 
-        <Text
-          style={{
-            marginTop: spacing.sm,
-            fontFamily: typography.caption.fontFamily,
-            fontSize: typography.caption.fontSize,
-            color: colors.textSecondary,
-            textAlign: "center",
-          }}
-        >
-          Number of students
-        </Text>
+              <View
+                style={{
+                  height: 10,
+                  width: "100%",
+                  overflow: "hidden",
+                  borderRadius: radius.round,
+                  backgroundColor: colors.secondaryBackground,
+                }}
+              >
+                <View
+                  style={{
+                    height: "100%",
+                    width: `${pct}%`,
+                    backgroundColor: barColor(index),
+                    borderRadius: radius.round,
+                  }}
+                />
+              </View>
+            </View>
+          );
+        })}
       </View>
     );
   }
 
+  // Vertical columns
   return (
     <View
-      accessibilityRole="summary"
-      accessibilityLabel={rows
-        .map((item) => `${item.label}: ${item.value}`)
-        .join(", ")}
+      accessible
+      accessibilityLabel={summary}
+      style={{
+        flexDirection: "row",
+        alignItems: "flex-end",
+        gap: spacing.sm,
+      }}
     >
-      {rows.map((item) => {
-        const percentage = Math.round((item.value / max) * 100);
-        const barPercentage = Math.max(4, percentage);
+      {data.map((d, index) => {
+        const height =
+          d.value > 0 ? Math.max(6, (d.value / max) * barAreaHeight) : 3;
 
         return (
-          <View
-            key={item.label}
-            style={{
-              marginBottom: spacing.md,
-            }}
-            accessible
-            accessibilityLabel={`${item.label}: ${item.value}`}
-          >
-            <View
+          <View key={d.label} style={styles.column}>
+            <Text
               style={{
-                flexDirection: "row",
-                alignItems: "flex-start",
-                justifyContent: "space-between",
-                marginBottom: 5,
+                fontFamily: typography.caption.fontFamily,
+                fontSize: typography.caption.fontSize,
+                fontWeight: "700",
+                color: colors.text,
+                marginBottom: 4,
               }}
             >
-              <Text
-                style={{
-                  flex: 1,
-                  paddingRight: spacing.sm,
-                  fontFamily: typography.caption.fontFamily,
-                  fontSize: typography.caption.fontSize,
-                  lineHeight: 18,
-                  color: colors.text,
-                }}
-              >
-                {item.label}
-              </Text>
+              {d.value}
+            </Text>
 
-              <Text
-                style={{
-                  fontFamily: typography.caption.fontFamily,
-                  fontSize: typography.caption.fontSize,
-                  fontWeight: "700",
-                  color: colors.text,
-                  minWidth: 28,
-                  textAlign: "right",
-                }}
-              >
-                {item.value}
-              </Text>
-            </View>
-
-            <View
-              style={{
-                height: 12,
-                width: "100%",
-                overflow: "hidden",
-                borderRadius: radius.round,
-                backgroundColor: colors.secondaryBackground,
-              }}
-            >
+            <View style={{ height: barAreaHeight, justifyContent: "flex-end" }}>
               <View
                 style={{
-                  height: "100%",
-                  width: `${barPercentage}%`,
-                  backgroundColor: color,
-                  borderRadius: radius.round,
+                  width: 34,
+                  height,
+                  borderTopLeftRadius: radius.sm,
+                  borderTopRightRadius: radius.sm,
+                  backgroundColor: barColor(index),
                 }}
               />
             </View>
 
             <Text
-              style={{
-                marginTop: 3,
-                fontFamily: typography.caption.fontFamily,
-                fontSize: Math.max(
-                  10,
-                  typography.caption.fontSize - 2,
-                ),
-                color: colors.textSecondary,
-                textAlign: "right",
-              }}
+              numberOfLines={2}
+              style={[
+                captionStyle,
+                { marginTop: 6, fontSize: 11, textAlign: "center" },
+              ]}
             >
-              {percentage}%
+              {d.label}
             </Text>
           </View>
         );
@@ -256,3 +203,10 @@ export default function PwdBarChart({
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  column: {
+    flex: 1,
+    alignItems: "center",
+  },
+});

@@ -97,6 +97,27 @@ async function completeFollowup(id, userId, note) {
   return result.affectedRows > 0;
 }
 
+// Closes every ACTIVE follow-up of one student with the given reason.
+// Used when a teacher referral is completed. Rows are kept as history.
+// Returns how many follow-ups were closed.
+async function completeActiveFollowupsByReason(
+  studentId,
+  reason,
+  userId,
+  note,
+) {
+  const [result] = await pool.query(
+    `UPDATE guidance_followups
+     SET status = 'completed',
+         completed_by = ?,
+         completed_at = NOW(),
+         completion_note = ?
+     WHERE student_id = ? AND reason = ? AND status = 'active'`,
+    [userId, note || null, studentId, reason],
+  );
+  return result.affectedRows;
+}
+
 module.exports = {
   toDto,
   getFollowupById,
@@ -106,4 +127,5 @@ module.exports = {
   getActiveFollowups,
   countActiveFollowups,
   completeFollowup,
+  completeActiveFollowupsByReason,
 };

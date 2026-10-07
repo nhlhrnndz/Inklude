@@ -1,8 +1,8 @@
 // utils/reportPdf.ts
 // Builds a print-styled HTML report and opens the browser's print dialog,
 // where Guidance chooses "Save as PDF". Web only, no packages needed.
-import type { AccessibilityReportExport } from "./guidanceReportApi";
 import type { PwdStats } from "./guidanceDashboardApi";
+import type { AccessibilityReportExport } from "./guidanceReportApi";
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "Pending",
@@ -280,6 +280,18 @@ export type PwdReportKind = "college" | "category";
 // Counts of 1-2 can identify a single student, so exports show "<3".
 const MASK_BELOW = 3;
 
+// Okabe-Ito colorblind-safe palette (same as components/PwdBarChart.tsx)
+const PWD_PALETTE = [
+  "#0072B2", // blue
+  "#E69F00", // orange
+  "#009E73", // green
+  "#D55E00", // vermillion
+  "#56B4E9", // sky blue
+  "#CC79A7", // pink
+  "#6A3D9A", // purple
+  "#8C8C8C", // gray
+];
+
 export function maskCount(n: number) {
   return n > 0 && n < MASK_BELOW ? "<3" : String(n);
 }
@@ -370,7 +382,11 @@ function buildPwdHtml(
   ${
     rows.length === 0
       ? `<div class="empty">No data yet.</div>`
-      : rows.map((r) => pwdBar(r.label, r.value, max, "#b5121b")).join("")
+      : rows
+          .map((r, i) =>
+            pwdBar(r.label, r.value, max, PWD_PALETTE[i % PWD_PALETTE.length]),
+          )
+          .join("")
   }
 
   <h2>Table</h2>

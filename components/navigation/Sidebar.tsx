@@ -86,6 +86,11 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { key: "appointments", label: "Appointments", icon: "calendar-outline" },
     { key: "messages", label: "Messages", icon: "chatbubble-ellipses-outline" },
     {
+      key: "teacherReferrals",
+      label: "Teacher Referrals",
+      icon: "school-outline",
+    },
+    {
       key: "accessibilityReports",
       label: "Accessibility Reports",
       icon: "alert-circle-outline",

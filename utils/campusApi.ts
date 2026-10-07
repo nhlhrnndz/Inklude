@@ -8,6 +8,14 @@ import api from "./api";
 
 export type PickedPhoto = { uri: string; mimeType?: string | null };
 
+// A supporting document picked in the browser (web only).
+export type PickedDocument = {
+  file: any; // the browser File object
+  name: string;
+  type: string;
+  size: number;
+};
+
 export type MapType =
   | "pwd_restroom"
   | "ramp"
@@ -46,7 +54,16 @@ export type CampusEvent = {
   tags: EventTag[];
   inCalendar: boolean;
   createdAt: string;
+  // Only sent to Guidance. null = no document on file.
+  document?: { name: string; type: string; size: number } | null;
 };
+
+export const EVENT_DOCUMENT_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+];
+export const EVENT_DOCUMENT_MAX_BYTES = 5 * 1024 * 1024;
 
 // Turns "/uploads/map/x.jpg" into a full URL on the same server as the API.
 export function assetUrl(path: string) {
@@ -131,6 +148,49 @@ export async function getEvents(): Promise<CampusEvent[]> {
   return res.data.events ?? [];
 }
 
+// Web only: opens the browser's file chooser for the supporting document.
+// Resolves null when nothing is chosen, rejects with a readable message when
+// the file type or size is not allowed.
+export function pickEventDocument(): Promise<PickedDocument | null> {
+  return new Promise((resolve, reject) => {
+    const doc = (globalThis as any).document;
+
+    if (Platform.OS !== "web" || !doc) {
+      reject(
+        new Error("Attaching a document is available in the web version."),
+      );
+      return;
+    }
+
+    const input = doc.createElement("input");
+    input.type = "file";
+    input.accept = ".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png";
+
+    input.onchange = () => {
+      const file = input.files && input.files[0];
+
+      if (!file) {
+        resolve(null);
+        return;
+      }
+      if (!EVENT_DOCUMENT_TYPES.includes(file.type)) {
+        reject(new Error("Only PDF, JPG or PNG files are allowed."));
+        return;
+      }
+      if (file.size > EVENT_DOCUMENT_MAX_BYTES) {
+        reject(new Error("The document is too large (max 5 MB)."));
+        return;
+      }
+
+      resolve({ file, name: file.name, type: file.type, size: file.size });
+    };
+
+    input.oncancel = () => resolve(null);
+
+    input.click();
+  });
+}
+
 export async function createEvent(input: {
   title: string;
   description?: string;
@@ -139,9 +199,59 @@ export async function createEvent(input: {
   startTime: string; // HH:MM
   endTime: string; // HH:MM
   tags: EventTag[];
+  document?: PickedDocument | null;
 }): Promise<{ event: CampusEvent; recipientCount: number }> {
-  const res = await api.post("/api/events", input);
+  const form = new FormData();
+  form.append("title", input.title);
+  form.append("description", input.description ?? "");
+  form.append("location", input.location);
+  form.append("date", input.date);
+  form.append("startTime", input.startTime);
+  form.append("endTime", input.endTime);
+  form.append("tags", JSON.stringify(input.tags));
+
+  if (input.document) {
+    form.append("document", input.document.file, input.document.name);
+  }
+
+  const res = await api.post("/api/events", form, MULTIPART);
   return res.data;
+}
+
+// Guidance only. The file needs the login token, so it is fetched through the
+// API and opened from memory instead of a plain link.
+export async function openEventDocument(id: number) {
+  const g = globalThis as any;
+
+  if (Platform.OS !== "web" || !g.window) {
+    throw new Error("Open supporting documents in the web version.");
+  }
+
+  // Open the tab first (browsers block popups that open after an await)
+  const tab = g.window.open("", "_blank");
+
+  try {
+    const res = await api.get(`/api/events/${id}/document`, {
+      responseType: "blob",
+    });
+    const url = g.URL.createObjectURL(res.data);
+
+    if (tab) {
+      tab.location.href = url;
+    } else {
+      const a = g.document.createElement("a");
+      a.href = url;
+      a.target = "_blank";
+      g.document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+
+    setTimeout(() => g.URL.revokeObjectURL(url), 5 * 60 * 1000);
+  } catch (err) {
+    if (tab) tab.close();
+    throw err;
+  }
 }
 
 export async function cancelEvent(id: number) {

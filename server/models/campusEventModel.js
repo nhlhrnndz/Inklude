@@ -37,6 +37,24 @@ async function init() {
         ON DELETE CASCADE
     )
   `);
+  // Supporting document (letter or photo) that shows the event is legitimate.
+  // One document per event. Only Guidance can ever read it.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS event_documents (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      event_id INT NOT NULL,
+      stored_name VARCHAR(120) NOT NULL,
+      original_name VARCHAR(255) NOT NULL,
+      file_type VARCHAR(60) NOT NULL,
+      file_size INT NOT NULL,
+      uploaded_by INT NULL,
+      uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_event_document (event_id),
+      CONSTRAINT fk_event_document_event
+        FOREIGN KEY (event_id) REFERENCES campus_events(id)
+        ON DELETE CASCADE
+    )
+  `);
 }
 
 init().catch((err) => console.error("event tables init failed:", err.message));
@@ -78,6 +96,11 @@ async function createEvent({
   return getEventById(id);
 }
 
+// Used only to undo an event whose document could not be saved.
+async function deleteEvent(id) {
+  await pool.query("DELETE FROM campus_events WHERE id = ?", [id]);
+}
+
 async function getEventById(id) {
   const [rows] = await pool.query("SELECT * FROM campus_events WHERE id = ?", [
     id,
@@ -103,6 +126,46 @@ async function cancelEvent(id) {
     "UPDATE campus_events SET status = 'cancelled' WHERE id = ?",
     [id],
   );
+}
+
+// ---- supporting documents (Guidance only) ----
+
+async function addEventDocument({
+  eventId,
+  storedName,
+  originalName,
+  fileType,
+  fileSize,
+  uploadedBy,
+}) {
+  await pool.query(
+    `INSERT INTO event_documents
+       (event_id, stored_name, original_name, file_type, file_size, uploaded_by)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [eventId, storedName, originalName, fileType, fileSize, uploadedBy],
+  );
+  return getEventDocument(eventId);
+}
+
+async function getEventDocument(eventId) {
+  const [rows] = await pool.query(
+    "SELECT * FROM event_documents WHERE event_id = ? LIMIT 1",
+    [eventId],
+  );
+  return rows[0] || null;
+}
+
+// Map of eventId -> document row, for a list of events.
+async function getDocumentsForEvents(eventIds) {
+  const map = new Map();
+  if (!eventIds || eventIds.length === 0) return map;
+
+  const [rows] = await pool.query(
+    "SELECT * FROM event_documents WHERE event_id IN (?)",
+    [eventIds],
+  );
+  rows.forEach((r) => map.set(r.event_id, r));
+  return map;
 }
 
 // ---- calendar helpers (schedule_items rows with source_type 'campus_event') ----
@@ -142,9 +205,13 @@ async function getUserIdsWithEventInCalendar(eventId) {
 module.exports = {
   TAGS,
   createEvent,
+  deleteEvent,
   getEventById,
   listEvents,
   cancelEvent,
+  addEventDocument,
+  getEventDocument,
+  getDocumentsForEvents,
   getCalendarEventIds,
   isInCalendar,
   removeFromCalendar,
