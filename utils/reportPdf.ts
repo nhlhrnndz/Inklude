@@ -2,6 +2,7 @@
 // Builds a print-styled HTML report and opens the browser's print dialog,
 // where Guidance chooses "Save as PDF". Web only, no packages needed.
 import type { AccessibilityReportExport } from "./guidanceReportApi";
+import type { PwdStats } from "./guidanceDashboardApi";
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "Pending",
@@ -220,11 +221,11 @@ function buildHtml(data: AccessibilityReportExport, includeNames: boolean) {
 </html>`;
 }
 
-// Returns false when printing isn't available (not running in a browser).
-export function printAccessibilityReport(
-  data: AccessibilityReportExport,
-  includeNames: boolean,
-): boolean {
+/* ------------------------------------------------------------------ */
+/* shared print helper                                                 */
+/* ------------------------------------------------------------------ */
+
+function printHtml(html: string): boolean {
   const doc = (globalThis as any).document;
   if (!doc || !doc.body) return false;
 
@@ -247,7 +248,7 @@ export function printAccessibilityReport(
 
   const idoc = win.document;
   idoc.open();
-  idoc.write(buildHtml(data, includeNames));
+  idoc.write(html);
   idoc.close();
 
   win.onafterprint = () => {
@@ -259,5 +260,183 @@ export function printAccessibilityReport(
     win.print();
   }, 350);
 
+  return true;
+}
+
+// Returns false when printing isn't available (not running in a browser).
+export function printAccessibilityReport(
+  data: AccessibilityReportExport,
+  includeNames: boolean,
+): boolean {
+  return printHtml(buildHtml(data, includeNames));
+}
+
+/* ------------------------------------------------------------------ */
+/* PWD statistics export                                               */
+/* ------------------------------------------------------------------ */
+
+export type PwdReportKind = "college" | "category";
+
+// Counts of 1-2 can identify a single student, so exports show "<3".
+const MASK_BELOW = 3;
+
+export function maskCount(n: number) {
+  return n > 0 && n < MASK_BELOW ? "<3" : String(n);
+}
+
+function pwdRows(stats: PwdStats, kind: PwdReportKind) {
+  return kind === "college"
+    ? stats.byCollege.map((c) => ({ label: c.college, value: c.total }))
+    : stats.byCategory.map((c) => ({ label: c.need, value: c.count }));
+}
+
+function pwdBar(label: string, value: number, max: number, color: string) {
+  const masked = value > 0 && value < MASK_BELOW;
+  // Masked values get a fixed short bar so the length doesn't leak the count.
+  const pct = masked
+    ? 4
+    : max > 0 && value > 0
+      ? Math.max(4, Math.round((value / max) * 100))
+      : 0;
+  return `
+    <div class="bar">
+      <div class="bar-top"><span>${esc(label)}</span><b>${maskCount(value)}</b></div>
+      <div class="track"><div class="fill" style="width:${pct}%;background:${color}"></div></div>
+    </div>`;
+}
+
+function buildPwdHtml(
+  stats: PwdStats,
+  kind: PwdReportKind,
+  exporterName: string,
+  exporterRole: string,
+) {
+  const isCollege = kind === "college";
+  const title = isCollege
+    ? "PWD Students per College"
+    : "PWD Students per Support Category";
+  const countHeader = isCollege ? "Students" : "Selections";
+  const rows = pwdRows(stats, kind);
+  const max = Math.max(
+    0,
+    ...rows.filter((r) => r.value >= MASK_BELOW).map((r) => r.value),
+  );
+
+  const note = isCollege
+    ? `Total students with support needs: <b>${maskCount(stats.totalPwd)}</b>.`
+    : "A student can select more than one support need, so the counts can add up to more than the total number of students.";
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>IncluEd - ${esc(title)}</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1b1f24; font-size: 12px; line-height: 1.45; margin: 0;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .brand { font-size: 11px; letter-spacing: 1px; color: #5b6570; font-weight: 700; }
+  h1 { font-size: 24px; margin: 4px 0 2px; }
+  .meta { color: #5b6570; margin-bottom: 10px; }
+  .conf { display: inline-block; border: 1px solid #b5121b; color: #b5121b; border-radius: 6px; padding: 3px 10px; font-weight: 700; font-size: 11px; margin-bottom: 14px; }
+  h2 { font-size: 14px; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #d5dae0; }
+  .bar { margin-bottom: 8px; }
+  .bar-top { display: flex; justify-content: space-between; margin-bottom: 3px; }
+  .track { height: 10px; background: #e8ebef; border-radius: 99px; overflow: hidden; }
+  .fill { height: 100%; border-radius: 99px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 11px; color: #5b6570; padding: 6px 8px; border-bottom: 2px solid #d5dae0; }
+  th.r, td.r { text-align: right; }
+  td { padding: 7px 8px; border-bottom: 1px solid #e8ebef; }
+  tr { page-break-inside: avoid; }
+  .empty { color: #5b6570; font-style: italic; }
+  .foot { margin-top: 22px; color: #8a949e; font-size: 10.5px; }
+</style>
+</head>
+<body>
+  <div class="brand">INCLUED · GUIDANCE OFFICE</div>
+  <h1>${esc(title)}</h1>
+  <div class="meta">
+    Generated ${esc(formatDate(new Date().toISOString()))}
+    · Exported by ${esc(exporterName)} (${esc(exporterRole)})
+  </div>
+  <div class="conf">Confidential: contains student support information.</div>
+
+  <h2>Graph</h2>
+  ${
+    rows.length === 0
+      ? `<div class="empty">No data yet.</div>`
+      : rows.map((r) => pwdBar(r.label, r.value, max, "#b5121b")).join("")
+  }
+
+  <h2>Table</h2>
+  ${
+    rows.length === 0
+      ? `<div class="empty">No data yet.</div>`
+      : `<table>
+          <thead><tr><th>${isCollege ? "College" : "Support category"}</th><th class="r">${countHeader}</th></tr></thead>
+          <tbody>
+            ${rows.map((r) => `<tr><td>${esc(r.label)}</td><td class="r">${maskCount(r.value)}</td></tr>`).join("")}
+          </tbody>
+        </table>`
+  }
+
+  <p>${note}</p>
+
+  <div class="foot">
+    Counts below ${MASK_BELOW} are shown as "&lt;${MASK_BELOW}" to protect student privacy.
+    Handle this document as confidential.
+  </div>
+</body>
+</html>`;
+}
+
+export function printPwdReport(
+  stats: PwdStats,
+  kind: PwdReportKind,
+  exporterName: string,
+  exporterRole: string,
+): boolean {
+  return printHtml(buildPwdHtml(stats, kind, exporterName, exporterRole));
+}
+
+function csvCell(value: string) {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+export function downloadPwdCsv(stats: PwdStats, kind: PwdReportKind): boolean {
+  const g = globalThis as any;
+  const doc = g.document;
+  if (!doc || !doc.body || !g.Blob || !g.URL?.createObjectURL) return false;
+
+  const header =
+    kind === "college"
+      ? ["College", "Students"]
+      : ["Support category", "Selections"];
+
+  const lines = [
+    header,
+    ...pwdRows(stats, kind).map((r) => [r.label, maskCount(r.value)]),
+  ].map((row) => row.map(csvCell).join(","));
+
+  // BOM so Excel reads it as UTF-8
+  const blob = new g.Blob(["\uFEFF" + lines.join("\r\n")], {
+    type: "text/csv;charset=utf-8",
+  });
+  const url = g.URL.createObjectURL(blob);
+  const a = doc.createElement("a");
+  a.href = url;
+  a.download =
+    kind === "college"
+      ? "pwd-students-per-college.csv"
+      : "pwd-students-per-support-category.csv";
+  doc.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => g.URL.revokeObjectURL(url), 1000);
   return true;
 }

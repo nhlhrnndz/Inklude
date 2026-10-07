@@ -132,39 +132,12 @@ export default function StartScreen() {
         ]}
       >
         <TouchableOpacity
-          style={[
-            styles.button,
-            {
-              backgroundColor: colors.primary,
-              borderRadius: radius.xl,
-              paddingVertical: spacing.md + 2,
-            },
-          ]}
-          activeOpacity={0.85}
-          onPress={() => router.push("/support-needs")}
-          accessibilityRole="button"
-          accessibilityLabel="Get started"
-        >
-          <Text
-            style={{
-              color: "#FFFFFF",
-              fontFamily: typography.button.fontFamily,
-              fontSize: typography.button.fontSize,
-              fontWeight: typography.button.fontWeight,
-            }}
-          >
-            Get Started
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
           onPress={() =>
             router.push({ pathname: "/login", params: { role: "student" } })
           }
           accessibilityRole="button"
           accessibilityLabel="I already have an account. Log in"
           style={{
-            marginTop: spacing.md,
             minHeight: 48,
             justifyContent: "center",
           }}
@@ -215,10 +188,5 @@ const styles = StyleSheet.create({
   },
   bottomContainer: {
     alignItems: "center",
-  },
-  button: {
-    width: "100%",
-    alignItems: "center",
-    elevation: 4,
   },
 });

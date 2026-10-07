@@ -99,7 +99,6 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { key: "reports", label: "Reports", icon: "document-text-outline" },
     { key: "announcements", label: "Announcements", icon: "megaphone-outline" },
     { key: "profile", label: "Profile", icon: "person-outline" },
-    { key: "settings", label: "Settings", icon: "settings-outline" },
   ],
 };
 

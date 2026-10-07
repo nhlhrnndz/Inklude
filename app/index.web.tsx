@@ -124,10 +124,6 @@ export default function LandingPage() {
     router.push("/staff-login" as any);
   };
 
-  const openApp = () => {
-    router.push("/role-select" as any);
-  };
-
   const downloadApk = () => {
     if (Platform.OS === "web") {
       window.location.href = APK_URL;
@@ -549,12 +545,6 @@ export default function LandingPage() {
                   },
                 ]}
               >
-                <GlassButton
-                  label="Enter IncluEd"
-                  onPress={openApp}
-                  filled
-                />
-
                 <OutlineButton
                   label="Download App"
                   onPress={downloadApk}
@@ -1245,7 +1235,7 @@ export default function LandingPage() {
             </View>
 
             <View style={styles.stepsContainer}>
-              {STEPS.map((step, index) => (
+              {STEPS.map((step) => (
                 <View
                   key={step.number}
                   style={[
@@ -1654,12 +1644,6 @@ export default function LandingPage() {
                 },
               ]}
             >
-              <GlassButton
-                label="Enter IncluEd"
-                onPress={openApp}
-                filled
-              />
-
               <OutlineButton
                 label="Staff Portal"
                 onPress={openStaffPortal}
